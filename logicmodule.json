@@ -1,0 +1,13 @@
+{
+  "name": "Proxmox_VE",
+  "version": "1.0.0",
+  "transport": "HTTPS JSON API",
+  "appliesTo": "pve.api.url != \"\"",
+  "script": "scripts/LM_Proxmox.groovy",
+  "datasources": [
+    {"name":"Proxmox_VE_Cluster","resourceLabel":"Cluster","mode":"cluster","activeDiscovery":false,"datapoints":["quorate","votes","expectedVotes"]},
+    {"name":"Proxmox_VE_Node","resourceLabel":"Nodes","mode":"node","activeDiscovery":"node","datapoints":["up","cpuPct","load1","memUsedPct","memUsedBytes","memTotalBytes","swapUsedPct","rootUsedPct","rootUsedBytes","rootTotalBytes","uptimeSeconds","netInBytes","netOutBytes"]},
+    {"name":"Proxmox_VE_Guest","resourceLabel":"Guests","mode":"guest","activeDiscovery":"guest","datapoints":["up","status","cpuPct","memUsedPct","memUsedBytes","memMaxBytes","diskUsedBytes","diskMaxBytes","netInBytes","netOutBytes","uptimeSeconds"]},
+    {"name":"Proxmox_VE_Storage","resourceLabel":"Storage","mode":"storage","activeDiscovery":"storage","datapoints":["up","usedBytes","availableBytes","totalBytes","usedPct"]}
+  ]
+}
