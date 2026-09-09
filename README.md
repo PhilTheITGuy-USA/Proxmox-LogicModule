@@ -9,11 +9,18 @@ This bundle monitors Proxmox VE through its HTTPS JSON API. It is designed for a
    - `pve.api.token` = `monitor@pam!logicmonitor=TOKEN_SECRET`
    - optional `pve.api.timeout` = milliseconds, default `10000`
    - optional `pve.api.insecure` = `true` only for lab/self-signed certificates
-2. Upload `scripts/LM_Proxmox.groovy` to the DataSources as the Groovy script.
-3. Create the four DataSources described in `logicmodule.json`, using the same script and the listed `pve.mode` argument. Configure Active Discovery with the listed mode.
-4. Apply the DataSources to resources matching `pve.api.url != ""`.
+2. Set `pve.monitor = true` on each Proxmox resource. Apply the DataSources to `getPropValue("pve.monitor") && pve.monitor == "true"`.
+3. Create the four DataSources described in `logicmodule.json`.
+4. Use the corresponding Embedded Groovy scripts and arguments:
+   - Cluster: `scripts/Proxmox_VE_Cluster_CT.groovy`, collection argument `cluster`.
+   - Node: `scripts/Proxmox_VE_Node_AD.groovy` / `node discover` for AD; `scripts/Proxmox_VE_Node_CT.groovy` / `node` for collection.
+   - Guest: `scripts/Proxmox_VE_Guest_AD.groovy` / `guest discover` for AD; `scripts/Proxmox_VE_Guest_CT.groovy` / `guest` for collection.
+   - Storage: `scripts/Proxmox_VE_Storage_AD.groovy` / `storage discover` for AD; `scripts/Proxmox_VE_Storage_CT.groovy` / `storage` for collection.
+5. Configure datapoints with Raw Metric `output`, Post Processor `namevalue(datapointKey)`, and Metric Type `Gauge`.
 
-The JSON is a portable design manifest, not a raw LogicMonitor account export (account exports contain tenant-specific IDs and thresholds). Import the definitions through My Module Toolbox, then copy the datapoints and thresholds from the manifest.
+The `*_AD.groovy` scripts are for Active Discovery and the `*_CT.groovy` scripts are for collection. For a standalone Proxmox host, disable or omit the Cluster DataSource because `/cluster/status` has no meaningful cluster metrics outside a cluster.
+
+The JSON is a portable design manifest, not a raw LogicMonitor account export (account exports contain tenant-specific IDs and thresholds). Import the definitions through My Module Toolbox, then copy the datapoints, scripts, arguments, and thresholds from the manifest.
 
 ## Coverage
 
