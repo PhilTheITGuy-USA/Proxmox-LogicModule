@@ -86,9 +86,15 @@ anything works against a real Proxmox host. Both need the user's environment. Do
 change as verified end-to-end on the strength of a green harness run — say which of the two layers
 was actually exercised.
 
+For future live-cluster testing, use a read-only test token, measure Collector request counts,
+and verify the four bulk DataSources issue one `/cluster/resources` request each per interval.
+Do not replace this with a per-guest production test loop. For live HA testing, cover quorum
+loss/recovery, node changes, guest migration or failover, HA error/fence states, and temporary
+HA endpoint failure; confirm existing instances remain intact on non-zero collection exits.
+
 ## The Collector contract (get these wrong and the DataSource silently breaks)
 
-**Property lookup.** Resource-level properties (`pve.api.url`, `pve.api.token`, ...) come from
+**Property lookup.** Resource-level properties (`pve.api.url`, `pve.api.token.credential`, ...) come from
 `hostProps`. Instance-level properties set by Active Discovery come from `taskProps` /
 `instanceProps`, and may be prefixed `auto.`. `pveInstanceProp` in the preamble is the only correct
 way to read them: it tries `taskProps[key]`, `taskProps['auto.'+key]`, `instanceProps[key]`,
@@ -137,7 +143,7 @@ instances through a transient Proxmox outage instead of deleting them. Never "ha
 by returning 0 with zeroed datapoints.
 
 **Auth header.** Proxmox expects `Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET` — the
-separator after `PVEAPIToken` is `=`, not `-`. The `pve.api.token` property already contains the
+separator after `PVEAPIToken` is `=`, not `-`. The `pve.api.token.credential` property already contains the
 whole `user@realm!tokenid=secret` string, so the header is built as `'PVEAPIToken=' + apiToken`.
 
 **Instance IDs must round-trip, and must not encode location.** Wildvalues come from Proxmox's own

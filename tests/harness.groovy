@@ -90,7 +90,7 @@ def runScript = { File file, Map bindings ->
 def hostProps = [
     'system.hostname': '127.0.0.1',
     'pve.api.url'    : baseUrl,
-    'pve.api.token'  : TOKEN,
+    'pve.api.token.credential'  : TOKEN,
     'pve.api.timeout': '5000',
 ]
 
@@ -233,7 +233,7 @@ note('api-down', dead.stdout.trim().isEmpty(), 'emitted datapoints while the API
 note('api-down', dead.stderr.toLowerCase().contains('failed'), 'did not explain the failure on stderr')
 
 // A rejected token must read as a permissions problem, not as an empty cluster.
-def badAuth = runScript(guestAdFile, [hostProps: hostProps + ['pve.api.token': 'wrong@pam!bad=nope']])
+def badAuth = runScript(guestAdFile, [hostProps: hostProps + ['pve.api.token.credential': 'wrong@pam!bad=nope']])
 note('api-auth', badAuth.exit == 2, "expected exit 2 on HTTP 401, got ${badAuth.exit}")
 note('api-auth', badAuth.stderr.contains('token'), 'did not mention the token on stderr')
 
@@ -241,7 +241,7 @@ note('api-auth', badAuth.stderr.contains('token'), 'did not mention the token on
 def unconfigured = runScript(new File(scriptsDir, 'Proxmox_VE_Nodes.collect.groovy'),
                              [hostProps: ['system.hostname': 'pve.example.com']])
 note('unconfigured', unconfigured.exit == 2, "expected exit 2 with no token, got ${unconfigured.exit}")
-note('unconfigured', unconfigured.stderr.contains('pve.api.token'),
+note('unconfigured', unconfigured.stderr.contains('pve.api.token.credential'),
      'did not name the missing property on stderr')
 
 // ------------------------------------------------------------ PropertySource

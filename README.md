@@ -24,6 +24,11 @@ how large the cluster is: `/cluster/resources` returns every node, guest and sto
 object in a single response. A 500-guest cluster costs one request per interval, not five
 hundred.
 
+The four calls are intentional: LogicMonitor executes each DataSource independently, so
+there is no dependable cross-DataSource response cache. Combining them into one DataSource
+could reduce the count further, but would couple unrelated alerting and collection intervals.
+This is the practical low-load boundary while preserving separate modules.
+
 ## Requirements
 
 A Proxmox API token with read-only rights:
@@ -50,13 +55,13 @@ Set these on the Proxmox resource, or on a group containing it:
 
 | Property | Required | Default | Notes |
 |---|---|---|---|
-| `pve.api.token` | yes | — | Full token string: `user@realm!tokenid=secret` |
+| `pve.api.token.credential` | yes | — | Full token string: `user@realm!tokenid=secret`; LogicMonitor masks this suffix |
 | `pve.api.url` | no | `https://<system.hostname>:8006` | Override if the API is on another address or port |
 | `pve.api.port` | no | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | no | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | no | `false` | `true` accepts self-signed certificates. **Lab use only** |
 
-Store `pve.api.token` as a secured property so the secret is not readable from the UI.
+Store the token as `pve.api.token.credential`. LogicMonitor recognizes the `.credential` suffix as sensitive and masks the value in the UI.
 
 ## Install
 
@@ -68,7 +73,7 @@ Store `pve.api.token` as a secured property so the secret is not readable from t
    anything that is not Proxmox), and paste `dist/scripts/addCategory_Proxmox_VE.groovy`.
    It is supplied as a script rather than an importable JSON because the PropertySource
    export schema could not be verified against a published sample.
-3. Set `pve.api.token` on the resource and run the PropertySource. It adds the category
+3. Set `pve.api.token.credential` on the resource and run the PropertySource. It adds the category
    `ProxmoxVE`, and every module applies itself from there — nothing else to configure.
 
 ## Alerting
@@ -129,3 +134,18 @@ collection uses the bulk endpoint.
 Adding or changing a datapoint means editing three things: the `pveEmit` call in the
 collection script, the `datapoints` array in `modules/<Module>.json`, and the coverage
 table above. The build enforces the first two agreeing.
+
+For live-cluster testing, use a non-production read-only `PVEAuditor` token and record the
+Collector API request count. Verify that each batch module makes one bulk request per interval
+and that Node Detail makes one `/nodes/{node}/status` request per discovered node. Do not use
+a per-guest production test loop.
+
+For live-HA-cluster testing, cover quorum loss and recovery, node membership changes, guest
+migration/failover, HA service error/fence states, and temporary HA endpoint unavailability.
+Confirm that HA-optional datapoints becoming no-data is understood and that failed collection
+returns non-zero without deleting existing instances. Restore healthy quorum before ending.
+
+End users should receive prebuilt `dist/*.json` imports and the assembled PropertySource script
+from a tagged release; they should not need Python, Docker, or a local build. Maintainers should
+still rebuild and run the complete validation loop before publishing release artifacts. `dist/`
+remains generated output and is intentionally not committed to the development branch.
