@@ -171,6 +171,19 @@ to the key. So a key printed by the script must match the datapoint name exactly
 declared in `modules/<Module>.json` must actually be printed on every successful run unless it is
 marked `"conditional": true`.
 
+**The post-processor key is not the datapoint name on a BatchScript.** One execution prints every
+instance into a single stream, so a bare `CPUUsagePercent` matches no line — every key in that
+stream is prefixed with an instance id. The key must be scoped to the instance as
+`##WILDVALUE##.CPUUsagePercent`, which LogicMonitor substitutes per instance at poll time. `build.py`
+applies the prefix for `batchscript` modules and withholds it for `script` modules, and refuses to
+emit if a module's keys do not match its collection method.
+
+This is the highest-consequence mistake in the repo, because every other signal stays green: the
+build passes, the scripts compile, the harness goes green, Active Discovery populates instances, and
+**Test Collection Script in the portal shows perfectly correct output** — while every datapoint on
+every instance reads No Data. It shipped that way once. If a batchscript module collects nothing,
+check `interpretExpr` in `dist/<Module>.json` before you touch anything else.
+
 **Every emitted value must be a number.** The harness asserts each one matches
 `^-?\d+(\.\d+)?([eE][-+]?\d+)?$` (`tests/harness.groovy:100`). Proxmox fields that are typed as
 strings — `loadavg` items, `status`, HA state — must be converted or mapped before `pveEmit`:

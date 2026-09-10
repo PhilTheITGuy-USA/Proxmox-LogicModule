@@ -66,6 +66,10 @@ STANDALONE_SCRIPTS = ["addCategory_Proxmox_VE.groovy"]
 
 EMIT_RE = re.compile(r"""pveEmit\(\s*[^,]+,\s*'([A-Za-z0-9_]+)'""")
 
+# BatchScript post-processor keys are scoped to the instance with this token; see
+# expand_datapoint.
+WILDVALUE_PREFIX = "##WILDVALUE##."
+
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -77,13 +81,19 @@ def assemble(body_name: str) -> str:
     return read(PREAMBLE).rstrip() + "\n\n" + ("-" * 0) + body.lstrip("\n")
 
 
-def expand_datapoint(dp: dict) -> dict:
+def expand_datapoint(dp: dict, batch: bool) -> dict:
     out = dict(DATAPOINT_DEFAULTS)
     out.update(dp)
     out.pop(CONDITIONAL_KEY, None)
     # The post-processor key is the name printed by the script; they are always the same
     # here, and keeping them coupled is what makes the drift check below meaningful.
-    out.setdefault("interpretExpr", out["name"])
+    #
+    # BatchScript is the exception. One execution prints every instance into a single
+    # stream, so a bare key matches nothing -- the key has to be scoped to the instance,
+    # and LogicMonitor does that by substituting ##WILDVALUE## per instance at poll time.
+    # Get this wrong and discovery, collection and the script output all look correct
+    # while every datapoint on every instance reads No Data.
+    out.setdefault("interpretExpr", (WILDVALUE_PREFIX if batch else "") + out["name"])
     return out
 
 
@@ -110,7 +120,10 @@ def build_module(defn: dict) -> tuple[dict, dict[str, str]]:
         "useWildValueAsUniqueIdentifier": defn.get("useWildValueAsUniqueIdentifier", False),
         "dataSourceType": 1,
         "type": 0,
-        "datapoints": [expand_datapoint(dp) for dp in defn["datapoints"]],
+        "datapoints": [
+            expand_datapoint(dp, defn["collectionMethod"] == "batchscript")
+            for dp in defn["datapoints"]
+        ],
     }
 
     if "discoveryScript" in defn:
@@ -149,6 +162,25 @@ def check_module(defn: dict, module: dict) -> list[str]:
 
     if module["collectionMethod"] == "batchscript" and not module.get("multiInstance"):
         problems.append(f"{name}: batchscript collection requires multiInstance")
+
+    # The post-processor key must match the shape of the output the script actually
+    # prints. A mismatch here is invisible everywhere else: the build passes, the
+    # scripts compile, the harness is green, Test Collection Script shows correct
+    # output in the portal, and every datapoint still reads No Data.
+    batch = module["collectionMethod"] == "batchscript"
+    for dp in module["datapoints"]:
+        scoped = dp["interpretExpr"].startswith(WILDVALUE_PREFIX)
+        if batch and not scoped:
+            problems.append(
+                f"{name}: datapoint '{dp['name']}' has post-processor key "
+                f"'{dp['interpretExpr']}', but batchscript output is prefixed with the "
+                f"instance id -- expected '{WILDVALUE_PREFIX}{dp['name']}'"
+            )
+        elif not batch and scoped:
+            problems.append(
+                f"{name}: datapoint '{dp['name']}' scopes its post-processor key with "
+                f"{WILDVALUE_PREFIX} but this is not a batchscript module"
+            )
     if module.get("multiInstance") and "activeDiscovery" not in module:
         problems.append(f"{name}: multiInstance requires an Active Discovery script")
 
