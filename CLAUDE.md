@@ -8,6 +8,12 @@ executed by a LogicMonitor Collector. The target is a suite publishable to the L
 works unchanged from a single node to a large enterprise cluster; see `docs/DESIGN.md` for the
 parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the Tier 2 backlog.
 
+**`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
+change from the current implementation", reads like a to-do list but every one of its ten items is
+implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
+superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. Only §4's Tier 2 modules and the
+TopologySource are unbuilt.
+
 ```
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
 scripts/<Subject>.ad.groovy      Active Discovery bodies, named per subject and often shared
@@ -31,6 +37,15 @@ The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groov
 discover identical instance sets and a single guest carries both a performance and a status
 instance. Editing a shared AD body changes every module naming it in `discoveryScript`.
 
+| Module | Method | Interval | Discovery |
+|---|---|---|---|
+| `Proxmox_VE_Cluster` | script | 5m | — (single instance) |
+| `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` |
+| `Proxmox_VE_NodeDetail` | script, per instance | 5m | `Nodes.ad` |
+| `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` |
+| `Proxmox_VE_GuestStatus` | batchscript | 3m | `Guests.ad` |
+| `Proxmox_VE_StorageCapacity` | batchscript | 10m | `Storage.ad` |
+
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
 `/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
@@ -38,6 +53,11 @@ has no token. It is the one script with no module definition (`STANDALONE_SCRIPT
 because the PropertySource export schema could not be verified against a published sample, so it
 ships as an assembled script to paste into the UI. Break its silence and the whole suite starts
 applying itself to unrelated Linux hosts.
+
+On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
+(when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
+so a cluster-only module can target standalone-versus-cluster in its AppliesTo without a second
+probe — dropping it breaks the harness and any future cluster-only module.
 
 ## Build and verification
 
@@ -65,6 +85,14 @@ defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: 
 carries only its name, description and what deviates — `threshold`, `type: derive`, `min`,
 `alertBody`, `conditional`. The Active Discovery block, `deleteInactiveInstances: false` included,
 is hardcoded in `build_module` rather than set per module.
+
+Several fields there are load-bearing and validated by nothing. `useWildValueAsUniqueIdentifier:
+true` is set on every multiInstance module and checked by neither the build nor the harness — it is
+what makes the wildvalue the instance's identity, which is the entire point of the migration-safe
+IDs below. `threshold` is LogicMonitor's `"<op> warn error critical"` string (`"> 90 95 98"`).
+`technicalNotes` carries the per-module rationale shown in the portal; every module has one and
+Exchange review expects it. All five modules that discover override `discoveryInterval` to `60m`,
+where the build default is `1440m`.
 
 **There is no way to run a single test.** `tests/harness.groovy` is one program: it walks every
 `modules/*.json`, runs that module's assembled AD and collect scripts against an in-process mock
@@ -102,6 +130,19 @@ way to read them: it tries `taskProps[key]`, `taskProps['auto.'+key]`, `instance
 exists during Active Discovery. Reading an instance property out of `hostProps` returns null and the
 script fails at runtime, not at edit time.
 
+**Secrets are named by suffix.** LogicMonitor treats a property whose name ends in `.credential` as
+sensitive and masks its value in the UI. That is the whole reason the token property is
+`pve.api.token.credential` rather than `pve.api.token`: renaming it to anything without the suffix
+silently exposes the secret in the portal. Any future secret this suite consumes takes the same
+suffix.
+
+**That rename has no compatibility read, and it fails quietly.** `pveHostProp('pve.api.token.credential')`
+is the only lookup — nothing falls back to the old name. A resource still carrying `pve.api.token`
+therefore sets `pveConfigError`, which sends the PropertySource down its silent path (exit 0, no
+output), so the category is never set and every module stops applying. The resource goes *quiet*
+rather than erroring, which looks nothing like a credentials problem. On an existing deployment,
+rename the property first, then re-run the PropertySource.
+
 **Active Discovery output.** One instance per line, exactly:
 
 ```
@@ -129,6 +170,12 @@ export JSON, `"useValue": "output"` with `"interpretMethod": "namevalue"` and `"
 to the key. So a key printed by the script must match the datapoint name exactly, and a datapoint
 declared in `modules/<Module>.json` must actually be printed on every successful run unless it is
 marked `"conditional": true`.
+
+**Every emitted value must be a number.** The harness asserts each one matches
+`^-?\d+(\.\d+)?([eE][-+]?\d+)?$` (`tests/harness.groovy:100`). Proxmox fields that are typed as
+strings — `loadavg` items, `status`, HA state — must be converted or mapped before `pveEmit`:
+NodeDetail does `toString().toDouble()`, GuestStatus maps `running` to 1. A string reaches
+LogicMonitor as no-data and fails the harness.
 
 **Datapoint metric type is not always Gauge.** The API enum (`type` on the datapoint object) is
 `0 unknown, 1 counter, 2 gauge, 3 derive, 5 status, 6 compute, 7 counter32, 8 counter64`; `dataType`
@@ -189,6 +236,14 @@ Always pass datapoint names as single-quoted literals.
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
 the same — a row in the README table, and a fixture for every endpoint it calls.
 
+**A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
+that is both `script` and `multiInstance`: it executes once per node and reads its instance
+properties. The harness fakes those in the `instanceBindings` map (`tests/harness.groovy:103`),
+hardcoded to `pve1` so it lines up with the `/nodes/pve1/status` fixture. A new module that calls
+`pveInstanceProp` needs an entry there plus a fixture keyed to the same node name — without it the
+collect script runs with no `taskProps`, and the harness reports a collection failure rather than a
+missing binding.
+
 A datapoint that is legitimately not emitted on every run needs `"conditional": true` in the module
 definition. Use it when the API genuinely has no value to report — QEMU used-disk, cluster quorum on
 a standalone host — so the datapoint reads as no-data. Do not emit a zero to keep the build quiet;
@@ -226,7 +281,8 @@ Other schema details that bite:
   that alert as permanently down. Filter them out of guest discovery.
 - `/nodes/{node}/status` declares `additionalProperties: 1` — `uptime`, `swap`, `ksm` and friends
   are returned but absent from the published schema, so don't "correct" code that reads them.
-- `loadavg` items are typed **string**, not number. Printing them is fine; arithmetic on them is not.
+- `loadavg` items are typed **string**, not number. Convert with `toDouble()` before arithmetic and
+  before emitting — an unconverted string reaches LogicMonitor as no-data and fails the harness.
 - Storage list entries carry `active`, `enabled` and `used_fraction`; storage `status` omits
   `used_fraction`. A disabled or inactive storage still discovers, so `up` should reflect `active`.
 
