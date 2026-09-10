@@ -9,18 +9,35 @@ works unchanged from a single node to a large enterprise cluster; see `docs/DESI
 parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the Tier 2 backlog.
 
 ```
-scripts/lib/pve_common.groovy   shared preamble: properties, TLS, HTTP, output helpers
-scripts/<Module>.ad.groovy      Active Discovery bodies
-scripts/<Module>.collect.groovy collection bodies
-modules/<Module>.json           module metadata + datapoint declarations
-build/build.py                  assembles preamble + body into importable module JSON
-tests/harness.groovy            runs the scripts against a mock Proxmox API
-dist/                           GENERATED, gitignored — never edit, never commit
+scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
+scripts/<Subject>.ad.groovy      Active Discovery bodies, named per subject and often shared
+scripts/<Module>.collect.groovy  collection bodies, one per module
+modules/<Module>.json            build-time module definition: metadata + datapoint declarations
+build/build.py                   assembles preamble + body into importable module JSON
+build/groovylint.py              bracket-balance check over the assembled scripts
+tests/harness.groovy             runs the assembled scripts against a mock Proxmox API
+tests/fixtures/pve_api.json      recorded API responses, keyed by path + query string
+docs/DESIGN.md                   parity analysis, design rationale, Tier 2 backlog
+dist/                            GENERATED, gitignored — never edit, never commit
 ```
 
 **The bodies are not standalone scripts.** They assume the helpers the preamble defines, and
 `build.py` concatenates the two. Edit shared behaviour in `pve_common.groovy` once; edit
 `dist/` never.
+
+**Discovery scripts are shared; collection scripts are not.** `Proxmox_VE_Guests.ad.groovy` backs
+both GuestPerformance and GuestStatus; `Proxmox_VE_Nodes.ad.groovy` backs both Nodes and NodeDetail.
+The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those modules
+discover identical instance sets and a single guest carries both a performance and a status
+instance. Editing a shared AD body changes every module naming it in `discoveryScript`.
+
+**The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
+`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
+`/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
+has no token. It is the one script with no module definition (`STANDALONE_SCRIPTS` in `build.py`),
+because the PropertySource export schema could not be verified against a published sample, so it
+ships as an assembled script to paste into the UI. Break its silence and the whole suite starts
+applying itself to unrelated Linux hosts.
 
 ## Build and verification
 
@@ -32,10 +49,34 @@ docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 
 docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
 ```
 
+**Rebuild before you verify.** Both Docker jobs read `dist/scripts/`, never `scripts/`, so an
+un-rebuilt edit is silently tested in its previous form. The loop is always
+`python build/build.py` → `compile` → `tests`.
+
 The build refuses to emit if a collection script prints an undeclared datapoint, if a declared
-datapoint is never printed (unless marked `"conditional": true` in the module definition), or if
-brackets are unbalanced in an assembled script. Groovy is not installed on this machine — Docker
+datapoint is never printed (unless marked `"conditional": true` in the module definition), if a
+`batchscript` module is not `multiInstance` or a `multiInstance` module has no discovery script, or
+if brackets are unbalanced in an assembled script. Groovy is not installed on this machine — Docker
 is how these get compiled and run, and `groovy:4-jdk17` matches the Collector's runtime.
+
+**`modules/<Module>.json` is the build's input, not the export format.** `build.py` supplies the
+defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: namevalue`,
+`dataType 7`, `maxDigits 4`) and derives `interpretExpr` from the datapoint name, so an entry
+carries only its name, description and what deviates — `threshold`, `type: derive`, `min`,
+`alertBody`, `conditional`. The Active Discovery block, `deleteInactiveInstances: false` included,
+is hardcoded in `build_module` rather than set per module.
+
+**There is no way to run a single test.** `tests/harness.groovy` is one program: it walks every
+`modules/*.json`, runs that module's assembled AD and collect scripts against an in-process mock
+API, then adds fixed assertions that pin the design decisions (template exclusion, migration-safe
+instance IDs, QEMU vs LXC disk, exit 2 on a dead API or bad token, bulk endpoint used and `rrddata`
+not). It finishes in seconds — run all of it. To poke at one script instead, override the service
+command: `docker compose -f tests/docker-compose.yml run --rm tests groovy /work/tests/scratch.groovy`.
+
+**The mock API returns 501, not 404, for a path it has no fixture for**, so a missing fixture looks
+like a harness gap rather than an empty result. Fixture keys in `tests/fixtures/pve_api.json` are
+the path after `/api2/json` plus the query string exactly as the script requests it
+(`/cluster/resources?type=vm`). A new endpoint needs a fixture before its module can be tested.
 
 The harness is mutation-tested. If you change it, re-verify it still fails when you deliberately
 break something; a green suite that cannot go red is worse than no suite.
@@ -121,11 +162,26 @@ check and the whole test harness. See `docs/DESIGN.md` §6.
 
 The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and default-off.
 
+Every body opens with the same guard, because the preamble reports missing configuration through
+`pveConfigError` rather than throwing: DataSource bodies print it to `System.err` and `return 2`,
+the PropertySource returns 0 silently. Everything after it sits in a `try` whose `catch` writes the
+reason to `System.err` and returns 2. An optional surface that may legitimately be absent — HA
+status on a cluster without HA — gets its own inner `try` and simply omits its datapoints.
+
 ## Editing checklist
 
 Adding or changing a datapoint touches three places: the `pveEmit` call in the collection script,
 the `datapoints` array in `modules/<Module>.json`, and the coverage table in `README.md`. The build
 enforces the first two agreeing; nothing enforces the third.
+
+**The drift check is a regex, not an interpreter.** `build.py` finds emitted names with
+`pveEmit(<anything>, '<Literal>'`. A datapoint name held in a variable or built by concatenation is
+invisible to it and will pass the build while printing an undeclared datapoint on a live Collector.
+Always pass datapoint names as single-quoted literals.
+
+**Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
+collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
+the same — a row in the README table, and a fixture for every endpoint it calls.
 
 A datapoint that is legitimately not emitted on every run needs `"conditional": true` in the module
 definition. Use it when the API genuinely has no value to report — QEMU used-disk, cluster quorum on
