@@ -1,0 +1,72 @@
+{
+  "name": "Proxmox_VE_Cluster",
+  "displayedAs": "Proxmox VE Cluster",
+  "description": "Corosync quorum and HA manager health for a Proxmox VE cluster. Reports safely on a standalone host by withholding the quorum datapoints rather than reporting them as healthy.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,cluster,quorum,corosync,ha,virtualization",
+  "technicalNotes": "Single-instance. Requires Sys.Audit on / for /cluster/status; the HA datapoints additionally read /cluster/ha/status/current and are omitted when HA is not configured or not permitted.\n\nOn a standalone host ClusterConfigured reports 0 and the quorum datapoints are not emitted at all, so they read as no-data instead of raising a false alert.",
+  "collectionMethod": "script",
+  "collectionInterval": "5m",
+  "multiInstance": false,
+  "collectScript": "Proxmox_VE_Cluster.collect.groovy",
+  "datapoints": [
+    {
+      "name": "ClusterConfigured",
+      "description": "1 when this host is a member of a Proxmox cluster, 0 when standalone."
+    },
+    {
+      "name": "Quorate",
+      "description": "1 when the cluster has quorum. Not emitted on a standalone host.",
+      "threshold": "< 1 1 1",
+      "alertBody": "The Proxmox cluster containing ##HOST## has lost quorum. Guests on the minority partition cannot be started or migrated, and HA services will be fenced.\n\nThis started at ##START##, ##DURATION## ago.",
+      "conditional": true
+    },
+    {
+      "name": "Votes",
+      "description": "Current corosync votes.",
+      "conditional": true
+    },
+    {
+      "name": "ExpectedVotes",
+      "description": "Votes corosync expects for quorum.",
+      "conditional": true
+    },
+    {
+      "name": "NodesExpected",
+      "description": "Node count recorded in the cluster configuration.",
+      "conditional": true
+    },
+    {
+      "name": "NodesTotal",
+      "description": "Nodes reported by /cluster/status."
+    },
+    {
+      "name": "NodesOnline",
+      "description": "Nodes currently online."
+    },
+    {
+      "name": "NodesOffline",
+      "description": "Nodes currently offline.",
+      "threshold": "> 0 0 1",
+      "alertBody": "##VALUE## node(s) in the Proxmox cluster containing ##HOST## are offline.\n\nThis started at ##START##, ##DURATION## ago."
+    },
+    {
+      "name": "HAServicesTotal",
+      "description": "HA-managed services known to the CRM.",
+      "conditional": true
+    },
+    {
+      "name": "HAServicesError",
+      "description": "HA services in error or fence state.",
+      "threshold": "> 0 0 1",
+      "alertBody": "##VALUE## HA service(s) on the Proxmox cluster containing ##HOST## are in an error or fence state.\n\nThis started at ##START##, ##DURATION## ago.",
+      "conditional": true
+    },
+    {
+      "name": "HAMasterPresent",
+      "description": "1 when an HA manager master has been elected.",
+      "conditional": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Proxmox_VE_GuestStatus",
+  "displayedAs": "Proxmox VE Guest Status",
+  "description": "Power state, configuration lock and HA state for every QEMU virtual machine and LXC container in a Proxmox VE cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,vm,qemu,lxc,container,guest,status,ha,virtualization",
+  "technicalNotes": "BatchScript, sharing discovery with Proxmox VE Guest Performance. Split from it so state changes can carry a different alert posture from utilisation.\n\nStatus deliberately ships with NO alert threshold. A stopped guest is usually stopped on purpose, and alerting on every powered-off VM produces noise that gets the whole suite disabled. Set a threshold of \"< 1\" on the instances or instance groups that are genuinely expected to stay running -- or alert on HAError, which only fires for guests the cluster itself considers broken.\n\nHAError covers the error and fence states. Templates are excluded from discovery.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "3m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_GuestStatus.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Guests.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {"name": "Status", "description": "1 when the guest is running, 0 otherwise. Intentionally unthresholded; see technical notes."},
+    {"name": "UpTimeSeconds", "description": "Seconds since the guest started."},
+    {"name": "Locked", "description": "1 when the guest configuration is locked by a running task such as a backup or migration."},
+    {"name": "HAManaged", "description": "1 when the guest is managed by the HA stack."},
+    {"name": "HAError", "description": "1 when the HA stack reports this guest in an error or fence state.", "threshold": "> 0 0 1", "alertBody": "Proxmox guest ##INSTANCE## is in an HA error or fence state. The cluster could not keep the guest running on its assigned node.\n\nThis started at ##START##, ##DURATION## ago."}
+  ]
+}

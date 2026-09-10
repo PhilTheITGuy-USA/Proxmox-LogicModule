@@ -1,29 +1,131 @@
-# LogicMonitor Proxmox VE LogicModule bundle
+# Proxmox VE LogicModule suite
 
-This bundle monitors Proxmox VE through its HTTPS JSON API. It is designed for a LogicMonitor Collector with Groovy scripting enabled and covers cluster/node health, QEMU VMs, LXC containers, and storage. API monitoring is required for virtualization-level visibility; SNMP can be layered on for the underlying Linux hardware.
+LogicMonitor modules for Proxmox VE, built to work unchanged from a single-node host to a
+multi-hundred-node enterprise cluster, with coverage comparable to LogicMonitor's VMware
+vSphere, Hyper-V and Nutanix suites.
+
+Monitoring is over the Proxmox HTTPS JSON API (`/api2/json`) using a read-only API token.
+SNMP can be layered alongside for the underlying Linux hardware.
+
+## Modules
+
+| Module | Collection | Covers |
+|---|---|---|
+| Proxmox VE Cluster | Script, single instance | Corosync quorum, votes, node counts, HA manager state |
+| Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state |
+| Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem |
+| Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
+| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state |
+| Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
+| addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
+
+The four BatchScript modules each make **one** API call per collection interval no matter
+how large the cluster is: `/cluster/resources` returns every node, guest and storage
+object in a single response. A 500-guest cluster costs one request per interval, not five
+hundred.
+
+## Requirements
+
+A Proxmox API token with read-only rights:
+
+1. **Datacenter → Permissions → API Tokens → Add.** Create a token, for example
+   `monitor@pam!logicmonitor`. Copy the secret — Proxmox shows it exactly once.
+2. **Datacenter → Permissions → Add → API Token Permission.** Grant the token `PVEAuditor`
+   on path `/` with **Propagate** enabled.
+
+   If the token has **Privilege Separation** enabled (the default), it carries its own ACL
+   and permissions granted to the *user* do not apply to it. Granting `PVEAuditor` to the
+   token itself, as above, covers both cases.
+
+`PVEAuditor` supplies every privilege the suite needs: `Sys.Audit` for node and cluster
+status, `VM.Audit` for guests, `Datastore.Audit` for storage.
+
+Note that `/cluster/resources` filters by ACL rather than returning an error, so an
+under-privileged token produces *empty discovery* rather than a failure. If instances do
+not appear, check permissions before anything else.
+
+## Resource properties
+
+Set these on the Proxmox resource, or on a group containing it:
+
+| Property | Required | Default | Notes |
+|---|---|---|---|
+| `pve.api.token` | yes | — | Full token string: `user@realm!tokenid=secret` |
+| `pve.api.url` | no | `https://<system.hostname>:8006` | Override if the API is on another address or port |
+| `pve.api.port` | no | `8006` | Used only when building the default URL |
+| `pve.api.timeout` | no | `10000` | Connect and read timeout, milliseconds |
+| `pve.api.insecure` | no | `false` | `true` accepts self-signed certificates. **Lab use only** |
+
+Store `pve.api.token` as a secured property so the secret is not readable from the UI.
 
 ## Install
 
-1. Create a least-privilege Proxmox API token (suggested role: `PVEAuditor`) and set these resource properties on the Proxmox resource:
-   - `pve.api.url` = `https://pve.example.com:8006`
-   - `pve.api.token` = `monitor@pam!logicmonitor=TOKEN_SECRET`
-   - optional `pve.api.timeout` = milliseconds, default `10000`
-   - optional `pve.api.insecure` = `true` only for lab/self-signed certificates
-2. Set `pve.monitor = true` on each Proxmox resource. Apply the DataSources to `getPropValue("pve.monitor") && pve.monitor == "true"`.
-3. Create the four DataSources described in `logicmodule.json`.
-4. Use the corresponding Embedded Groovy scripts and arguments:
-   - Cluster: `scripts/Proxmox_VE_Cluster_CT.groovy`, collection argument `cluster`.
-   - Node: `scripts/Proxmox_VE_Node_AD.groovy` / `node discover` for AD; `scripts/Proxmox_VE_Node_CT.groovy` / `node` for collection.
-   - Guest: `scripts/Proxmox_VE_Guest_AD.groovy` / `guest discover` for AD; `scripts/Proxmox_VE_Guest_CT.groovy` / `guest` for collection.
-   - Storage: `scripts/Proxmox_VE_Storage_AD.groovy` / `storage discover` for AD; `scripts/Proxmox_VE_Storage_CT.groovy` / `storage` for collection.
-5. Configure datapoints with Raw Metric `output`, Post Processor `namevalue(datapointKey)`, and Metric Type `Gauge`.
+1. Import each `dist/*.json` through **Settings → LogicModules → My Module Toolbox →
+   Add → Import from file**.
+2. Create the PropertySource by hand: **Add → PropertySource**, name it
+   `addCategory_Proxmox_VE`, set AppliesTo to something that reaches your Proxmox hosts
+   (`system.displayname =~ "pve"`, or simply `true` — the script itself stays silent on
+   anything that is not Proxmox), and paste `dist/scripts/addCategory_Proxmox_VE.groovy`.
+   It is supplied as a script rather than an importable JSON because the PropertySource
+   export schema could not be verified against a published sample.
+3. Set `pve.api.token` on the resource and run the PropertySource. It adds the category
+   `ProxmoxVE`, and every module applies itself from there — nothing else to configure.
 
-The `*_AD.groovy` scripts are for Active Discovery and the `*_CT.groovy` scripts are for collection. For a standalone Proxmox host, disable or omit the Cluster DataSource because `/cluster/status` has no meaningful cluster metrics outside a cluster.
+## Alerting
 
-The JSON is a portable design manifest, not a raw LogicMonitor account export (account exports contain tenant-specific IDs and thresholds). Import the definitions through My Module Toolbox, then copy the datapoints, scripts, arguments, and thresholds from the manifest.
+Thresholds ship on the datapoints where a default is defensible: node and storage
+availability, cluster quorum, HA errors, filesystem and memory utilisation.
 
-## Coverage
+**`Status` on Guest Status deliberately ships with no threshold.** A stopped guest is
+usually stopped on purpose, and alerting on every powered-off VM produces the kind of
+noise that gets a whole suite disabled. Apply `< 1` to the instances or instance groups
+that are genuinely expected to stay running, or alert on `HAError`, which only fires for
+guests the cluster itself considers broken.
 
-Node: availability, CPU utilization, load, memory, swap, root filesystem, uptime, and network traffic. Guests: power state, CPU, memory, disk, network, uptime, and configured limits for both QEMU and LXC. Storage: availability, used/free bytes, utilization, and content type. Cluster: quorum, votes, and expected votes.
+## Known limits
 
-The script exits non-zero on API failure so a transient outage does not delete discovered instances.
+These are Proxmox API limits, not implementation shortcuts:
+
+- **No per-guest storage latency or IOPS.** Proxmox exposes byte counters only, so there
+  is no equivalent of Nutanix's `citAvgLatencyUsecs` or `vmReadIOPerSecond`.
+- **QEMU reports no used-disk figure.** `DiskUsedBytes` and `DiskUsagePercent` are
+  collected for LXC containers only. Real usage inside a VM requires the guest agent, in
+  the same way VMware requires VMware Tools. Those datapoints are left as no-data for VMs
+  rather than reported as a misleading zero.
+- **Templates are excluded from discovery.** They are never running and would otherwise
+  appear as permanently down instances.
+
+## Development
+
+`scripts/` is the source of truth. `dist/` is generated and not committed.
+
+Each module body is assembled with the shared preamble `scripts/lib/pve_common.groovy`,
+because LogicMonitor has no include mechanism and the script embedded in a module must be
+self-contained.
+
+```sh
+python build/build.py           # assemble dist/*.json and dist/scripts/*.groovy
+python build/build.py --check   # validate without writing
+```
+
+The build fails if a collection script prints a datapoint the module does not declare, if
+a declared datapoint is never printed, or if brackets are unbalanced in any assembled
+script.
+
+Verification runs in the same Groovy 4 runtime the Collector uses, and needs no Proxmox
+host:
+
+```sh
+docker compose -f tests/docker-compose.yml run --rm compile   # groovyc every script
+docker compose -f tests/docker-compose.yml run --rm tests     # run against a mock API
+```
+
+The test harness serves recorded Proxmox API shapes over HTTP, executes each script with
+the bindings a Collector injects, and asserts discovery line format, BatchScript
+`instance.datapoint=value` format, numeric values, that every discovered instance receives
+data and vice versa, that failures exit non-zero without emitting datapoints, and that
+collection uses the bulk endpoint.
+
+Adding or changing a datapoint means editing three things: the `pveEmit` call in the
+collection script, the `datapoints` array in `modules/<Module>.json`, and the coverage
+table above. The build enforces the first two agreeing.

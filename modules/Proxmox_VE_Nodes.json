@@ -1,0 +1,25 @@
+{
+  "name": "Proxmox_VE_Nodes",
+  "displayedAs": "Proxmox VE Nodes",
+  "description": "CPU, memory, uptime and availability for every node in a Proxmox VE cluster, collected cluster-wide in a single API call.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,node,hypervisor,host,virtualization",
+  "technicalNotes": "BatchScript: one /cluster/resources?type=node call per interval regardless of cluster size.\n\nInstance IDs are the Proxmox resource id (node/<name>). Load average, swap and root filesystem are not available from this endpoint and are collected by Proxmox VE Node Detail.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "5m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_Nodes.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Nodes.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {"name": "Status", "description": "1 when the node is online.", "threshold": "< 1 1 1", "alertBody": "Proxmox node ##INSTANCE## is offline.\n\nThis started at ##START##, ##DURATION## ago."},
+    {"name": "CPUUsagePercent", "description": "Node CPU utilisation, percent.", "threshold": "> 85 92 97", "triggerInterval": 3},
+    {"name": "CPUCount", "description": "Logical CPUs available to the node."},
+    {"name": "MemoryUsedBytes", "description": "Memory in use, bytes."},
+    {"name": "MemoryCapacityBytes", "description": "Total memory, bytes."},
+    {"name": "MemoryUsagePercent", "description": "Memory utilisation, percent.", "threshold": "> 85 92 97", "triggerInterval": 3},
+    {"name": "UpTimeSeconds", "description": "Seconds since the node booted."}
+  ]
+}

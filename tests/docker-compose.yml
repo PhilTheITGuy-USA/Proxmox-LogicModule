@@ -1,0 +1,42 @@
+# Verification for the Proxmox VE LogicModule suite.
+#
+# The scripts cannot run outside a LogicMonitor Collector, and Groovy is rarely installed
+# on a developer machine, so both jobs here run in the same Groovy 4 runtime the Collector
+# uses. Run from the repository root:
+#
+#   python build/build.py                                   assemble dist/
+#   docker compose -f tests/docker-compose.yml run --rm compile
+#   docker compose -f tests/docker-compose.yml run --rm tests
+#
+# Neither job talks to a real Proxmox host.
+
+services:
+  # Compile every assembled script. Catches syntax errors that would otherwise only
+  # surface when a Collector rejected the module.
+  compile:
+    image: groovy:4-jdk17
+    working_dir: /work
+    volumes:
+      - ..:/work
+    command: >
+      sh -c '
+      status=0;
+      for f in dist/scripts/*.groovy; do
+        if groovyc -d /tmp/classes "$$f" 2>/tmp/err; then
+          echo "PASS  $$f";
+        else
+          status=1; echo "FAIL  $$f"; sed "s/^/      /" /tmp/err;
+        fi;
+      done;
+      exit $$status'
+
+  # Execute the scripts against a mock Proxmox API and assert the output conforms to
+  # what LogicMonitor parses.
+  tests:
+    image: groovy:4-jdk17
+    working_dir: /work
+    volumes:
+      - ..:/work
+    environment:
+      PVE_MODULE_ROOT: /work
+    command: groovy tests/harness.groovy

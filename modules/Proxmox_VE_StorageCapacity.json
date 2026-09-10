@@ -1,0 +1,24 @@
+{
+  "name": "Proxmox_VE_StorageCapacity",
+  "displayedAs": "Proxmox VE Storage Capacity",
+  "description": "Capacity, free space and availability for every storage defined in a Proxmox VE cluster, per node.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,storage,datastore,capacity,ceph,nfs,zfs,virtualization",
+  "technicalNotes": "BatchScript: one /cluster/resources?type=storage call per interval.\n\nA shared storage is visible from every node and is therefore discovered once per node, with instance ID storage/<node>/<name>. That is intentional rather than duplication: availability and free space are reported from the perspective of the node doing the asking, and a shared store can be reachable from one node and not another. Group instances by the pve_shared instance property if you would rather alert on shared storage once.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "10m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_StorageCapacity.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Storage.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {"name": "Status", "description": "1 when the storage is available from this node.", "threshold": "< 1 1 1", "alertBody": "Proxmox storage ##INSTANCE## is not available. Guests with disks on this storage cannot start, and backups targeting it will fail.\n\nThis started at ##START##, ##DURATION## ago."},
+    {"name": "UsedBytes", "description": "Storage used, bytes."},
+    {"name": "Capacity", "description": "Storage size, bytes."},
+    {"name": "FreeSpace", "description": "Storage free, bytes."},
+    {"name": "UsedPercent", "description": "Storage utilisation, percent.", "threshold": "> 80 90 95", "alertBody": "Proxmox storage ##INSTANCE## is ##VALUE##% full.\n\nThis started at ##START##, ##DURATION## ago."},
+    {"name": "Shared", "description": "1 when the storage is marked shared in the cluster configuration."}
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "name": "Proxmox_VE_GuestPerformance",
+  "displayedAs": "Proxmox VE Guest Performance",
+  "description": "CPU, memory, network and disk throughput for every QEMU virtual machine and LXC container in a Proxmox VE cluster, collected cluster-wide in a single API call.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,vm,qemu,lxc,container,guest,virtualization,performance",
+  "technicalNotes": "BatchScript: one /cluster/resources?type=vm call per interval, whether the cluster has 10 guests or 5000.\n\nInstance IDs are the Proxmox resource id (qemu/<vmid>, lxc/<vmid>), which is cluster-unique and unchanged by live migration or HA failover, so instances and their history survive a guest moving between nodes.\n\nDataRateRx, DataRateTx, DiskReadRate and DiskWriteRate are declared as derive because Proxmox reports these as counters accumulated since guest start; a minimum of 0 discards the negative delta produced when a guest restarts.\n\nDiskUsedBytes and DiskUsagePercent are reported for LXC containers only. QEMU exposes no used-disk figure -- real usage inside a VM requires the guest agent, exactly as VMware requires VMware Tools -- so those datapoints are deliberately left as no-data for VMs rather than reported as zero.\n\nTemplates are excluded from discovery: they are never running and would otherwise appear as permanently down instances.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "5m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_GuestPerformance.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Guests.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {
+      "name": "CPUUsagePercent",
+      "description": "Guest CPU utilisation, percent of its allocated cores.",
+      "threshold": "> 90 95 98",
+      "triggerInterval": 5
+    },
+    {
+      "name": "CPUCount",
+      "description": "vCPUs allocated to the guest."
+    },
+    {
+      "name": "MemoryUsedBytes",
+      "description": "Memory in use, bytes."
+    },
+    {
+      "name": "MemoryCapacityBytes",
+      "description": "Memory allocated to the guest, bytes."
+    },
+    {
+      "name": "MemoryUsagePercent",
+      "description": "Memory utilisation, percent of allocation.",
+      "threshold": "> 90 95 98",
+      "triggerInterval": 5
+    },
+    {
+      "name": "DiskCapacityBytes",
+      "description": "Root disk size, bytes."
+    },
+    {
+      "name": "DiskUsedBytes",
+      "description": "Root disk used, bytes. LXC containers only; QEMU reports no used-disk figure.",
+      "conditional": true
+    },
+    {
+      "name": "DiskUsagePercent",
+      "description": "Root disk utilisation, percent. LXC containers only.",
+      "threshold": "> 85 92 97",
+      "conditional": true
+    },
+    {
+      "name": "DataRateRx",
+      "description": "Network bytes received per second.",
+      "type": "derive",
+      "min": "0"
+    },
+    {
+      "name": "DataRateTx",
+      "description": "Network bytes sent per second.",
+      "type": "derive",
+      "min": "0"
+    },
+    {
+      "name": "DiskReadRate",
+      "description": "Bytes read from block devices per second.",
+      "type": "derive",
+      "min": "0"
+    },
+    {
+      "name": "DiskWriteRate",
+      "description": "Bytes written to block devices per second.",
+      "type": "derive",
+      "min": "0"
+    }
+  ]
+}

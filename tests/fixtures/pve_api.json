@@ -1,0 +1,60 @@
+{
+  "/version": {
+    "version": "8.2.2", "release": "8.2", "repoid": "a1b2c3d4"
+  },
+  "/cluster/status": [
+    {"type": "cluster", "id": "cluster", "name": "pve-cluster", "version": 2, "nodes": 2, "quorate": 1},
+    {"type": "node", "id": "node/pve1", "name": "pve1", "online": 1, "local": 1, "nodeid": 1},
+    {"type": "node", "id": "node/pve2", "name": "pve2", "online": 0, "nodeid": 2}
+  ],
+  "/cluster/ha/status/current": [
+    {"id": "quorum", "type": "quorum", "quorate": 1},
+    {"id": "master", "type": "master", "node": "pve1", "timestamp": 1730000000},
+    {"id": "lrm:pve1", "type": "lrm", "node": "pve1", "status": "active"},
+    {"id": "service:vm:102", "type": "service", "sid": "vm:102", "state": "error", "node": "pve2"}
+  ],
+  "/cluster/resources?type=node": [
+    {"id": "node/pve1", "type": "node", "node": "pve1", "status": "online",
+     "cpu": 0.1523, "maxcpu": 16, "mem": 34359738368, "maxmem": 68719476736, "uptime": 604800},
+    {"id": "node/pve2", "type": "node", "node": "pve2", "status": "offline",
+     "cpu": 0, "maxcpu": 16, "mem": 0, "maxmem": 68719476736, "uptime": 0}
+  ],
+  "/cluster/resources?type=vm": [
+    {"id": "qemu/101", "type": "qemu", "vmid": 101, "name": "web-01", "node": "pve1",
+     "status": "running", "cpu": 0.0342, "maxcpu": 4, "mem": 2147483648, "maxmem": 4294967296,
+     "maxdisk": 53687091200, "netin": 123456789, "netout": 98765432,
+     "diskread": 555000, "diskwrite": 666000, "uptime": 86400, "template": false,
+     "pool": "prod", "tags": "web;prod", "hastate": "started"},
+    {"id": "lxc/200", "type": "lxc", "vmid": 200, "name": "dns-01", "node": "pve2",
+     "status": "running", "cpu": 0.0101, "maxcpu": 2, "mem": 268435456, "maxmem": 1073741824,
+     "disk": 2147483648, "maxdisk": 8589934592, "netin": 111, "netout": 222,
+     "diskread": 333, "diskwrite": 444, "uptime": 3600, "template": false},
+    {"id": "qemu/999", "type": "qemu", "vmid": 999, "name": "ubuntu-24.04 template",
+     "node": "pve1", "status": "stopped", "template": true, "maxcpu": 2, "maxmem": 2147483648},
+    {"id": "qemu/102", "type": "qemu", "vmid": 102, "name": "db-01", "node": "pve2",
+     "status": "stopped", "cpu": 0, "maxcpu": 8, "mem": 0, "maxmem": 17179869184,
+     "maxdisk": 214748364800, "netin": 0, "netout": 0, "diskread": 0, "diskwrite": 0,
+     "uptime": 0, "template": false, "lock": "backup", "hastate": "error"}
+  ],
+  "/cluster/resources?type=storage": [
+    {"id": "storage/pve1/local", "type": "storage", "storage": "local", "node": "pve1",
+     "status": "available", "disk": 10737418240, "maxdisk": 107374182400,
+     "shared": false, "plugintype": "dir"},
+    {"id": "storage/pve1/ceph-vm", "type": "storage", "storage": "ceph-vm", "node": "pve1",
+     "status": "available", "disk": 5497558138880, "maxdisk": 10995116277760,
+     "shared": true, "plugintype": "rbd"},
+    {"id": "storage/pve2/backup.nfs", "type": "storage", "storage": "backup.nfs",
+     "node": "pve2", "status": "unavailable", "disk": 0, "maxdisk": 0,
+     "shared": true, "plugintype": "nfs"}
+  ],
+  "/nodes/pve1/status": {
+    "cpu": 0.1523,
+    "loadavg": ["1.20", "0.98", "0.75"],
+    "cpuinfo": {"cpus": 16, "cores": 8, "model": "AMD EPYC 7302P"},
+    "memory": {"total": 68719476736, "used": 34359738368, "free": 34359738368},
+    "swap": {"total": 8589934592, "used": 1073741824},
+    "rootfs": {"total": 107374182400, "used": 32212254720, "avail": 75161927680},
+    "uptime": 604800,
+    "pveversion": "pve-manager/8.2.2"
+  }
+}
