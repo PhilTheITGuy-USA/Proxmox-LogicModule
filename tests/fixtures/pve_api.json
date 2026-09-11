@@ -507,5 +507,106 @@
       "mounted": true,
       "osdid": -1
     }
-  ]
+  ],
+  "/cluster/ceph/status": {
+    "health": {
+      "status": "HEALTH_WARN",
+      "checks": {
+        "PG_DEGRADED": {
+          "severity": "HEALTH_WARN",
+          "summary": {
+            "message": "Degraded data redundancy"
+          }
+        }
+      }
+    },
+    "osdmap": {
+      "epoch": 4821,
+      "num_osds": 6,
+      "num_up_osds": 5,
+      "num_in_osds": 6
+    },
+    "pgmap": {
+      "num_pgs": 256,
+      "bytes_used": 1099511627776,
+      "bytes_avail": 3298534883328,
+      "bytes_total": 4398046511104,
+      "pgs_by_state": [
+        {
+          "state_name": "active+clean",
+          "count": 240
+        },
+        {
+          "state_name": "active+undersized+degraded",
+          "count": 16
+        }
+      ]
+    },
+    "monmap": {
+      "mons": [
+        {
+          "name": "pve1"
+        },
+        {
+          "name": "pve2"
+        },
+        {
+          "name": "pve3"
+        }
+      ]
+    },
+    "quorum_names": [
+      "pve1",
+      "pve2"
+    ]
+  },
+  "/nodes/pve1/replication": [
+    {
+      "id": "101-0",
+      "guest": 101,
+      "jobnum": 0,
+      "type": "local",
+      "source": "pve1",
+      "target": "pve2",
+      "schedule": "*/15",
+      "last_sync": 1789000000,
+      "last_try": 1789000000,
+      "duration": 12.7,
+      "fail_count": 0
+    },
+    {
+      "id": "102-0",
+      "guest": 102,
+      "jobnum": 0,
+      "type": "local",
+      "source": "pve1",
+      "target": "pve2",
+      "schedule": "*/30",
+      "last_sync": 1788000000,
+      "last_try": 1789000000,
+      "duration": 4.2,
+      "fail_count": 3,
+      "error": "command 'zfs send' failed: exit code 1"
+    },
+    {
+      "id": "200-0",
+      "guest": 200,
+      "jobnum": 0,
+      "type": "local",
+      "source": "pve1",
+      "target": "pve2",
+      "schedule": "*/60",
+      "disable": 1
+    }
+  ],
+  "/nodes/pve1/subscription": {
+    "status": "active",
+    "level": "c",
+    "productname": "Proxmox VE Community Subscription 2 CPUs/year",
+    "sockets": 2,
+    "checktime": 1788900000,
+    "nextduedate": "2027-03-15",
+    "serverid": "ABCDEF0123456789",
+    "message": "Subscription is a community subscription"
+  }
 }

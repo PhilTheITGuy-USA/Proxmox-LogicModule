@@ -1,0 +1,47 @@
+{
+  "name": "Proxmox_VE_Replication",
+  "displayedAs": "Proxmox VE Replication",
+  "description": "Storage replication job health: failures, replica staleness and run duration for every replication job in a Proxmox VE cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,replication,zfs,replica,dr,disaster recovery",
+  "technicalNotes": "BatchScript, one /nodes/{node}/replication call per online node per interval. O(nodes). Requires VM.Audit on /vms/{vmid}; the endpoint filters per guest rather than erroring, so an under-privileged token under-reports.\n\nThe job id (guest and job number, e.g. 100-0) is the wildvalue, deliberately without the node name. A replication job follows its guest, so an id built from the current source node would be destroyed by a migration -- the same reasoning that governs guest instance ids. Jobs are deduplicated by id in case more than one node reports the same one.\n\nSecondsSinceLastSync is the datapoint that matters. Whether the most recent run failed is less important than how old the replica now is: a job failing for a day is a job whose replica is a day old, and only the age says that directly. It ships without a threshold because the tolerable staleness is whatever the job's own schedule implies, which varies per job -- set it per instance or per instance group.\n\nlast_sync, duration and fail_count only exist once a job has run. A job that has never run reports no sync age rather than an age of zero, which would read as 'replicated just now', the exact opposite of the truth.\n\nUNVERIFIED: not yet exercised against a cluster that runs replication.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "10m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_Replication.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Replication.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {
+      "name": "FailCount",
+      "description": "Consecutive failures of this replication job.",
+      "threshold": "> 0 2 5"
+    },
+    {
+      "name": "Failed",
+      "description": "1 when the job's last run recorded an error. The error text is written to the collection task log.",
+      "threshold": "> 0 0 0",
+      "triggerInterval": 2
+    },
+    {
+      "name": "Disabled",
+      "description": "1 when the job is administratively disabled."
+    },
+    {
+      "name": "Running",
+      "description": "1 while the job is actually executing."
+    },
+    {
+      "name": "SecondsSinceLastSync",
+      "description": "Age of the replica, in seconds since the last successful sync. Withheld for a job that has never run. Ships without a threshold: tolerable staleness follows each job's own schedule.",
+      "conditional": true
+    },
+    {
+      "name": "DurationSeconds",
+      "description": "How long the last run took.",
+      "conditional": true
+    }
+  ]
+}

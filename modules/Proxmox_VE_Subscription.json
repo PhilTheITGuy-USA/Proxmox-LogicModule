@@ -1,0 +1,37 @@
+{
+  "name": "Proxmox_VE_Subscription",
+  "displayedAs": "Proxmox VE Subscription",
+  "description": "Proxmox subscription status and renewal date for every online node.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,subscription,licence,license,support,renewal",
+  "technicalNotes": "BatchScript, one /nodes/{node}/subscription call per online node per interval. O(nodes). The endpoint needs no privilege beyond authentication.\n\nProxmox_VE_Nodes already reports Subscribed from the 'level' field on /cluster/resources at no extra cost. This module exists for the part that field cannot answer: when the subscription runs out.\n\nnextduedate is a YYYY-MM-DD string rather than an epoch, so it is parsed as UTC midnight. A node with no subscription has no due date at all and reports none -- zero days remaining would read as 'expires today' on every unlicensed node.\n\nActive ships without a threshold, for the same reason Subscribed does: an unsubscribed node is a licensing fact, not a fault, and a homelab would alert forever. Set a threshold where a subscription is genuinely expected.\n\nUNVERIFIED: not yet exercised against a subscribed node.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "720m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_Subscription.collect.groovy",
+  "discoveryScript": "Proxmox_VE_OnlineNodes.ad.groovy",
+  "discoveryInterval": "1440m",
+  "datapoints": [
+    {
+      "name": "Active",
+      "description": "1 when the node reports an active subscription. Ships without a threshold: an unsubscribed node is a licensing fact, not a fault."
+    },
+    {
+      "name": "Sockets",
+      "description": "CPU sockets the subscription key covers."
+    },
+    {
+      "name": "DaysUntilDue",
+      "description": "Days until the subscription's next due date. Withheld on a node with no subscription rather than reported as zero.",
+      "conditional": true,
+      "threshold": "< 30 14 7"
+    },
+    {
+      "name": "DaysSinceLastCheck",
+      "description": "Days since Proxmox last validated the key against the subscription server.",
+      "conditional": true
+    }
+  ]
+}

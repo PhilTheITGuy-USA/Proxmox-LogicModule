@@ -150,16 +150,20 @@ schema carries `content`, `shared` and `plugintype` but no `enabled`. That field
 
 ### Tier 2 — infrastructure surfaces the parity suites have and we do not
 
-| Module | Source | Cost | Rationale |
-|---|---|---|---|
-| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | Ceph is the Proxmox equivalent of vSAN. Health state, PG states, capacity. Mandatory for enterprise credibility. |
-| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | O(nodes) | Per-OSD in/out/up/down, fill percentage. |
-| `Proxmox_VE_Replication` | `/cluster/replication` + `/nodes/{node}/replication/{id}/status` | O(nodes) | Storage replication job failures and lag. |
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
-| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state. |
-| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | Support level and expiry. Largely superseded by the free `level` field above; build this only for expiry. |
-| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | Days until `notafter`. |
-| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | Physical disk SMART `health`, size, wearout. |
+Seven of the eight are built. Four were verifiable against a standalone node and are
+straightforward; three could only be written best-effort, because a single node cannot exercise
+them. Those carry an UNVERIFIED note in their own `technicalNotes` saying exactly what is unproven.
+
+| Module | Source | Cost | Status | Rationale |
+|---|---|---|---|---|
+| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
+| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
+| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
+| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
+| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | built, **unverified** | Ceph is the Proxmox equivalent of vSAN. The endpoint returns an untyped passthrough of `ceph status`, so every field is read defensively. |
+| `Proxmox_VE_Replication` | `/nodes/{node}/replication` | O(nodes) | built, **unverified** | Job failures and replica staleness. Note the endpoint is the *node* one; `/cluster/replication` is `ReplicationConfig`, the job definitions, not their status. |
+| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | built, **unverified** | Renewal date. The status half is already free from the `level` field in Tier 1a; this module exists for `nextduedate`. |
+| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | O(nodes) | **not built** | Per-OSD in/out/up/down and fill percentage. Deliberately deferred: the endpoint returns a CRUSH-map tree rather than a flat list, and guessing at that shape without a real cluster to check against is how the BatchScript defect in §7 happened. |
 
 ### Tier 2a — workload surfaces
 

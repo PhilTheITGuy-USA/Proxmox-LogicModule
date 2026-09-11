@@ -1,0 +1,117 @@
+{
+  "name": "Proxmox_VE_Ceph",
+  "displayedAs": "Proxmox VE Ceph",
+  "description": "Ceph cluster health, OSD state, placement group state and capacity for a Proxmox VE hyper-converged cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,ceph,osd,placement group,pg,storage,hyperconverged,rados",
+  "technicalNotes": "Single instance, one /cluster/ceph/status call per interval, whatever the size of the Ceph cluster. Requires Sys.Audit or Datastore.Audit on /.\n\nUNVERIFIED against a real Ceph cluster. The Proxmox API declares this endpoint's return as an untyped object -- it passes through whatever `ceph status` produces -- so no field can be relied on from the schema, and Ceph has moved these keys between releases. Every field is read defensively, osdmap is accepted in both its flat and nested shapes, and each group of datapoints is withheld entirely when its source key is absent. Expect to tighten this once it has run against a real cluster.\n\nMost Proxmox installs do not run Ceph. That case reports CephAvailable=0 and withholds everything else, rather than reporting a healthy cluster with zero OSDs. It is not a collection failure.\n\nHealth is three flags rather than one ordinal, because an encoding where 2 means HEALTH_ERR is something every dashboard author then has to look up. Placement group cleanliness is decided by decomposing the compound state name (active+clean, active+undersized+degraded) rather than by string-matching active+clean, so a state Ceph adds later does not silently count as clean.",
+  "collectionMethod": "script",
+  "collectionInterval": "5m",
+  "multiInstance": false,
+  "collectScript": "Proxmox_VE_Ceph.collect.groovy",
+  "datapoints": [
+    {
+      "name": "CephAvailable",
+      "description": "1 when Ceph status could be read. 0 on a cluster with no Ceph configured, in which case every other datapoint here is withheld."
+    },
+    {
+      "name": "HealthOK",
+      "description": "1 when Ceph reports HEALTH_OK.",
+      "conditional": true
+    },
+    {
+      "name": "HealthWarn",
+      "description": "1 when Ceph reports HEALTH_WARN.",
+      "conditional": true,
+      "threshold": "> 0 0 0",
+      "triggerInterval": 5
+    },
+    {
+      "name": "HealthError",
+      "description": "1 when Ceph reports HEALTH_ERR.",
+      "conditional": true,
+      "threshold": "> 0 0 0",
+      "alertBody": "Ceph reports HEALTH_ERR. Data availability or durability is at risk; check `ceph health detail` on any node."
+    },
+    {
+      "name": "HealthChecks",
+      "description": "Number of active Ceph health checks. The check names are written to the collection task log.",
+      "conditional": true
+    },
+    {
+      "name": "OSDsTotal",
+      "description": "OSDs known to the cluster.",
+      "conditional": true
+    },
+    {
+      "name": "OSDsUp",
+      "description": "OSDs currently up.",
+      "conditional": true
+    },
+    {
+      "name": "OSDsIn",
+      "description": "OSDs currently in the cluster.",
+      "conditional": true
+    },
+    {
+      "name": "OSDsDown",
+      "description": "OSDs known but not up.",
+      "conditional": true,
+      "threshold": "> 0 0 1"
+    },
+    {
+      "name": "OSDsOut",
+      "description": "OSDs known but not in the cluster. Expected during a planned rebalance.",
+      "conditional": true
+    },
+    {
+      "name": "PGsTotal",
+      "description": "Placement groups in the cluster.",
+      "conditional": true
+    },
+    {
+      "name": "PGsClean",
+      "description": "Placement groups whose every state component is active or clean.",
+      "conditional": true
+    },
+    {
+      "name": "PGsNotClean",
+      "description": "Placement groups in any other state: degraded, undersized, recovering, backfilling. Non-zero during normal recovery, so the threshold allows time to settle.",
+      "conditional": true,
+      "threshold": "> 0 0 0",
+      "triggerInterval": 15
+    },
+    {
+      "name": "Capacity",
+      "description": "Raw cluster capacity, bytes.",
+      "conditional": true
+    },
+    {
+      "name": "UsedBytes",
+      "description": "Raw cluster capacity in use, bytes.",
+      "conditional": true
+    },
+    {
+      "name": "FreeSpace",
+      "description": "Raw cluster capacity available, bytes.",
+      "conditional": true
+    },
+    {
+      "name": "UsedPercent",
+      "description": "Raw cluster utilisation. Ceph degrades badly when full, and rebalancing needs free space to work with.",
+      "conditional": true,
+      "threshold": "> 75 85 90"
+    },
+    {
+      "name": "MonitorsTotal",
+      "description": "Ceph monitors in the monmap.",
+      "conditional": true
+    },
+    {
+      "name": "MonitorsInQuorum",
+      "description": "Ceph monitors currently in quorum. A cluster that loses monitor quorum is unavailable regardless of OSD state.",
+      "conditional": true
+    }
+  ]
+}
