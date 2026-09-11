@@ -167,21 +167,33 @@ guest restart's counter reset is discarded rather than producing a negative spik
 
 ## 7. Build status
 
-Tier 1 and the PropertySource are implemented, assembled and verified.
+Tier 1 and the PropertySource are implemented, assembled and verified, and as of 2026-09-10 all
+six DataSources are collecting against a live cluster.
 
 | | |
 |---|---|
 | Modules built | 6 DataSources + 1 PropertySource |
 | Scripts compiled | 12, on Groovy 4.0.33 (the Collector's runtime) |
 | Harness checks | 415, against a mock Proxmox API |
-| Real Proxmox host | **not yet exercised** |
+| Portal import | **verified** — all six import and apply via `hasCategory("ProxmoxVE")` |
+| Real Proxmox host | **verified** — all six collecting, 2026-09-10 |
 
 The harness is mutation-tested: reintroducing the template-discovery bug and the QEMU
 used-disk bug both make it fail, so a green run means something.
 
-What has *not* been proven is the module JSON importing into a real portal, and the scripts
-running against a real Proxmox host. Both need Phil's environment. Everything the published API
-schema can settle has been settled; the rest is a portal import away.
+**The live portal caught what nothing local could.** Every batchscript module imported, discovered
+its instances, and returned correct output from Test Collection Script while recording No Data on
+every datapoint of every instance. The cause was the datapoint post-processor key: `build.py` was
+emitting a bare `CPUUsagePercent`, which matches a Script DataSource's output but never a
+BatchScript's, where one stream carries every instance and each key is prefixed with an instance id.
+The key has to be `##WILDVALUE##.CPUUsagePercent`. Node Detail was the only module collecting, and
+only because it is the one Script-method module in the suite.
+
+That is worth recording as a boundary rather than a footnote: the build, the compile check and the
+harness all validate what the *scripts* emit, and none of them validate how the *module JSON* tells
+LogicMonitor to parse it. The build now checks post-processor keys against the collection method,
+but the class of defect — module metadata that is wrong in a way no local check can see — is still
+only reachable from a portal.
 
 Tier 2 (Ceph, CephOSD, Replication, BackupCoverage, NodeServices, Subscription, Certificates,
 Disks) and the TopologySource are designed above but not built.
