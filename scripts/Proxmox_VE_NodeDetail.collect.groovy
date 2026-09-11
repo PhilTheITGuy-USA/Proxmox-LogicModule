@@ -34,6 +34,8 @@ try {
 
     def cpuCount = cpuInfo.cpus ?: 0
     pveEmit(null, 'CPUCount', cpuCount)
+    pveEmit(null, 'CPUSockets', cpuInfo.sockets ?: 0)
+    pveEmit(null, 'CPUCores', cpuInfo.cores ?: 0)
     // Load per core is the figure that means the same thing across differently sized nodes.
     pveEmit(null, 'LoadPerCore', cpuCount ? pveRound((load ? load[0] : 0.0d) / (cpuCount as double)) : 0)
 
@@ -49,6 +51,20 @@ try {
     pveEmit(null, 'RootFSCapacity', rootfs.total ?: 0)
     pveEmit(null, 'RootFSFreeSpace', rootfs.avail ?: 0)
     pveEmit(null, 'RootFSUsedPercent', pvePercent(rootfs.used, rootfs.total))
+
+    // "wait" is the node's IO wait, reported on a 0..1 scale exactly like cpu. Sustained
+    // IO wait is the clearest signal that storage, not CPU, is the constraint.
+    pveEmit(null, 'IOWaitPercent', pveRound(((status.wait ?: 0) as double) * 100.0d))
+
+    /*
+     * KSM reclaims memory by merging identical pages across guests. A node with KSM
+     * disabled reports no ksm block at all, and a zero there would read as "KSM is running
+     * and saving nothing" rather than "KSM is off", so it is withheld.
+     */
+    def ksm = status.ksm ?: [:]
+    if (ksm.shared != null) {
+        pveEmit(null, 'KSMSharedBytes', ksm.shared)
+    }
 
     pveEmit(null, 'UpTimeSeconds', status.uptime ?: 0)
 

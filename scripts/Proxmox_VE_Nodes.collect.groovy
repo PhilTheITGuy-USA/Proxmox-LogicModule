@@ -22,6 +22,14 @@ try {
         pveEmit(id, 'MemoryCapacityBytes', node.maxmem ?: 0)
         pveEmit(id, 'MemoryUsagePercent', pvePercent(node.mem, node.maxmem))
         pveEmit(id, 'UpTimeSeconds', node.uptime ?: 0)
+
+        /*
+         * "level" is the subscription level, empty on an unsubscribed node. Reported as a
+         * boolean because the level itself is a string and not a metric, and shipped
+         * without a threshold because an unsubscribed node is a licensing fact, not a
+         * fault -- a homelab would alert forever.
+         */
+        pveEmit(id, 'Subscribed', node.level?.toString() ? 1 : 0)
     }
     return 0
 } catch (Exception exception) {

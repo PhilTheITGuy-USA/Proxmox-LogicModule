@@ -14,12 +14,43 @@
   "discoveryScript": "Proxmox_VE_Nodes.ad.groovy",
   "discoveryInterval": "60m",
   "datapoints": [
-    {"name": "Status", "description": "1 when the node is online.", "threshold": "< 1 1 1", "alertBody": "Proxmox node ##INSTANCE## is offline.\n\nThis started at ##START##, ##DURATION## ago."},
-    {"name": "CPUUsagePercent", "description": "Node CPU utilisation, percent.", "threshold": "> 85 92 97", "triggerInterval": 3},
-    {"name": "CPUCount", "description": "Logical CPUs available to the node."},
-    {"name": "MemoryUsedBytes", "description": "Memory in use, bytes."},
-    {"name": "MemoryCapacityBytes", "description": "Total memory, bytes."},
-    {"name": "MemoryUsagePercent", "description": "Memory utilisation, percent.", "threshold": "> 85 92 97", "triggerInterval": 3},
-    {"name": "UpTimeSeconds", "description": "Seconds since the node booted."}
+    {
+      "name": "Status",
+      "description": "1 when the node is online.",
+      "threshold": "< 1 1 1",
+      "alertBody": "Proxmox node ##INSTANCE## is offline.\n\nThis started at ##START##, ##DURATION## ago."
+    },
+    {
+      "name": "CPUUsagePercent",
+      "description": "Node CPU utilisation, percent.",
+      "threshold": "> 85 92 97",
+      "triggerInterval": 3
+    },
+    {
+      "name": "CPUCount",
+      "description": "Logical CPUs available to the node."
+    },
+    {
+      "name": "MemoryUsedBytes",
+      "description": "Memory in use, bytes."
+    },
+    {
+      "name": "MemoryCapacityBytes",
+      "description": "Total memory, bytes."
+    },
+    {
+      "name": "MemoryUsagePercent",
+      "description": "Memory utilisation, percent.",
+      "threshold": "> 85 92 97",
+      "triggerInterval": 3
+    },
+    {
+      "name": "UpTimeSeconds",
+      "description": "Seconds since the node booted."
+    },
+    {
+      "name": "Subscribed",
+      "description": "1 when the node carries a Proxmox subscription. Ships without a threshold: an unsubscribed node is a licensing fact, not a fault."
+    }
   ]
 }

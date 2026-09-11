@@ -76,6 +76,11 @@
       "description": "Bytes written to block devices per second.",
       "type": "derive",
       "min": "0"
+    },
+    {
+      "name": "MemoryHostBytes",
+      "description": "The host's view of the guest's memory footprint, bytes. The gap between this and MemoryUsedBytes is the balloon at work. Not reported by older Proxmox.",
+      "conditional": true
     }
   ]
 }

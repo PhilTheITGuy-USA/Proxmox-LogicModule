@@ -26,6 +26,16 @@ try {
 
         pveEmit(id, 'DiskCapacityBytes', guest.maxdisk ?: 0)
 
+        /*
+         * memhost is the host's view of the guest's memory footprint; mem is the guest's
+         * own. The gap between them is the balloon doing its job, which is as close to
+         * ballooning visibility as /cluster/resources gets. Older Proxmox omits the field,
+         * so it is withheld rather than reported as a zero-sized gap.
+         */
+        if (guest.memhost != null) {
+            pveEmit(id, 'MemoryHostBytes', guest.memhost)
+        }
+
         pveEmit(id, 'DataRateRx', guest.netin ?: 0)
         pveEmit(id, 'DataRateTx', guest.netout ?: 0)
         pveEmit(id, 'DiskReadRate', guest.diskread ?: 0)

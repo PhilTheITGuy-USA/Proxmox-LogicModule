@@ -142,7 +142,11 @@ line plus a datapoint declaration.
 | HA service detail | `crm_state`, `request_state`, `max_restart`, `max_relocate`, `failback`, `group` | Cluster | Already fetched; only `state` is read. A service stuck between requested and actual state is invisible today |
 | HA fencing armed | `fencing` entry type, `armed-state` enum (`armed`/`standby`/`disarming`/`disarmed`) | Cluster | A cluster whose fencing is not armed is a cluster that will not recover |
 | Node subscription level | `level` on node rows | Nodes | Most of Tier 2's `Proxmox_VE_Subscription`, free, minus expiry |
-| Storage administratively disabled | `enabled` on storage rows | StorageCapacity | We map only `active`, so a disabled store is indistinguishable from a broken one |
+
+**Not free, despite appearances.** Storage `enabled` — which would distinguish an administratively
+disabled store from a broken one — is *not* on `/cluster/resources`; `Cluster.pm`'s declared return
+schema carries `content`, `shared` and `plugintype` but no `enabled`. That field is on
+`/nodes/{node}/storage`, making it O(nodes), not free. Same for storage `used_fraction`.
 
 ### Tier 2 — infrastructure surfaces the parity suites have and we do not
 
@@ -222,7 +226,14 @@ guest restart's counter reset is discarded rather than producing a negative spik
 
 ---
 
-## 6. Things that must change from the current implementation
+## 6. Decisions taken in the rebuild (historical)
+
+**Every item in this section is implemented.** It reads as a to-do list because it was one, in the
+rebuild that produced the current Tier 1; it is kept as the record of *why* each decision went the
+way it did, since several of them are load-bearing and cheap to undo by accident. Nothing here is
+outstanding work — for that, see §4. Item 3's `derive` choice and item 2's instance IDs in
+particular are the two most expensive to reverse: changing an ID scheme orphans every discovered
+instance in a customer's portal.
 
 1. Collection method → BatchScript for the four `/cluster/resources`-backed modules.
 2. Instance IDs → Proxmox `id`, so migration doesn't destroy instances.

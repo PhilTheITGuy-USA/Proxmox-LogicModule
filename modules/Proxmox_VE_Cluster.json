@@ -5,7 +5,7 @@
   "group": "Proxmox VE",
   "appliesTo": "hasCategory(\"ProxmoxVE\")",
   "searchKeywords": "proxmox,pve,cluster,quorum,corosync,ha,virtualization",
-  "technicalNotes": "Single-instance. Requires Sys.Audit on / for /cluster/status; the HA datapoints additionally read /cluster/ha/status/current and are omitted when HA is not configured or not permitted.\n\nOn a standalone host ClusterConfigured reports 0 and the quorum datapoints are not emitted at all, so they read as no-data instead of raising a false alert.",
+  "technicalNotes": "Single-instance. Requires Sys.Audit on / for /cluster/status; the HA datapoints additionally read /cluster/ha/status/current and are omitted when HA is not configured or not permitted.\n\nOn a standalone host ClusterConfigured reports 0 and the quorum datapoints are not emitted at all, so they read as no-data instead of raising a false alert.\n\nCapacity rollups come from one unfiltered /cluster/resources call, which returns every node, guest and storage object at once. The module makes three calls per interval (/cluster/status, /cluster/resources, /cluster/ha/status/current) and that count does not grow with the cluster: a 500-guest cluster costs the same three as a single node.\n\nVCPUOvercommitRatio and MemoryOvercommitRatio ship without thresholds on purpose. A defensible ratio depends on the site's capacity plan and, for memory, on how much ballooning and KSM headroom exists; a shipped default would be wrong for most clusters in one direction or the other. Templates are excluded from the allocation sums because their allocation is not committed.",
   "collectionMethod": "script",
   "collectionInterval": "5m",
   "multiInstance": false,
@@ -66,6 +66,48 @@
     {
       "name": "HAMasterPresent",
       "description": "1 when an HA manager master has been elected.",
+      "conditional": true
+    },
+    {
+      "name": "GuestsTotal",
+      "description": "Non-template guests in the cluster, running or stopped."
+    },
+    {
+      "name": "GuestsRunning",
+      "description": "Guests currently running."
+    },
+    {
+      "name": "VCPUsAllocated",
+      "description": "Total vCPUs assigned across all non-template guests."
+    },
+    {
+      "name": "VCPUsCapacity",
+      "description": "Total physical CPU threads across all nodes."
+    },
+    {
+      "name": "VCPUOvercommitRatio",
+      "description": "Allocated vCPUs per physical thread. 1.0 is fully committed, above 1.0 is oversubscribed. Ships without a threshold: a defensible ratio is entirely site-specific."
+    },
+    {
+      "name": "MemoryAllocatedBytes",
+      "description": "Total memory assigned across all non-template guests, bytes."
+    },
+    {
+      "name": "MemoryCapacityBytes",
+      "description": "Total physical memory across all nodes, bytes."
+    },
+    {
+      "name": "MemoryOvercommitRatio",
+      "description": "Assigned guest memory per byte of physical memory. Above 1.0 the cluster depends on ballooning or KSM to stay within its real memory. Ships without a threshold: how much overcommit is safe depends on the balloon configuration."
+    },
+    {
+      "name": "HAServicesRequestMismatch",
+      "description": "HA services whose current state differs from the state the CRM requested, i.e. services mid-transition. Brief mismatches are normal; a persistent one is a stuck service.",
+      "conditional": true
+    },
+    {
+      "name": "HAFencingArmed",
+      "description": "1 when the cluster's fencing is armed. A cluster that cannot fence a failed node cannot safely recover its guests. Reported only by Proxmox versions that expose fencing state.",
       "conditional": true
     }
   ]

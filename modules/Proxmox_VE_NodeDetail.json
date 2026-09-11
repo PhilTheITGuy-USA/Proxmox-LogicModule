@@ -14,21 +14,95 @@
   "discoveryScript": "Proxmox_VE_Nodes.ad.groovy",
   "discoveryInterval": "60m",
   "datapoints": [
-    {"name": "LoadAverage1m", "description": "1 minute load average."},
-    {"name": "LoadAverage5m", "description": "5 minute load average."},
-    {"name": "LoadAverage15m", "description": "15 minute load average."},
-    {"name": "CPUCount", "description": "Logical CPUs on the node."},
-    {"name": "LoadPerCore", "description": "1 minute load average divided by logical CPU count.", "threshold": "> 1.5 2 4", "triggerInterval": 3, "alertBody": "Proxmox node ##INSTANCE## has a load of ##VALUE## per core.\n\nThis started at ##START##, ##DURATION## ago."},
-    {"name": "MemoryUsedBytes", "description": "Memory in use, bytes."},
-    {"name": "MemoryCapacityBytes", "description": "Total memory, bytes."},
-    {"name": "MemoryUsagePercent", "description": "Memory utilisation, percent."},
-    {"name": "SwapUsedBytes", "description": "Swap in use, bytes."},
-    {"name": "SwapCapacityBytes", "description": "Total swap, bytes."},
-    {"name": "SwapUsagePercent", "description": "Swap utilisation, percent. Sustained swap use on a hypervisor indicates memory overcommit.", "threshold": "> 25 50 80", "triggerInterval": 5},
-    {"name": "RootFSUsedBytes", "description": "Root filesystem used, bytes."},
-    {"name": "RootFSCapacity", "description": "Root filesystem size, bytes."},
-    {"name": "RootFSFreeSpace", "description": "Root filesystem free, bytes."},
-    {"name": "RootFSUsedPercent", "description": "Root filesystem utilisation, percent. A full root filesystem stops pvedaemon accepting work.", "threshold": "> 80 90 95", "alertBody": "The root filesystem on Proxmox node ##INSTANCE## is ##VALUE##% full.\n\nThis started at ##START##, ##DURATION## ago."},
-    {"name": "UpTimeSeconds", "description": "Seconds since the node booted."}
+    {
+      "name": "LoadAverage1m",
+      "description": "1 minute load average."
+    },
+    {
+      "name": "LoadAverage5m",
+      "description": "5 minute load average."
+    },
+    {
+      "name": "LoadAverage15m",
+      "description": "15 minute load average."
+    },
+    {
+      "name": "CPUCount",
+      "description": "Logical CPUs on the node."
+    },
+    {
+      "name": "LoadPerCore",
+      "description": "1 minute load average divided by logical CPU count.",
+      "threshold": "> 1.5 2 4",
+      "triggerInterval": 3,
+      "alertBody": "Proxmox node ##INSTANCE## has a load of ##VALUE## per core.\n\nThis started at ##START##, ##DURATION## ago."
+    },
+    {
+      "name": "MemoryUsedBytes",
+      "description": "Memory in use, bytes."
+    },
+    {
+      "name": "MemoryCapacityBytes",
+      "description": "Total memory, bytes."
+    },
+    {
+      "name": "MemoryUsagePercent",
+      "description": "Memory utilisation, percent."
+    },
+    {
+      "name": "SwapUsedBytes",
+      "description": "Swap in use, bytes."
+    },
+    {
+      "name": "SwapCapacityBytes",
+      "description": "Total swap, bytes."
+    },
+    {
+      "name": "SwapUsagePercent",
+      "description": "Swap utilisation, percent. Sustained swap use on a hypervisor indicates memory overcommit.",
+      "threshold": "> 25 50 80",
+      "triggerInterval": 5
+    },
+    {
+      "name": "RootFSUsedBytes",
+      "description": "Root filesystem used, bytes."
+    },
+    {
+      "name": "RootFSCapacity",
+      "description": "Root filesystem size, bytes."
+    },
+    {
+      "name": "RootFSFreeSpace",
+      "description": "Root filesystem free, bytes."
+    },
+    {
+      "name": "RootFSUsedPercent",
+      "description": "Root filesystem utilisation, percent. A full root filesystem stops pvedaemon accepting work.",
+      "threshold": "> 80 90 95",
+      "alertBody": "The root filesystem on Proxmox node ##INSTANCE## is ##VALUE##% full.\n\nThis started at ##START##, ##DURATION## ago."
+    },
+    {
+      "name": "UpTimeSeconds",
+      "description": "Seconds since the node booted."
+    },
+    {
+      "name": "CPUSockets",
+      "description": "Physical CPU sockets populated on the node."
+    },
+    {
+      "name": "CPUCores",
+      "description": "Physical CPU cores per socket."
+    },
+    {
+      "name": "IOWaitPercent",
+      "description": "Percent of CPU time spent waiting on IO. Sustained IO wait means storage, not CPU, is the constraint.",
+      "threshold": "> 20 35 50",
+      "triggerInterval": 5
+    },
+    {
+      "name": "KSMSharedBytes",
+      "description": "Memory reclaimed by kernel same-page merging, bytes. Absent when KSM is disabled on the node, which is why it is not reported as zero.",
+      "conditional": true
+    }
   ]
 }

@@ -11,9 +11,9 @@ SNMP can be layered alongside for the underlying Linux hardware.
 
 | Module | Collection | Covers |
 |---|---|---|
-| Proxmox VE Cluster | Script, single instance | Corosync quorum, votes, node counts, HA manager state |
-| Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state |
-| Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem |
+| Proxmox VE Cluster | Script, single instance | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit |
+| Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
+| Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
 | Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
@@ -80,6 +80,13 @@ Store the token as `pve.api.token.credential`. LogicMonitor recognizes the `.cre
 
 Thresholds ship on the datapoints where a default is defensible: node and storage
 availability, cluster quorum, HA errors, filesystem and memory utilisation.
+
+**The capacity rollups ship with no thresholds.** `VCPUOvercommitRatio` and
+`MemoryOvercommitRatio` are the figures worth watching cluster-wide, but a defensible number is
+entirely site-specific: 4:1 vCPU oversubscription is routine on some clusters and reckless on
+others, and memory overcommit above 1.0 is safe exactly to the extent that ballooning and KSM are
+configured to absorb it. Set them against your own capacity plan. `Subscribed` is unthresholded for
+the same reason in reverse — an unsubscribed node is a licensing fact, not a fault.
 
 **`Status` on Guest Status deliberately ships with no threshold.** A stopped guest is
 usually stopped on purpose, and alerting on every powered-off VM produces the kind of
