@@ -6,13 +6,20 @@ A LogicMonitor **LogicModule suite** for Proxmox VE, monitored over its HTTPS JS
 (`/api2/json/...`). There is no application here — Groovy scripts are embedded in DataSources and
 executed by a LogicMonitor Collector. The target is a suite publishable to the LM Exchange that
 works unchanged from a single node to a large enterprise cluster; see `docs/DESIGN.md` for the
-parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the Tier 2 backlog.
+parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the backlog.
 
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
 implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
-superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. Only §4's Tier 2 modules and the
-TopologySource are unbuilt.
+superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. Everything in §4 past Tier 1 is unbuilt.
+
+**§4 sorts the backlog on two axes, and they are independent.** *Scope* (Tier 1 core parity, Tier 2
+infrastructure, Tier 2a workload, Tier 3 per-guest detail) says whether something is worth
+monitoring; *cost* (O(1) per cluster, O(nodes), O(guests)) says what collecting it does to the
+architecture. Cost is the one that constrains design: an O(1) field can join a module that already
+makes the call — Tier 1a is a list of fields already fetched and discarded — while anything
+O(guests) has to be its own opt-in module on a long interval, because one call per guest per
+interval is precisely what §2 was written to avoid.
 
 ```
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers

@@ -35,8 +35,10 @@ Three conventions to copy:
 
 `GET /cluster/resources` returns, in a single request, every node, guest and storage object in the
 cluster with `type`, `id`, `node`, `vmid`, `storage`, `name`, `status`, `cpu`, `maxcpu`, `mem`,
-`maxmem`, `disk`, `maxdisk`, `netin`, `netout`, `diskread`, `diskwrite`, `uptime`, `template`,
-`tags`, `pool` and `hastate`. It works identically on a standalone host.
+`maxmem`, `memhost`, `disk`, `maxdisk`, `netin`, `netout`, `diskread`, `diskwrite`, `uptime`,
+`template`, `tags`, `pool`, `lock`, `level`, `shared`, `plugintype` and `hastate`. It works
+identically on a standalone host. `memhost`, `level` and storage `enabled` are returned today and
+not yet emitted — see Tier 1a in §4.
 
 So Nodes, Guest Performance, Guest Status and Storage Capacity are all served by **one** call per
 interval, as BatchScripts. On a 500-guest cluster that is 1 request per interval instead of ~1000.
@@ -53,9 +55,17 @@ limits are in the Proxmox API itself, and they apply equally to either collectio
 - **QEMU reports no used-disk figure** — `maxdisk` only. LXC reports `disk`. VM disk usage needs
   the guest agent, exactly as VMware needs VMware Tools.
 
-`GET /cluster/metrics/export` is worth evaluating as a second-phase source: it returns a
-timestamp-sorted metric series designed for external metrics servers and may give better resolution
-than polling `/cluster/resources`. Not in the initial build.
+`GET /cluster/metrics/export` was left open as a possible second-phase source. **Resolved: it is a
+narrower set than `/cluster/resources`, not a richer one.** `PullMetric.pm` defines exactly what it
+emits — `cpu_current`, `cpu_max`, `cpu_avg1/5/15`, `cpu_iowait`, `mem_used`, `mem_total`,
+`swap_used`, `swap_total`, `disk_used`, `disk_total`, `net_in`, `net_out`, `uptime` — per object,
+keyed `node/<name>`, `qemu/<vmid>`, `lxc/<vmid>` or `storage/<node>/<sid>`. No ballooning, no PSI,
+no HA, no snapshots.
+
+It is worth adopting for exactly two things `/cluster/resources` cannot supply: **node network
+counters** and **node `cpu_iowait`**. One useful property — each entry carries its own metric type
+as `gauge`, `counter` or `derive`, which maps directly onto the datapoint `type` field in §5. It
+needs `Sys.Audit` on `/`, and takes `local-only`, `node-list`, `start-time` and `history`.
 
 ---
 
@@ -79,29 +89,104 @@ its id because a non-shared storage genuinely is per-node.
 
 ## 4. Proposed module suite
 
-### Tier 1 — core parity
+Everything below is sorted on **two independent axes**. Conflating them is what produced this
+backlog's original blind spot, so they are kept apart deliberately.
 
-| Module | Display name | Source | Notes |
-|---|---|---|---|
-| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` | Single-instance. Quorum, expected vs actual votes, node count, HA manager state. Auto-disables on standalone. |
-| `Proxmox_VE_Nodes` | Proxmox VE Nodes | `/cluster/resources?type=node` | BatchScript. CPU, memory, uptime, online state. |
-| `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. |
-| `Proxmox_VE_GuestPerformance` | Proxmox VE Guest Performance | `/cluster/resources?type=vm` | BatchScript. CPU, memory, network rates, disk IO rates. QEMU + LXC. |
-| `Proxmox_VE_GuestStatus` | Proxmox VE Guest Status | same call | BatchScript. Power state, HA state, lock state, uptime. |
-| `Proxmox_VE_StorageCapacity` | Proxmox VE Storage Capacity | `/cluster/resources?type=storage` | BatchScript. Used/total/percent, active, shared. |
+**Scope tier** answers *is this worth monitoring* — judged against the parity targets in §1, and
+against what someone actually running guests asks for. Tier 1 is core parity, Tier 2 is the
+surfaces the parity suites have that we do not, Tier 3 is detail only some sites want.
 
-### Tier 2 — enterprise surfaces the parity suites have and we currently don't
+**Cost tier** answers *what does it cost to collect*, in API calls per collection interval:
 
-| Module | Source | Rationale |
+| Cost | Meaning | Examples |
 |---|---|---|
-| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | Ceph is the Proxmox equivalent of vSAN. Health state, PG states, capacity. Mandatory for enterprise credibility. |
-| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | Per-OSD in/out/up/down, fill percentage. |
-| `Proxmox_VE_Replication` | `/cluster/replication` + `/nodes/{node}/replication/{id}/status` | Storage replication job failures and lag. |
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | Count of guests covered by no backup job. A compliance metric with no VMware equivalent — a genuine differentiator. |
-| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state. |
-| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | Support level and expiry. Enterprise ops cares; trivial to collect. |
-| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | Days until `notafter`. |
-| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | Physical disk SMART `health`, size, wearout. |
+| **O(1)** | One call, any cluster size | `/cluster/resources`, `/cluster/status`, `/cluster/ha/status/current`, `/cluster/backup-info/not-backed-up`, `/cluster/ceph/status`, `/cluster/metrics/export` |
+| **O(nodes)** | One call per node | `/nodes/{node}/status`, `/nodes/{node}/tasks`, services, certificates, disks |
+| **O(guests)** | One call per guest | per-guest `status/current`, `snapshot` |
+
+Cost decides architecture; scope decides priority. An O(1) addition can usually join a module that
+already makes the call. An O(guests) addition must be its own module, on its own interval, disabled
+by default — at 500 guests on a 5m interval that is ~1.7 requests/second sustained against
+`pvedaemon`, and a QEMU `status/current` is a QMP round trip into the VM, not a cheap read. §2
+exists because the first implementation did exactly this.
+
+**O(nodes) is not O(guests).** Node counts are small and grow slowly; guest counts are neither.
+NodeDetail is already O(nodes) and that is fine.
+
+### Tier 1 — core parity (built, and collecting against a live cluster)
+
+| Module | Display name | Source | Cost | Notes |
+|---|---|---|---|---|
+| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` | O(1) | Single-instance. Quorum, expected vs actual votes, node count, HA manager state. Auto-disables on standalone. |
+| `Proxmox_VE_Nodes` | Proxmox VE Nodes | `/cluster/resources?type=node` | O(1) | BatchScript. CPU, memory, uptime, online state. |
+| `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | O(nodes) | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. |
+| `Proxmox_VE_GuestPerformance` | Proxmox VE Guest Performance | `/cluster/resources?type=vm` | O(1) | BatchScript. CPU, memory, network rates, disk IO rates. QEMU + LXC. |
+| `Proxmox_VE_GuestStatus` | Proxmox VE Guest Status | same call | O(1) | BatchScript. Power state, HA state, lock state, uptime. |
+| `Proxmox_VE_StorageCapacity` | Proxmox VE Storage Capacity | `/cluster/resources?type=storage` | O(1) | BatchScript. Used/total/percent, active, shared. |
+
+### Tier 1a — fields already fetched and thrown away
+
+Not new modules. These are omissions inside the six above: the responses are already being parsed
+and these fields discarded. No new endpoint, no new call, no interval change. Each is a `pveEmit`
+line plus a datapoint declaration.
+
+| What | Field | Belongs in | Why it matters |
+|---|---|---|---|
+| **Total allocated vCPU** | sum `maxcpu` over non-template guests | Cluster | The rollup the suite has no answer for today |
+| **Total assigned memory** | sum `maxmem` over non-template guests | Cluster | As above |
+| **vCPU / memory overcommit ratio** | those sums over node-row `maxcpu` / `maxmem` | Cluster | The form people actually alert on, rather than raw totals |
+| Guest host-side memory | `memhost` on guest rows | GuestPerformance | `mem` vs `memhost` is the ballooning delta at the resolution `/cluster/resources` can express — turns ballooning from invisible into visible, for free |
+| Node IO wait | `wait` in `/nodes/{node}/status` | NodeDetail | Arguably the most diagnostic node metric currently missing |
+| KSM page sharing | `ksm.shared`, same response | NodeDetail | Memory reclaimed by dedup |
+| Sockets and cores | `cpuinfo.sockets`, `cpuinfo.cores` | NodeDetail | We emit total threads only |
+| HA service detail | `crm_state`, `request_state`, `max_restart`, `max_relocate`, `failback`, `group` | Cluster | Already fetched; only `state` is read. A service stuck between requested and actual state is invisible today |
+| HA fencing armed | `fencing` entry type, `armed-state` enum (`armed`/`standby`/`disarming`/`disarmed`) | Cluster | A cluster whose fencing is not armed is a cluster that will not recover |
+| Node subscription level | `level` on node rows | Nodes | Most of Tier 2's `Proxmox_VE_Subscription`, free, minus expiry |
+| Storage administratively disabled | `enabled` on storage rows | StorageCapacity | We map only `active`, so a disabled store is indistinguishable from a broken one |
+
+### Tier 2 — infrastructure surfaces the parity suites have and we do not
+
+| Module | Source | Cost | Rationale |
+|---|---|---|---|
+| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | Ceph is the Proxmox equivalent of vSAN. Health state, PG states, capacity. Mandatory for enterprise credibility. |
+| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | O(nodes) | Per-OSD in/out/up/down, fill percentage. |
+| `Proxmox_VE_Replication` | `/cluster/replication` + `/nodes/{node}/replication/{id}/status` | O(nodes) | Storage replication job failures and lag. |
+| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
+| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state. |
+| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | Support level and expiry. Largely superseded by the free `level` field above; build this only for expiry. |
+| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | Days until `notafter`. |
+| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | Physical disk SMART `health`, size, wearout. |
+
+### Tier 2a — workload surfaces
+
+The list above was written from "what do the competitor suites monitor". It is entirely
+infrastructure-facing, and it misses what an operator running guests asks for. These fill that gap,
+and all of them preserve the architecture.
+
+| Module | Source | Cost | Rationale |
+|---|---|---|---|
+| `Proxmox_VE_BackupStatus` | `/nodes/{node}/tasks?typefilter=vzdump` with `since` / `statusfilter` / `limit` | O(nodes) | Age of last successful backup, and last backup failed. Coverage says a job exists; this says it worked. Both are needed. Tasks return `upid`, `type`, `id`, `starttime`, `endtime`, `status`, `user`. |
+| `Proxmox_VE_Migrations` | same endpoint, migration `typefilter`; `source=active` for in-flight | O(nodes) | Migrations running, and migrations failed in the window. Also the natural place to see an HA failover storm, which the current HA datapoints imply but cannot show. |
+| `Proxmox_VE_NodeNetwork` | `/cluster/metrics/export` `net_in` / `net_out` | O(1) | A real blind spot: node rows in `/cluster/resources` carry no network counters at all. See §2. |
+
+### Tier 3 — per-guest detail, opt-in and throttled
+
+Everything here is O(guests). It belongs in **one** module, on a 15m-or-longer interval, shipped
+disabled, in the same spirit as VMware splitting VM Disk Capacity out of VM Performance. It must
+never be folded into Guest Performance at 5m: that trades away the property that makes this suite
+work at scale, in exchange for metrics that are either occasionally useful (snapshots) or frequently
+unavailable (balloon).
+
+| Surface | Source | Caveat |
+|---|---|---|
+| Ballooning, properly | per-guest `status/current` → `balloon` (actual), `ballooninfo`, `freemem`, `balloon_min`, and `maxmem` overwritten from the balloon's own `max_mem` | `QemuServer.pm` notes the balloon query "fails if balloon driver is not loaded, so this must be the last command". A guest without the driver yields nothing, and it must read as no-data — exactly like QEMU used-disk. |
+| Snapshot count and age of oldest | `/nodes/{node}/{qemu,lxc}/{vmid}/snapshot` | Snapshot sprawl silently consumes storage until a datastore fills. The response carries a synthetic `current` entry that must be filtered out, or every guest reports at least one snapshot. |
+| CPU pressure | `pressurecpusome`, `pressurecpufull` (also `pressureio*`, `pressurememory*`) from `vmstatus()` | See below. |
+
+**There is no CPU ready time in Proxmox.** It is an ESXi scheduler metric; KVM does not expose it
+and neither does the PVE API. PSI — time tasks spent stalled waiting for CPU — is a different
+measurement doing the same diagnostic job, and is the only honest substitute. Confirm it is
+populated on the target version before designing around it.
 
 ### Supporting modules
 
