@@ -30,7 +30,9 @@ build/build.py                   assembles preamble + body into importable modul
 build/groovylint.py              bracket-balance check over the assembled scripts
 tests/harness.groovy             runs the assembled scripts against a mock Proxmox API
 tests/fixtures/pve_api.json      recorded API responses, keyed by path + query string
-docs/DESIGN.md                   parity analysis, design rationale, Tier 2 backlog
+docs/DESIGN.md                   parity analysis, design rationale, the backlog
+docs/INSTALL.md                  Proxmox user/token/permissions, module import, which hosts
+docs/VALIDATION.md               what is unverified and how someone with a cluster checks it
 dist/                            GENERATED, gitignored — never edit, never commit
 ```
 
@@ -254,7 +256,11 @@ Always pass datapoint names as single-quoted literals.
 
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
-the same — a row in the README table, and a fixture for every endpoint it calls.
+the same — a row in the README table, and a fixture for every endpoint it calls. If the module
+cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
+its `technicalNotes` naming what is unproven, and an entry in `docs/VALIDATION.md` saying what to
+compare it against. Four of the Tier 2 modules are in that state; a green harness on a hand-written
+fixture proves the parsing, not the shape.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance

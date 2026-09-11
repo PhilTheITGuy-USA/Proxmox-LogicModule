@@ -37,52 +37,66 @@ there is no dependable cross-DataSource response cache. Combining them into one 
 could reduce the count further, but would couple unrelated alerting and collection intervals.
 This is the practical low-load boundary while preserving separate modules.
 
-## Requirements
+## Install
 
-A Proxmox API token with read-only rights:
+**[`docs/INSTALL.md`](docs/INSTALL.md) is the full guide** — creating the Proxmox user, the
+permissions it needs, creating the API token, building the credential string, importing the
+modules, and choosing which hosts to apply it to. The short version:
 
-1. **Datacenter → Permissions → API Tokens → Add.** Create a token, for example
-   `monitor@pam!logicmonitor`. Copy the secret — Proxmox shows it exactly once.
-2. **Datacenter → Permissions → Add → API Token Permission.** Grant the token `PVEAuditor`
-   on path `/` with **Propagate** enabled.
+```sh
+# On any Proxmox node
+pveum user add monitor@pve --comment "LogicMonitor read-only monitoring"
+pveum acl modify / --users monitor@pve --roles PVEAuditor
+pveum user token add monitor@pve logicmonitor          # copy the secret, shown once
+pveum acl modify / --tokens 'monitor@pve!logicmonitor' --roles PVEAuditor
+```
 
-   If the token has **Privilege Separation** enabled (the default), it carries its own ACL
-   and permissions granted to the *user* do not apply to it. Granting `PVEAuditor` to the
-   token itself, as above, covers both cases.
+```sh
+# Locally
+python build/build.py
+```
 
-`PVEAuditor` supplies every privilege the suite needs: `Sys.Audit` for node and cluster
-status, `VM.Audit` for guests, `Datastore.Audit` for storage.
+1. Import each `dist/*.json` through **Settings → LogicModules → My Module Toolbox → Add → Import
+   from file**.
+2. Create the PropertySource by hand: **Add → PropertySource**, name it `addCategory_Proxmox_VE`,
+   set AppliesTo to something that reaches your Proxmox hosts, and paste
+   `dist/scripts/addCategory_Proxmox_VE.groovy`. It ships as a script rather than an importable
+   JSON because the PropertySource export schema could not be verified against a published sample.
+3. Set **`pve.api.token.credential`** on the resource to the whole token string —
+   `monitor@pve!logicmonitor=<secret>` — and run the PropertySource. It adds the category
+   `ProxmoxVE`, and every module applies itself from there.
 
-Note that `/cluster/resources` filters by ACL rather than returning an error, so an
-under-privileged token produces *empty discovery* rather than a failure. If instances do
-not appear, check permissions before anything else.
+Two things that account for most failed installs:
+
+- **The token needs its own ACL.** With privilege separation on (the default) a token's effective
+  permissions are the intersection of the user's and its own, so granting `PVEAuditor` to the user
+  alone leaves the token with nothing. `/cluster/resources` filters by ACL rather than erroring, so
+  the symptom is *empty discovery with no error*, not a failure.
+- **The property name ends in `.credential` on purpose.** LogicMonitor masks the value of any
+  property whose name ends that way. Call it anything else and the token secret is readable by
+  anyone who can view the resource.
+
+### Which hosts to set the property on
+
+One call to `/cluster/resources` returns the whole cluster, so **a single Proxmox resource carrying
+the token monitors every node, guest and storage object in the cluster**. Setting the property on
+every node instead gives you redundancy at the cost of collecting the same cluster-wide data once
+per node — every guest becomes an instance under every resource. `docs/INSTALL.md` §4.1 lays out
+the trade-off. Because the PropertySource stays silent without a token, the property is the switch:
+whichever hosts have it are exactly the hosts the suite applies to.
 
 ## Resource properties
 
-Set these on the Proxmox resource, or on a group containing it:
-
 | Property | Required | Default | Notes |
 |---|---|---|---|
-| `pve.api.token.credential` | yes | — | Full token string: `user@realm!tokenid=secret`; LogicMonitor masks this suffix |
+| `pve.api.token.credential` | yes | — | Full token string: `user@realm!tokenid=secret`. The `.credential` suffix makes LogicMonitor mask it |
 | `pve.api.url` | no | `https://<system.hostname>:8006` | Override if the API is on another address or port |
 | `pve.api.port` | no | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | no | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | no | `false` | `true` accepts self-signed certificates. **Lab use only** |
 
-Store the token as `pve.api.token.credential`. LogicMonitor recognizes the `.credential` suffix as sensitive and masks the value in the UI.
-
-## Install
-
-1. Import each `dist/*.json` through **Settings → LogicModules → My Module Toolbox →
-   Add → Import from file**.
-2. Create the PropertySource by hand: **Add → PropertySource**, name it
-   `addCategory_Proxmox_VE`, set AppliesTo to something that reaches your Proxmox hosts
-   (`system.displayname =~ "pve"`, or simply `true` — the script itself stays silent on
-   anything that is not Proxmox), and paste `dist/scripts/addCategory_Proxmox_VE.groovy`.
-   It is supplied as a script rather than an importable JSON because the PropertySource
-   export schema could not be verified against a published sample.
-3. Set `pve.api.token.credential` on the resource and run the PropertySource. It adds the category
-   `ProxmoxVE`, and every module applies itself from there — nothing else to configure.
+`PVEAuditor` on `/` with propagate supplies every privilege the suite needs: `Sys.Audit` for node,
+cluster, Ceph and backup data, `VM.Audit` for guests and replication, `Datastore.Audit` for storage.
 
 ## Alerting
 
