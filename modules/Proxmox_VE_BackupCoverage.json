@@ -1,0 +1,34 @@
+{
+  "name": "Proxmox_VE_BackupCoverage",
+  "displayedAs": "Proxmox VE Backup Coverage",
+  "description": "Guests in a Proxmox VE cluster that no backup job covers, answered cluster-wide in a single API call.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,backup,vzdump,coverage,compliance,protection",
+  "technicalNotes": "Single call to /cluster/backup-info/not-backed-up, which answers for the whole cluster regardless of guest count. Requires Sys.Audit on / and filters per guest by VM.Audit on /vms/{vmid}, so an under-privileged token under-reports rather than erroring.\n\nThe endpoint is absent on older Proxmox versions. That case reports BackupInfoAvailable=0 and withholds the counts, rather than reporting zero uncovered guests: a zero here is a confident claim that everything is protected, which is the most damaging wrong answer this module could give.\n\nShips without thresholds. Uncovered guests are often deliberate -- scratch, dev and rebuildable guests are commonly excluded on purpose -- so the alerting threshold belongs to the site's backup policy. Set > 0 where every guest is genuinely expected to be covered.\n\nThe uncovered guests are named on stderr, so the collection task log identifies which guests rather than only how many.",
+  "collectionMethod": "script",
+  "collectionInterval": "60m",
+  "multiInstance": false,
+  "collectScript": "Proxmox_VE_BackupCoverage.collect.groovy",
+  "datapoints": [
+    {
+      "name": "BackupInfoAvailable",
+      "description": "1 when this Proxmox version exposes backup coverage information. When 0, the remaining datapoints are withheld rather than reported as zero."
+    },
+    {
+      "name": "GuestsNotBackedUp",
+      "description": "Guests, running or stopped, that no backup job covers.",
+      "conditional": true
+    },
+    {
+      "name": "VMsNotBackedUp",
+      "description": "QEMU virtual machines that no backup job covers.",
+      "conditional": true
+    },
+    {
+      "name": "ContainersNotBackedUp",
+      "description": "LXC containers that no backup job covers.",
+      "conditional": true
+    }
+  ]
+}

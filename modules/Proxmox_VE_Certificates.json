@@ -1,0 +1,33 @@
+{
+  "name": "Proxmox_VE_Certificates",
+  "displayedAs": "Proxmox VE Certificates",
+  "description": "TLS certificate expiry for every certificate on every online node in a Proxmox VE cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,certificate,tls,ssl,expiry,pveproxy,acme",
+  "technicalNotes": "BatchScript, one /nodes/{node}/certificates/info call per online node per interval. Node counts are small and bounded by cluster size, so this is O(nodes); it never scales with guest count.\n\nProxmox reports up to three certificates per node -- the cluster CA (pve-root-ca.pem), the internal cluster certificate (pve-ssl.pem), and the certificate a browser or API client actually sees (pveproxy-ssl.pem). They expire independently, so each is a separate instance: knowing which certificate is about to expire is most of the value. The endpoint needs no special privilege beyond authentication.\n\nOnly online nodes are discovered and collected. An offline node cannot answer, and discovering instances that can never collect fills the portal with permanent no-data. Instances discovered previously survive a node going offline because deleteInactiveInstances is false, so history is not lost.\n\nEach node is scoped to its own try in both discovery and collection: one unreachable node must not cost the remaining nodes their certificates.\n\nDays remaining is computed against the Collector's clock, because the API returns notafter as a UNIX epoch and provides no server-side 'days remaining'. A Collector with a badly wrong clock will therefore report badly wrong expiry.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "240m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_Certificates.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Certificates.ad.groovy",
+  "discoveryInterval": "1440m",
+  "datapoints": [
+    {
+      "name": "DaysUntilExpiry",
+      "description": "Days until the certificate's notAfter timestamp. Negative once expired.",
+      "threshold": "< 30 14 7"
+    },
+    {
+      "name": "Expired",
+      "description": "1 when the certificate has passed its notAfter timestamp.",
+      "threshold": "> 0 0 0",
+      "alertBody": "The TLS certificate ##INSTANCE## on this Proxmox node has expired. API clients and the web UI will refuse to connect until it is renewed."
+    },
+    {
+      "name": "PublicKeyBits",
+      "description": "Certificate public key size in bits."
+    }
+  ]
+}

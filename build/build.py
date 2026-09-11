@@ -97,6 +97,28 @@ def expand_datapoint(dp: dict, batch: bool) -> dict:
     return out
 
 
+# Keys every module definition must carry. Checked before anything is read off the
+# definition, so a typo or an omission reports as a validation problem naming the file
+# rather than as a KeyError traceback from somewhere inside the build.
+REQUIRED_KEYS = [
+    "name",
+    "displayedAs",
+    "description",
+    "appliesTo",
+    "collectionMethod",
+    "collectionInterval",
+    "collectScript",
+    "datapoints",
+]
+
+
+def check_definition(path: Path, defn: dict) -> list[str]:
+    missing = [key for key in REQUIRED_KEYS if key not in defn]
+    if missing:
+        return [f"{path.name}: module definition is missing {', '.join(missing)}"]
+    return []
+
+
 def build_module(defn: dict) -> tuple[dict, dict[str, str]]:
     """Return (module JSON, {output filename: assembled script})."""
     name = defn["name"]
@@ -208,6 +230,10 @@ def main() -> int:
 
     for path in definitions:
         defn = json.loads(read(path))
+        incomplete = check_definition(path, defn)
+        if incomplete:
+            problems.extend(incomplete)
+            continue
         module, scripts = build_module(defn)
         problems.extend(check_module(defn, module))
         for filename, content in scripts.items():

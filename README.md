@@ -17,6 +17,8 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
 | Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
+| Proxmox VE Backup Coverage | Script, single instance | Guests that no backup job covers |
+| Proxmox VE Certificates | BatchScript | TLS certificate expiry, per certificate per node |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
 
 The four BatchScript modules each make **one** API call per collection interval no matter

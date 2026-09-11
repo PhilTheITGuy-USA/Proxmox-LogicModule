@@ -377,5 +377,49 @@
       "shared": true,
       "plugintype": "nfs"
     }
+  ],
+  "/cluster/backup-info/not-backed-up": [
+    {
+      "vmid": 102,
+      "type": "qemu",
+      "name": "db-01"
+    },
+    {
+      "vmid": 200,
+      "type": "lxc",
+      "name": "edge-cache"
+    }
+  ],
+  "/nodes/pve1/certificates/info": [
+    {
+      "filename": "pve-root-ca.pem",
+      "subject": "CN=Proxmox Virtual Environment,OU=pve-cluster,O=PVE",
+      "issuer": "CN=Proxmox Virtual Environment,OU=pve-cluster,O=PVE",
+      "notbefore": 1700000000,
+      "notafter": 2020000000,
+      "public-key-type": "rsa",
+      "public-key-bits": 4096,
+      "fingerprint": "AA:BB:CC:DD"
+    },
+    {
+      "filename": "pve-ssl.pem",
+      "subject": "CN=pve1.example.com",
+      "issuer": "CN=Proxmox Virtual Environment,OU=pve-cluster,O=PVE",
+      "notbefore": 1700000000,
+      "notafter": 1950000000,
+      "public-key-type": "rsa",
+      "public-key-bits": 2048,
+      "fingerprint": "EE:FF:00:11"
+    },
+    {
+      "filename": "pveproxy-ssl.pem",
+      "subject": "CN=pve1.example.com",
+      "issuer": "CN=Example CA",
+      "notbefore": 1600000000,
+      "notafter": 1700000000,
+      "public-key-type": "ecdsa",
+      "public-key-bits": 256,
+      "fingerprint": "22:33:44:55"
+    }
   ]
 }
