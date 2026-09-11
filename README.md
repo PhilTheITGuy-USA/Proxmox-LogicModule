@@ -22,6 +22,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Node Services | BatchScript | systemd state of pveproxy, pvedaemon, corosync and the rest |
 | Proxmox VE Disks | BatchScript | Physical disk SMART health, size, SSD life remaining |
 | Proxmox VE Ceph | Script, single instance | Ceph health, OSD and placement group state, capacity |
+| Proxmox VE Ceph OSD | BatchScript | Per-OSD up/in state, fill level, latency, CRUSH weight |
 | Proxmox VE Replication | BatchScript | Replication job failures, replica staleness, run duration |
 | Proxmox VE Subscription | BatchScript | Subscription status and renewal date, per node |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
@@ -100,6 +101,16 @@ usually stopped on purpose, and alerting on every powered-off VM produces the ki
 noise that gets a whole suite disabled. Apply `< 1` to the instances or instance groups
 that are genuinely expected to stay running, or alert on `HAError`, which only fires for
 guests the cluster itself considers broken.
+
+## Validating against a real cluster
+
+Six modules are verified against a live Proxmox host. Five are not, because they need something a
+single node cannot provide — a Ceph cluster, a replication job, a subscribed node, an SSD with a
+wear attribute. Those carry an UNVERIFIED note in their own technical notes.
+
+**`docs/VALIDATION.md` is the checklist for anyone with a cluster to test against**: what is
+unproven in each module, what to compare it against, and what to send back. The most useful thing
+is a raw API capture, which becomes a test fixture.
 
 ## Known limits
 

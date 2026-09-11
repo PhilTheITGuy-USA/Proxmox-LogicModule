@@ -1,0 +1,74 @@
+{
+  "name": "Proxmox_VE_CephOSD",
+  "displayedAs": "Proxmox VE Ceph OSD",
+  "description": "Per-OSD state, fill level and latency for a Proxmox VE hyper-converged Ceph cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,ceph,osd,crush,rados,storage,hyperconverged,latency",
+  "technicalNotes": "BatchScript. /nodes/{node}/ceph/osd returns the whole CRUSH tree rather than that node's OSDs -- every node answers with the same cluster-wide map -- so one call discovers and collects every OSD in the cluster. This module is O(1), not O(nodes). Online nodes are tried in turn only until one answers, so a node being down costs nothing. Requires Sys.Audit or Datastore.Audit on /.\n\nThe response is {flags, root}, where root is a recursive bucket tree: datacenter and host buckets carry 'children' lists and OSDs are the leaves. Proxmox's own source carries a 'fixme: return a list instead of extjs tree format?' against this endpoint, so the tree is walked rather than assumed to be any particular depth, and the walk is iterative.\n\nThe wildvalue is the OSD name (osd.12), which is cluster-unique, deliberately without the host. An OSD's host is a CRUSH placement that can change, and an id built from it would be destroyed by a rebalance -- the same reasoning that governs guest instance ids. The host travels as an instance property, where it is free to change.\n\nWhich fields an OSD carries depends on what Ceph could report. status, in, crush_weight, reweight, device_class and pgs come from `osd df tree`; total_space, bytes_used and percent_used from `osd df`; the latencies from the perf dump. A down OSD commonly reports state but no usage and no latency, so each of those is withheld when absent. A zero fill on a down OSD would read as an empty, healthy disk.\n\nNoOutFlagSet reports the cluster-wide noout flag on every OSD instance. noout suppresses rebalancing when an OSD goes down; it is set deliberately during maintenance and then forgotten, which is how a cluster ends up degraded and quiet.\n\nUNVERIFIED: this module has never run against a real Ceph cluster. The endpoint shape and every field name came from pve-manager PVE/API2/Ceph/OSD.pm, but the tree depth, which fields a down OSD actually omits, and the latency units are all worth confirming. See docs/VALIDATION.md.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "5m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_CephOSD.collect.groovy",
+  "discoveryScript": "Proxmox_VE_CephOSD.ad.groovy",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {
+      "name": "Up",
+      "description": "1 when the OSD is up. A down OSD is not serving data.",
+      "threshold": "< 1 1 1",
+      "triggerInterval": 5,
+      "alertBody": "Ceph OSD ##INSTANCE## is down. Check NoOutFlagSet before acting: if noout is set this may be planned maintenance."
+    },
+    {
+      "name": "In",
+      "description": "1 when the OSD is in the cluster. An OSD that is up but out is deliberately excluded from data placement, typically during a planned drain."
+    },
+    {
+      "name": "NoOutFlagSet",
+      "description": "1 when the cluster-wide noout flag is set, which suppresses rebalancing when an OSD goes down. Reported on every OSD because it changes what a down OSD means."
+    },
+    {
+      "name": "UsedPercent",
+      "description": "OSD fill level. Ceph blocks writes at its full ratio and degrades well before it, and rebalancing needs free space to work with.",
+      "threshold": "> 75 85 90",
+      "conditional": true
+    },
+    {
+      "name": "Capacity",
+      "description": "OSD raw capacity, bytes.",
+      "conditional": true
+    },
+    {
+      "name": "UsedBytes",
+      "description": "OSD raw capacity in use, bytes.",
+      "conditional": true
+    },
+    {
+      "name": "CrushWeight",
+      "description": "The OSD's weight in the CRUSH map, normally its size in TiB.",
+      "conditional": true
+    },
+    {
+      "name": "Reweight",
+      "description": "Override weight, 0.0 to 1.0. Below 1.0 means the OSD has been manually or automatically down-weighted.",
+      "conditional": true
+    },
+    {
+      "name": "PlacementGroups",
+      "description": "Placement groups currently mapped to this OSD. A large imbalance across OSDs indicates a CRUSH or weighting problem.",
+      "conditional": true
+    },
+    {
+      "name": "CommitLatencyMs",
+      "description": "Ceph commit latency for this OSD, milliseconds.",
+      "conditional": true
+    },
+    {
+      "name": "ApplyLatencyMs",
+      "description": "Ceph apply latency for this OSD, milliseconds.",
+      "conditional": true
+    }
+  ]
+}

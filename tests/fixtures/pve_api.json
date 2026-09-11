@@ -608,5 +608,83 @@
     "nextduedate": "2027-03-15",
     "serverid": "ABCDEF0123456789",
     "message": "Subscription is a community subscription"
+  },
+  "/nodes/pve1/ceph/osd": {
+    "flags": "noout",
+    "root": {
+      "id": -1,
+      "name": "default",
+      "type": "root",
+      "leaf": 0,
+      "children": [
+        {
+          "id": -3,
+          "name": "pve1",
+          "type": "host",
+          "leaf": 0,
+          "children": [
+            {
+              "id": 0,
+              "name": "osd.0",
+              "type": "osd",
+              "leaf": 1,
+              "host": "pve1",
+              "status": "up",
+              "in": 1,
+              "crush_weight": 3.63869,
+              "reweight": 1,
+              "device_class": "hdd",
+              "pgs": 128,
+              "osdtype": "bluestore",
+              "total_space": 4000787030016,
+              "bytes_used": 1099511627776,
+              "percent_used": 27.48,
+              "commit_latency_ms": 2,
+              "apply_latency_ms": 2
+            },
+            {
+              "id": 1,
+              "name": "osd.1",
+              "type": "osd",
+              "leaf": 1,
+              "host": "pve1",
+              "status": "up",
+              "in": 0,
+              "crush_weight": 3.63869,
+              "reweight": 0.8,
+              "device_class": "hdd",
+              "pgs": 12,
+              "osdtype": "bluestore",
+              "total_space": 4000787030016,
+              "bytes_used": 219902325555,
+              "percent_used": 5.49,
+              "commit_latency_ms": 3,
+              "apply_latency_ms": 3
+            }
+          ]
+        },
+        {
+          "id": -5,
+          "name": "pve2",
+          "type": "host",
+          "leaf": 0,
+          "children": [
+            {
+              "id": 2,
+              "name": "osd.2",
+              "type": "osd",
+              "leaf": 1,
+              "host": "pve2",
+              "status": "down",
+              "in": 1,
+              "crush_weight": 3.63869,
+              "reweight": 1,
+              "device_class": "ssd",
+              "osdtype": "bluestore"
+            }
+          ]
+        }
+      ]
+    }
   }
 }

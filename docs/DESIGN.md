@@ -150,9 +150,10 @@ schema carries `content`, `shared` and `plugintype` but no `enabled`. That field
 
 ### Tier 2 — infrastructure surfaces the parity suites have and we do not
 
-Seven of the eight are built. Four were verifiable against a standalone node and are
-straightforward; three could only be written best-effort, because a single node cannot exercise
-them. Those carry an UNVERIFIED note in their own `technicalNotes` saying exactly what is unproven.
+All eight are built. Four were verifiable against a standalone node; four could only be written
+best-effort, because a single node cannot exercise them. Those four carry an UNVERIFIED note in
+their own `technicalNotes`, and `docs/VALIDATION.md` is the checklist for whoever does have a
+cluster — what to look at, what to compare it against, and what to send back.
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
@@ -163,7 +164,7 @@ them. Those carry an UNVERIFIED note in their own `technicalNotes` saying exactl
 | `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | built, **unverified** | Ceph is the Proxmox equivalent of vSAN. The endpoint returns an untyped passthrough of `ceph status`, so every field is read defensively. |
 | `Proxmox_VE_Replication` | `/nodes/{node}/replication` | O(nodes) | built, **unverified** | Job failures and replica staleness. Note the endpoint is the *node* one; `/cluster/replication` is `ReplicationConfig`, the job definitions, not their status. |
 | `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | built, **unverified** | Renewal date. The status half is already free from the `level` field in Tier 1a; this module exists for `nextduedate`. |
-| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | O(nodes) | **not built** | Per-OSD in/out/up/down and fill percentage. Deliberately deferred: the endpoint returns a CRUSH-map tree rather than a flat list, and guessing at that shape without a real cluster to check against is how the BatchScript defect in §7 happened. |
+| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | **O(1)** | built, **unverified** | Per-OSD up/in, fill, latency, CRUSH weight. Costed as O(nodes) when this table was written, which was wrong: the endpoint returns the whole cluster-wide CRUSH tree whichever node is asked, so one call covers every OSD. The tree is walked rather than assumed to be any particular depth. |
 
 ### Tier 2a — workload surfaces
 
