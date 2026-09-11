@@ -1,0 +1,37 @@
+{
+  "name": "Proxmox_VE_NodeServices",
+  "displayedAs": "Proxmox VE Node Services",
+  "description": "systemd state of the Proxmox-managed services on every online node: pveproxy, pvedaemon, pve-cluster, corosync and the rest.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,service,systemd,pveproxy,pvedaemon,corosync,pve-cluster",
+  "technicalNotes": "BatchScript, one /nodes/{node}/services call per online node per interval. O(nodes); it never scales with guest count. Requires Sys.Audit on /nodes/{node}.\n\nThree separate systemd notions are reported rather than collapsed into one up/down, because the distinction is what tells you whether to act: active-state is what the process is doing now (active, inactive, failed), unit-state is what systemd is configured to do (enabled, disabled, not-found), and the substate is the detail. A service that is inactive because it is deliberately disabled is a different situation from one that has failed, which is different again from one that is not installed on this node. Alerting on Running alone would page for all three.\n\nOnly Failed carries a threshold. Running deliberately does not: several Proxmox services are legitimately inactive on a standalone host or on a node not participating in a given feature, and alerting on them would produce exactly the noise that gets a suite disabled.\n\nOnly online nodes are discovered and collected; instances discovered previously survive a node going offline because deleteInactiveInstances is false.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "5m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_NodeServices.collect.groovy",
+  "discoveryScript": "Proxmox_VE_NodeServices.ad.groovy",
+  "discoveryInterval": "1440m",
+  "datapoints": [
+    {
+      "name": "Running",
+      "description": "1 when systemd reports the service as active. Ships without a threshold: several Proxmox services are legitimately inactive on a standalone host."
+    },
+    {
+      "name": "Failed",
+      "description": "1 when systemd reports the service as failed, as opposed to merely stopped.",
+      "threshold": "> 0 0 0",
+      "triggerInterval": 2,
+      "alertBody": "The Proxmox service ##INSTANCE## is in systemd's failed state on this node. A failed service has exited abnormally, which is distinct from being deliberately stopped or disabled."
+    },
+    {
+      "name": "Enabled",
+      "description": "1 when the systemd unit is enabled to start at boot."
+    },
+    {
+      "name": "Installed",
+      "description": "0 when systemd has no such unit on this node, which is normal for services tied to features the node does not run."
+    }
+  ]
+}

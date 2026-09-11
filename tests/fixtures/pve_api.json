@@ -421,5 +421,91 @@
       "public-key-bits": 256,
       "fingerprint": "22:33:44:55"
     }
+  ],
+  "/nodes/pve1/services": [
+    {
+      "name": "pveproxy",
+      "service": "pveproxy",
+      "desc": "PVE API Proxy Server",
+      "state": "running",
+      "active-state": "active",
+      "unit-state": "enabled"
+    },
+    {
+      "name": "pvedaemon",
+      "service": "pvedaemon",
+      "desc": "PVE API Daemon",
+      "state": "running",
+      "active-state": "active",
+      "unit-state": "enabled"
+    },
+    {
+      "name": "corosync",
+      "service": "corosync",
+      "desc": "Corosync Cluster Engine",
+      "state": "failed",
+      "active-state": "failed",
+      "unit-state": "enabled"
+    },
+    {
+      "name": "spiceproxy",
+      "service": "spiceproxy",
+      "desc": "PVE SPICE Proxy Service",
+      "state": "dead",
+      "active-state": "inactive",
+      "unit-state": "disabled"
+    },
+    {
+      "name": "pve-ha-lrm",
+      "service": "pve-ha-lrm",
+      "desc": "PVE Local HA Resource Manager",
+      "state": "unknown",
+      "active-state": "unknown",
+      "unit-state": "not-found"
+    }
+  ],
+  "/nodes/pve1/disks/list": [
+    {
+      "devpath": "/dev/sda",
+      "size": 4000787030016,
+      "model": "WDC WD40EFRX-68N32N0",
+      "serial": "WD-WCC7K0000001",
+      "vendor": "ATA",
+      "type": "hdd",
+      "rpm": 5400,
+      "health": "PASSED",
+      "wearout": "N/A",
+      "gpt": true,
+      "mounted": false,
+      "osdid": -1
+    },
+    {
+      "devpath": "/dev/sdb",
+      "size": 512110190592,
+      "model": "Samsung SSD 860 EVO 500GB",
+      "serial": "S3Z8NB0K000002",
+      "vendor": "ATA",
+      "type": "ssd",
+      "rpm": 0,
+      "health": "PASSED",
+      "wearout": 94,
+      "gpt": true,
+      "mounted": true,
+      "osdid": -1
+    },
+    {
+      "devpath": "/dev/nvme0n1",
+      "size": 1024209543168,
+      "model": "Samsung SSD 980 PRO 1TB",
+      "serial": "S5GXNF0N000003",
+      "vendor": "NVMe",
+      "type": "nvme",
+      "rpm": 0,
+      "health": "UNKNOWN",
+      "wearout": "N/A",
+      "gpt": true,
+      "mounted": true,
+      "osdid": -1
+    }
   ]
 }
