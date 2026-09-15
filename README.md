@@ -65,6 +65,9 @@ resolves every widget's module and datapoint reference against `modules/*.json`,
 addresses a module as `"<displayedAs> (<name>)"` with nothing in LogicMonitor enforcing it — a
 rename would otherwise leave the dashboard importing cleanly and rendering empty tiles.
 
+**Verified in a portal on 2026-09-15**: it imports, lays out, and all twenty widgets populate with
+live data. It covers the Tier 1 modules, which are the six with a live-collection record.
+
 ## Install
 
 **[`docs/INSTALL.md`](docs/INSTALL.md) is the full guide** — creating the Proxmox user, the

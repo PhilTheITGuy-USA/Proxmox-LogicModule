@@ -128,12 +128,19 @@ overlapping widgets, which render on top of each other rather than erroring. Bot
 mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each
 make `build.py --check` exit 1.
 
-Two things it cannot check. Widgets legend on `##INSTANCE##`, not the `##HOSTNAME##` that
-LogicMonitor's own VMware and Hyper-V dashboards use — those suites give each hypervisor its own
-resource, while this one puts every node, guest and storage object on a single resource as
-instances, so legending on hostname gives every series the same label. And a widget aimed at a
-*conditional* datapoint renders blank rather than erroring, which is why the cluster tile shows
-`ClusterConfigured` (always emitted) rather than `Quorate` (withheld on a standalone host).
+Two things it cannot check, **both confirmed in a portal on 2026-09-15** rather than inferred.
+Widgets legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
+Hyper-V dashboards use — those suites give each hypervisor its own resource, while this one puts
+every node, guest and storage object on a single resource as instances, so legending on hostname
+gives every series the same label. And a widget aimed at a *conditional* datapoint renders blank
+rather than erroring, which is why the cluster tile shows `ClusterConfigured` (always emitted)
+rather than `Quorate` (withheld on a standalone host).
+
+`Proxmox_VE_Tier1` imported, laid out and populated every one of its twenty widgets with live
+data. That is the only proof available that the `"<displayedAs> (<name>)"` reference form and the
+`##INSTANCE##` legend are right — both are plain strings LogicMonitor does not validate, and
+either being wrong yields a dashboard that imports cleanly and renders nothing. A new dashboard
+should copy those two conventions rather than re-deriving them.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
