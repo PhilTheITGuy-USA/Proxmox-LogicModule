@@ -261,10 +261,35 @@ Discovery then populates instances, and collection starts on each module's own i
 
 1. **The category is set.** Resource → Info → look for `ProxmoxVE` in `system.categories`. If it is
    missing, the PropertySource found no token or the host is not Proxmox.
-2. **Instances appear.** Resource tree → the resource → the Proxmox VE modules should list guests,
-   nodes and storage. Empty discovery with no error is almost always the token ACL — step 1.4.
-3. **Data arrives.** Open any instance's **Raw Data** tab, or press **Poll Now**. Numbers should
-   appear within one collection interval.
+2. **Instances appear.** Resource tree → the resource → the Proxmox VE modules. What you should see
+   per module is in the table below. Empty discovery with no error is usually the token ACL — step
+   1.4 — but for two modules it is the normal result; the table says which.
+3. **Data arrives.** Open any instance's **Raw Data** tab. **Use Poll Now rather than waiting**:
+   four modules are on intervals of an hour or more, and Subscription will not collect on its own
+   for half a day. A module that is simply not due yet looks exactly like a broken one.
+
+### What each module should show
+
+| Module | Interval | Instances | Empty is normal when |
+|---|---|---|---|
+| Guest Status | 3m | one per guest, templates excluded | there are no guests |
+| Cluster | 5m | single instance | — |
+| Nodes | 5m | one per node, offline ones included | — |
+| Node Detail | 5m | one per node | — |
+| Guest Performance | 5m | one per guest, templates excluded | there are no guests |
+| Node Services | 5m | one per systemd unit per online node | — |
+| Ceph | 5m | single instance | — (reports `CephAvailable=0` without Ceph) |
+| Ceph OSD | 5m | one per OSD | **Ceph is not installed — expected on most hosts** |
+| Storage Capacity | 10m | one per storage | — |
+| Replication | 10m | one per replication job | **no replication job is defined — expected on most hosts** |
+| Backup Coverage | 60m | single instance | — |
+| Certificates | 240m | one per certificate per online node, usually 2–3 | — |
+| Disks | 240m | one per physical disk per online node | — |
+| Subscription | 720m | one per online node | — |
+
+Modules that reach into a node's own API — Node Services, Certificates, Disks, Subscription,
+Replication — discover **online** nodes only. An offline node cannot answer, and an instance that
+can never collect is worse than none. Instances discovered earlier survive a node going offline.
 
 ---
 
@@ -280,7 +305,16 @@ treated as having no token at all and will go quiet rather than erroring.
 `##WILDVALUE##.<name>`; a `script` module's must be the bare `<name>`. Re-import from a fresh
 `python build/build.py` if they disagree.
 
-**Empty discovery, no error.** Token ACL. See 1.4, then re-run the check in 1.5.
+**Empty discovery, no error.** Usually the token ACL — see 1.4, then re-run the check in 1.5.
+**Two modules are the exception.** Ceph OSD discovers nothing where Ceph is not installed, and
+Replication discovers nothing where no replication job is defined. Both are the normal result on
+most installs, and both say so on stderr in the discovery task log rather than failing. Check that
+log before going back to the ACL: if the other modules discovered instances, the token is fine.
+
+**A module has instances but no data yet.** Check its collection interval before anything else.
+Backup Coverage is 60m, Certificates and Disks are 240m, and Subscription is 720m — these endpoints
+are expensive (Disks shells out to `smartctl` per disk) or the data changes daily at most, so they
+are deliberately slow. Press **Poll Now** instead of waiting out the interval.
 
 **HTTP 401 in the task log.** The secret is wrong or the token was deleted. Tokens cannot be
 recovered — delete and recreate.
@@ -288,10 +322,22 @@ recovered — delete and recreate.
 **Certificate errors.** Proxmox self-signs by default. Install a trusted certificate, or set
 `pve.api.insecure=true` on the resource for lab use.
 
-**Some datapoints permanently No Data.** Often correct rather than broken. QEMU guests report no
-used-disk figure, so `DiskUsedBytes` is LXC-only. Cluster quorum datapoints are withheld on a
-standalone host. Ceph datapoints are withheld where Ceph is not configured. Each module's technical
-notes say which of its datapoints are conditional and why.
+**Some datapoints permanently No Data.** Often correct rather than broken — the suite withholds a
+value rather than emitting a zero, because a confident wrong number is worse than an absent one:
+
+- `DiskUsedBytes` / `DiskUsagePercent` on QEMU guests. Proxmox reports no used-disk figure for VMs;
+  LXC containers do report one. Real VM usage needs the guest agent.
+- Cluster quorum datapoints on a standalone host.
+- Every Ceph datapoint where Ceph is not configured. `CephAvailable` reads 0.
+- `DaysUntilDue` on an unsubscribed node. Zero would read as "expires today".
+- `LifeRemainingPercent` on anything that is not an SSD reporting a wear attribute. Proxmox returns
+  the literal string `N/A`, and zero would read as a disk with no life left.
+- `SmartHealthOK` on a disk whose SMART cannot be read. `SmartHealthKnown` goes to 0 instead, so an
+  unreadable disk is never mistaken for a failing one.
+- `SecondsSinceLastSync` on a replication job that has never run. Zero would mean "replicated just
+  now", the opposite of the truth.
+
+Each module's technical notes say which of its datapoints are conditional and why.
 
 ---
 
