@@ -28,14 +28,16 @@ scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output 
 scripts/<Subject>.ad.groovy      Active Discovery bodies, named per subject and often shared
 scripts/<Module>.collect.groovy  collection bodies, one per module
 modules/<Module>.json            build-time module definition: metadata + datapoint declarations
-build/build.py                   assembles preamble + body into importable module JSON
+build/build.py                   assembles preamble + body into importable module JSON,
+                                 and renders dashboards/*.py into dist/dashboards/
 build/groovylint.py              bracket-balance check over the assembled scripts
+build/dashboards.py              dashboard widget builders + schema/reference validation
 tests/harness.groovy             runs the assembled scripts against a mock Proxmox API
 tests/fixtures/pve_api.json      recorded API responses, keyed by path + query string
 docs/DESIGN.md                   parity analysis, design rationale, the backlog
 docs/INSTALL.md                  Proxmox user/token/permissions, module import, which hosts
 docs/VALIDATION.md               what is unverified and how someone with a cluster checks it
-dashboards/<Name>.json           LogicMonitor dashboard exports — NOT built, see below
+dashboards/<Name>.py             dashboard definitions, one per dashboard — see below
 dist/                            GENERATED, gitignored — never edit, never commit
 ```
 
@@ -103,24 +105,35 @@ first that answers, because `/nodes/{node}/ceph/osd` returns the whole cluster-w
 whichever node is asked — so it is O(1), and DESIGN §4's table says so explicitly. When no node has
 Ceph it prints nothing and returns 0: a fourth exit shape, meaning *nothing to report*, not failure.
 
-**`dashboards/` is outside the build entirely.** `build.py` globs `modules/*.json` and knows
-nothing about dashboards; nothing validates them, and the harness never opens them. They are
-LogicMonitor *dashboard* exports, a different resource from a LogicModule — imported through
-Dashboards → Add → From File, not through My Module Toolbox. The schema was taken from
-LogicMonitor's own published exports (`logicmonitor/dashboards`, `Virtualization/Hyper-V.json`
-and `Virtualization/Nutanix.json`), the same way the module export field names were.
+**Dashboards are a second artifact with its own source-of-truth split.** `dashboards/<Name>.py`
+is the definition — a `build()` returning a `Dashboard` — and `build.py` renders it to
+`dist/dashboards/<Name>.json`. The rendered JSON is generated output like everything else under
+`dist/`: never edit it, never commit it. `build/dashboards.py` holds the widget builders and the
+validation. A dashboard is a different LogicMonitor resource from a LogicModule and imports
+through **Dashboards → Add → From File**, not My Module Toolbox.
 
-Two things about them are load-bearing. A widget addresses a module as
-`"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — so **renaming a module or
-its `displayedAs` silently breaks every widget referencing it**, with nothing to catch it. And
-widgets here legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
-Hyper-V dashboards use: those suites give each hypervisor its own resource, while this one puts
-every node, guest and storage object on a single resource as instances. Legend on hostname and
-every series gets the same label.
+The schema in `build/dashboards.py` was taken from LogicMonitor's own published exports
+(`logicmonitor/dashboards`, Apache-2.0 — `Virtualization/Hyper-V.json` for cgraph, dynamicTable,
+noc and alert; `Virtualization/Nutanix.json` for bigNumber), the same way the module export field
+names were. `REFERENCE_KEYS` and the enum tuples record what those files actually contain, and
+`check_dashboard` refuses anything this project invented on its own — an unexpected key breaks an
+import as readily as a missing one, and neither reports an error in the portal.
 
-A dashboard that references a conditional datapoint renders blank rather than erroring, which is
-why the cluster tile shows `ClusterConfigured` (always emitted) instead of `Quorate` (withheld on
-a standalone host).
+**The check that earns its keep is the module reference.** A widget addresses a module as
+`"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — a plain string with
+nothing in LogicMonitor enforcing it. Rename a module, its `displayedAs`, or a datapoint, and
+every widget pointing at it keeps importing and renders an empty tile. So the build resolves
+every widget reference against `modules/*.json` and fails if one does not exist. It also refuses
+overlapping widgets, which render on top of each other rather than erroring. Both checks are
+mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each
+make `build.py --check` exit 1.
+
+Two things it cannot check. Widgets legend on `##INSTANCE##`, not the `##HOSTNAME##` that
+LogicMonitor's own VMware and Hyper-V dashboards use — those suites give each hypervisor its own
+resource, while this one puts every node, guest and storage object on a single resource as
+instances, so legending on hostname gives every series the same label. And a widget aimed at a
+*conditional* datapoint renders blank rather than erroring, which is why the cluster tile shows
+`ClusterConfigured` (always emitted) rather than `Quorate` (withheld on a standalone host).
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
@@ -337,6 +350,11 @@ claiming a module is done.
 `pveEmit(<anything>, '<Literal>'`. A datapoint name held in a variable or built by concatenation is
 invisible to it and will pass the build while printing an undeclared datapoint on a live Collector.
 Always pass datapoint names as single-quoted literals.
+
+**Adding a dashboard** means a new `dashboards/<Name>.py` exposing `build() -> Dashboard`; the
+build finds it by glob and validates it in the same pass as the modules. Reuse the widget helpers
+in `build/dashboards.py` rather than hand-writing widget dicts — they are what keep the key sets
+matching the reference exports.
 
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is

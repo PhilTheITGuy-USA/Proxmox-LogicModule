@@ -6,9 +6,16 @@ The .groovy files under scripts/ are the source of truth. Each module body is pr
 with scripts/lib/pve_common.groovy so the script embedded in the JSON is self-contained,
 which is what the Collector needs -- LogicMonitor has no include mechanism.
 
+Dashboards are built here too, from dashboards/<Name>.py. They are a different
+LogicMonitor resource -- imported through Dashboards > Add > From File, not My Module
+Toolbox -- but they reference modules by name and datapoint, so they are validated in
+the same pass: a module or datapoint rename that orphans a widget fails the build
+rather than producing a dashboard of empty tiles.
+
 Outputs:
   dist/<Module>.json           import via My Module Toolbox > Add > Import from file
   dist/scripts/<Module>.*.groovy   the assembled scripts, for pasting into the UI by hand
+  dist/dashboards/<Name>.json  import via Dashboards > Add > From File
 
 Usage:
   python build/build.py            build everything
@@ -18,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -27,9 +35,12 @@ from groovylint import balance_check
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from dashboards import check_dashboard  # noqa: E402  (needs the path insert above)
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 MODULES = ROOT / "modules"
+DASHBOARDS = ROOT / "dashboards"
 DIST = ROOT / "dist"
 PREAMBLE = SCRIPTS / "lib" / "pve_common.groovy"
 
@@ -209,6 +220,55 @@ def check_module(defn: dict, module: dict) -> list[str]:
     return problems
 
 
+def load_dashboard(path: Path):
+    """Import dashboards/<Name>.py and return its build() result."""
+    spec = importlib.util.spec_from_file_location(f"dashboard_{path.stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not hasattr(module, "build"):
+        raise AttributeError(f"{path.name} defines no build()")
+    return module.build()
+
+
+def module_datapoint_index(definitions: list[Path]) -> dict[str, set[str]]:
+    """
+    Map "<displayedAs> (<name>)" -> that module's datapoint names.
+
+    This is what lets the build refuse a dashboard whose widgets point at a module
+    or a datapoint that no longer exists. A dashboard has no equivalent of the
+    datapoint drift check, and a widget aimed at a renamed datapoint renders an
+    empty tile rather than an error, so the check has to live here.
+    """
+    index: dict[str, set[str]] = {}
+    for path in definitions:
+        defn = json.loads(read(path))
+        if "displayedAs" in defn and "name" in defn:
+            key = f"{defn['displayedAs']} ({defn['name']})"
+            index[key] = {dp["name"] for dp in defn.get("datapoints", [])}
+    return index
+
+
+def build_dashboards(
+    definitions: list[Path],
+) -> tuple[list[tuple[str, dict]], list[str]]:
+    """Return ([(name, rendered dashboard)], problems)."""
+    problems: list[str] = []
+    built: list[tuple[str, dict]] = []
+    if not DASHBOARDS.is_dir():
+        return built, problems
+
+    index = module_datapoint_index(definitions)
+    for path in sorted(DASHBOARDS.glob("*.py")):
+        try:
+            dashboard = load_dashboard(path).render()
+        except Exception as exc:  # a broken definition must name its own file
+            problems.append(f"{path.name}: {type(exc).__name__}: {exc}")
+            continue
+        problems.extend(check_dashboard(path.name, dashboard, index))
+        built.append((path.stem, dashboard))
+    return built, problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="validate without writing")
@@ -240,6 +300,9 @@ def main() -> int:
             problems.extend(balance_check(filename, content))
         built.append((module, scripts))
 
+    dashboards, dashboard_problems = build_dashboards(definitions)
+    problems.extend(dashboard_problems)
+
     if problems:
         print("Validation failed:\n", file=sys.stderr)
         for problem in problems:
@@ -247,7 +310,9 @@ def main() -> int:
         return 1
 
     if args.check:
-        print(f"OK: {len(built)} modules validated")
+        print(
+            f"OK: {len(built)} modules and {len(dashboards)} dashboards validated"
+        )
         return 0
 
     (DIST / "scripts").mkdir(parents=True, exist_ok=True)
@@ -264,7 +329,20 @@ def main() -> int:
     for filename in standalone:
         print(f"  {filename:34} propertysource  (script only, no JSON)")
 
-    print(f"\nBuilt {len(built)} modules into {DIST.relative_to(ROOT)}/")
+    if dashboards:
+        (DIST / "dashboards").mkdir(parents=True, exist_ok=True)
+        for name, dashboard in dashboards:
+            target = DIST / "dashboards" / f"{name}.json"
+            target.write_text(
+                json.dumps(dashboard, indent=2) + "\n", encoding="utf-8"
+            )
+            widget_count = len(dashboard["widgets"])
+            print(f"  {name:34} dashboard    {widget_count:2} widgets")
+
+    print(
+        f"\nBuilt {len(built)} modules and {len(dashboards)} dashboards "
+        f"into {DIST.relative_to(ROOT)}/"
+    )
     return 0
 
 

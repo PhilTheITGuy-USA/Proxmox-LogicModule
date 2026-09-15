@@ -45,10 +45,11 @@ Subscription at 720m). Node counts are small and grow slowly; guest counts are n
 
 ## Dashboard
 
-`dashboards/Proxmox_VE_Tier1.json` is a LogicMonitor dashboard covering the six Tier 1 modules:
-cluster health and capacity, per-node utilisation and load, guest CPU/memory/network/disk,
-storage capacity, guest status, and an alert table. Twenty widgets, in the same widget types and
-theme LogicMonitor's own VMware, Hyper-V and Nutanix dashboards use.
+`dist/dashboards/Proxmox_VE_Tier1.json`, built by `python build/build.py`, is a LogicMonitor
+dashboard covering the six Tier 1 modules: cluster health and capacity, per-node utilisation and
+load, guest CPU/memory/network/disk, storage capacity, guest status, and an alert table. Twenty
+widgets, in the same widget types and theme LogicMonitor's own VMware, Hyper-V and Nutanix
+dashboards use — the schema was taken from their published exports rather than guessed.
 
 Import through **Dashboards → Add → From File** — a different path from the modules, which go
 through My Module Toolbox. It lands in a dashboard group called `Proxmox VE`; the import dialog
@@ -59,8 +60,10 @@ Unlike the parity suites, widgets legend on the **instance** rather than the hos
 single Proxmox resource carries every node, guest and storage object as instances rather than as
 separate resources. That is what makes one tile show the whole cluster.
 
-`dashboards/` is not part of `build.py` and nothing validates it — it is a hand-maintained export.
-Renaming a module or its display name breaks every widget that references it, silently.
+The definition lives in `dashboards/Proxmox_VE_Tier1.py`; the JSON is generated. The build
+resolves every widget's module and datapoint reference against `modules/*.json`, because a widget
+addresses a module as `"<displayedAs> (<name>)"` with nothing in LogicMonitor enforcing it — a
+rename would otherwise leave the dashboard importing cleanly and rendering empty tiles.
 
 ## Install
 
@@ -181,7 +184,7 @@ because LogicMonitor has no include mechanism and the script embedded in a modul
 self-contained.
 
 ```sh
-python build/build.py           # assemble dist/*.json and dist/scripts/*.groovy
+python build/build.py           # assemble dist/*.json, dist/scripts/, dist/dashboards/
 python build/build.py --check   # validate without writing
 ```
 
@@ -189,7 +192,9 @@ The build fails if a collection script prints a datapoint the module does not de
 declared datapoint is never printed (unless marked `"conditional": true`), if a `batchscript`
 module is not `multiInstance` or a `multiInstance` module has no discovery script, if a datapoint's
 post-processor key does not match the module's collection method, or if brackets are unbalanced in
-any assembled script.
+any assembled script. It also fails if a dashboard widget references a module or datapoint that
+does not exist, if two widgets overlap, or if a widget's shape does not match LogicMonitor's own
+exported dashboards.
 
 Verification runs in the same Groovy 4 runtime the Collector uses, and needs no Proxmox
 host:
