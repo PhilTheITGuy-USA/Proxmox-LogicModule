@@ -81,9 +81,16 @@ Proxmox already publishes a stable, cluster-unique identifier as `id` on every `
 row: `qemu/101`, `lxc/200`, `storage/pve1/local`, `node/pve1`. VMIDs are unique cluster-wide and do
 not change on migration. `/` is legal in a wildvalue (only space, colon, `=`, `\` and `#` are not).
 
-Use that `id` verbatim as the wildvalue, set `useWildValueAsUuid`, and carry the current node as an
-*instance property* (`auto.pve_node`) which is allowed to change freely. Storage keeps the node in
-its id because a non-shared storage genuinely is per-node.
+Use that `id` as the wildvalue, set `useWildValueAsUniqueIdentifier`, and carry the current node as
+an *instance property* (`auto.pve_node`) which is allowed to change freely. Storage keeps the node
+in its id because a non-shared storage genuinely is per-node.
+
+**As implemented, the `id` is folded rather than taken verbatim.** `pveWildValue` replaces anything
+outside `[A-Za-z0-9_-]` with `-`, so `qemu/101` becomes `qemu-101` and `storage/pve1/local` becomes
+`storage-pve1-local`. That fold is required by BatchScript output rather than by LogicMonitor's
+wildvalue character rules: `.` separates the instance from the datapoint in
+`instance.datapoint=value`, and a storage name may legally contain one. The property that actually
+matters — that the id does not change when a guest migrates — survives the fold intact.
 
 ---
 
@@ -150,17 +157,22 @@ schema carries `content`, `shared` and `plugintype` but no `enabled`. That field
 
 ### Tier 2 — infrastructure surfaces the parity suites have and we do not
 
-All eight are built. Four were verifiable against a standalone node; four could only be written
-best-effort, because a single node cannot exercise them. Those four carry an UNVERIFIED note in
-their own `technicalNotes`, and `docs/VALIDATION.md` is the checklist for whoever does have a
-cluster — what to look at, what to compare it against, and what to send back.
+All eight are built, and **none has yet been imported into a portal or run against a live host** —
+they were written after the 2026-09-10 Tier 1 verification. Four of them could only be written
+best-effort in the first place, because a single node cannot exercise them at all — Ceph, CephOSD,
+Replication and Subscription. Disks is a fifth, partial case: the
+module itself is straightforward, but the *direction* of its `wearout` value has never been checked
+against a real SSD, and a threshold that is backwards would alert on healthy disks and stay silent
+on dying ones. All five carry an UNVERIFIED note in their own `technicalNotes`, and
+`docs/VALIDATION.md` is the checklist for whoever does have the hardware — what to look at, what to
+compare it against, and what to send back.
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
-| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
-| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
-| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
+| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **untested live** | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
+| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built, **untested live** | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
+| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built, **untested live** | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
+| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built, **partly unverified** | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
 | `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | built, **unverified** | Ceph is the Proxmox equivalent of vSAN. The endpoint returns an untyped passthrough of `ceph status`, so every field is read defensively. |
 | `Proxmox_VE_Replication` | `/nodes/{node}/replication` | O(nodes) | built, **unverified** | Job failures and replica staleness. Note the endpoint is the *node* one; `/cluster/replication` is `ReplicationConfig`, the job definitions, not their status. |
 | `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | built, **unverified** | Renewal date. The status half is already free from the `level` field in Tier 1a; this module exists for `nextduedate`. |
@@ -225,9 +237,9 @@ PascalCase, with metric type chosen deliberately:
 | `UsedPercent`, `Capacity`, `FreeSpace` | gauge | storage |
 
 `netin`/`netout`/`diskread`/`diskwrite` are **cumulative counters since guest start**. Configured as
-gauge (as the current README instructs) they graph as an ever-climbing total instead of throughput,
-which is the single most visible defect in the module today. As `derive` with a minimum of 0, a
-guest restart's counter reset is discarded rather than producing a negative spike.
+gauge — as the pre-rebuild module was — they graph as an ever-climbing total instead of throughput,
+which was the single most visible defect in it. As `derive` with a minimum of 0, a guest restart's
+counter reset is discarded rather than producing a negative spike. Implemented; see §6 item 3.
 
 ---
 
@@ -268,17 +280,19 @@ instance in a customer's portal.
 
 ## 7. Build status
 
-Tier 1, Tier 1a and the PropertySource are implemented, assembled and verified, and as of
-2026-09-10 all six DataSources are collecting against a live cluster.
+Tier 1, Tier 1a, all eight Tier 2 modules and the PropertySource are implemented and assembled.
+Tier 1's six DataSources have been collecting against a live cluster since 2026-09-10. The Tier 2
+eight were written afterwards and have not yet been through a portal or a live host.
 
 | | |
 |---|---|
-| Modules built | 6 DataSources + 1 PropertySource |
-| Scripts compiled | 12, on Groovy 4.0.33 (the Collector's runtime) |
-| Harness checks | 451, against a mock Proxmox API |
-| Portal import | **verified** — all six import and apply via `hasCategory("ProxmoxVE")` |
-| Real Proxmox host | **verified** — all six collecting, 2026-09-10 |
+| Modules built | 14 DataSources + 1 PropertySource |
+| Scripts assembled | 26, compiled on Groovy 4 (the Collector's runtime) |
+| Harness checks | 959, against a mock Proxmox API |
+| Portal import | **verified for Tier 1's six** — they import and apply via `hasCategory("ProxmoxVE")`. Tier 2 is unproven at this layer |
+| Real Proxmox host | **verified for Tier 1's six** — collecting, 2026-09-10 |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
+| Tier 2 | built and green on the harness; **none imported to a portal or run live**. Five carry an explicit UNVERIFIED note, see `docs/VALIDATION.md` |
 
 The harness is mutation-tested: reintroducing the template-discovery bug and the QEMU
 used-disk bug both make it fail, so a green run means something.
@@ -303,4 +317,5 @@ portal with no corrections needed. The difference is that Tier 1a changed only *
 emit*, which is exactly the layer the local checks do cover.
 
 Tier 2 (Ceph, CephOSD, Replication, BackupCoverage, NodeServices, Subscription, Certificates,
-Disks) and the TopologySource are designed above but not built.
+Disks) is built — §4's status column carries each module's state. Tier 2a, Tier 3 and the
+TopologySource are designed above but not built.

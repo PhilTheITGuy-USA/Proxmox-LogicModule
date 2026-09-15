@@ -1,8 +1,14 @@
 # Validating this suite against a real cluster
 
-Most of this suite is verified. Six modules have run against a live Proxmox host and report as
-expected. Five have not, because they need something a single node cannot provide — a Ceph cluster,
-a replication job, a subscribed node, an SSD with a wear attribute.
+The suite is fourteen modules. Tier 1's six have run against a live Proxmox host and report as
+expected. Five more have never run against the hardware they monitor — Ceph, Ceph OSD, Replication,
+Subscription, and one specific question in Disks — because a single node cannot provide a Ceph
+cluster, a replication job, a subscribed node or an SSD with a wear attribute. The Cluster module's
+HA datapoints are in the same position for a different reason: they need a real failover.
+
+**None of the eight Tier 2 modules has been imported into a portal yet**, so §2.0 below is the
+cheapest and highest-value thing on this list — it needs no special hardware at all, and it covers
+the one failure mode the local checks provably cannot see.
 
 This document is for whoever has that cluster. It says exactly what is unproven, what to look at,
 and what to send back.
@@ -42,6 +48,36 @@ definition, against your Proxmox resource. It shows stdout and stderr without wa
 ---
 
 ## 2. What is unverified, and what to check
+
+### 2.0 First: do the Tier 2 modules import and collect at all?
+
+This needs nothing but a working Proxmox host, and it is the check that matters most. The build,
+the compile pass and the harness all validate what the *scripts emit*. None of them validates how
+the module JSON tells LogicMonitor to *parse* that output — and that layer has failed here before,
+silently: discovery populated instances, Test Collection Script showed perfect output, everything
+local was green, and every datapoint on every instance read No Data. See §4.
+
+**Backup Coverage, Certificates, Node Services and Disks** need no Ceph, no replication and no
+subscription. Import them, let Active Discovery run, and confirm:
+
+- **Certificates** — one instance per certificate per node (`pve-ssl`, `pveproxy-ssl`, and the
+  cluster CA where present). `DaysUntilExpiry` should match the node's Certificates panel. It is
+  computed against the *Collector's* clock, since the API returns `notafter` as an epoch and no
+  days-remaining figure, so a wrong number here may be a Collector clock problem rather than a
+  parsing one.
+- **Node Services** — one instance per systemd unit per node. `pveproxy`, `pvedaemon` and
+  `pve-cluster` should read `Running=1`, `Failed=0`, `Enabled=1`, `Installed=1`. On a standalone
+  host `corosync` is installed but not running, which is correct and not a fault.
+- **Backup Coverage** — `GuestsNotBackedUp` should equal what Datacenter → Backup leaves uncovered;
+  with no backup job defined at all, that is every guest, not zero. `BackupInfoAvailable` is a
+  separate question about the *endpoint*: it reads 0 only on Proxmox versions that do not expose
+  `/cluster/backup-info/not-backed-up`, and then no counts are emitted at all. Check which of the
+  two you are looking at before reading a low number as good news.
+- **Disks** — `SizeBytes`, `Mounted` and `SmartHealthKnown` on every physical disk. The
+  `LifeRemainingPercent` question is separate and is covered below.
+
+For each, the thing to report back is simply: did instances appear, and did the datapoints carry
+numbers or read No Data? If a module collects nothing, §4 is the first place to look.
 
 ### `Proxmox_VE_CephOSD` — the least verified thing here
 

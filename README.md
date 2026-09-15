@@ -27,15 +27,21 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Subscription | BatchScript | Subscription status and renewal date, per node |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
 
-The four BatchScript modules each make **one** API call per collection interval no matter
-how large the cluster is: `/cluster/resources` returns every node, guest and storage
-object in a single response. A 500-guest cluster costs one request per interval, not five
-hundred.
+**Four modules carry the bulk of the suite on one API call each.** Nodes, Guest Performance,
+Guest Status and Storage Capacity each make **one** call per collection interval no matter how
+large the cluster is: `/cluster/resources` returns every node, guest and storage object in a
+single response. A 500-guest cluster costs one request per interval, not five hundred.
 
-The four calls are intentional: LogicMonitor executes each DataSource independently, so
-there is no dependable cross-DataSource response cache. Combining them into one DataSource
-could reduce the count further, but would couple unrelated alerting and collection intervals.
-This is the practical low-load boundary while preserving separate modules.
+Those four calls are deliberately not consolidated: LogicMonitor executes each DataSource
+independently, so there is no dependable cross-DataSource response cache. Combining them into one
+DataSource could reduce the count further, but would couple unrelated alerting and collection
+intervals. This is the practical low-load boundary while preserving separate modules.
+
+**Nothing in the suite scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are
+also fixed-cost. Node Detail, Node Services, Replication, Certificates, Disks and Subscription make
+one call per *online* node, because that data is only available from the node that owns it — and
+the expensive ones sit on long intervals for exactly that reason (Certificates and Disks at 240m,
+Subscription at 720m). Node counts are small and grow slowly; guest counts are neither.
 
 ## Install
 
@@ -118,9 +124,17 @@ guests the cluster itself considers broken.
 
 ## Validating against a real cluster
 
-Six modules are verified against a live Proxmox host. Five are not, because they need something a
-single node cannot provide — a Ceph cluster, a replication job, a subscribed node, an SSD with a
-wear attribute. Those carry an UNVERIFIED note in their own technical notes.
+**The six Tier 1 modules are the ones with a live-collection record** — Cluster, Nodes, Node
+Detail, Guest Performance, Guest Status and Storage Capacity, collecting against a real host since
+2026-09-10. The eight Tier 2 modules were written afterwards and have not yet been imported into a
+portal or run against a host. They are green on the build, the compile check and the mock-API
+harness, which covers what the scripts emit but not how the module JSON tells LogicMonitor to parse
+it — a gap that has bitten this suite once before.
+
+Five of those eight also need hardware a single node cannot provide — Ceph, Ceph OSD, Replication,
+Subscription, and one specific question in Disks — and each carries an UNVERIFIED note in its own
+technical notes. The Cluster module's HA datapoints are in the same position for a different
+reason: they need a real failover, not just an HA cluster.
 
 **`docs/VALIDATION.md` is the checklist for anyone with a cluster to test against**: what is
 unproven in each module, what to compare it against, and what to send back. The most useful thing
@@ -152,9 +166,11 @@ python build/build.py           # assemble dist/*.json and dist/scripts/*.groovy
 python build/build.py --check   # validate without writing
 ```
 
-The build fails if a collection script prints a datapoint the module does not declare, if
-a declared datapoint is never printed, or if brackets are unbalanced in any assembled
-script.
+The build fails if a collection script prints a datapoint the module does not declare, if a
+declared datapoint is never printed (unless marked `"conditional": true`), if a `batchscript`
+module is not `multiInstance` or a `multiInstance` module has no discovery script, if a datapoint's
+post-processor key does not match the module's collection method, or if brackets are unbalanced in
+any assembled script.
 
 Verification runs in the same Groovy 4 runtime the Collector uses, and needs no Proxmox
 host:
@@ -175,9 +191,10 @@ collection script, the `datapoints` array in `modules/<Module>.json`, and the co
 table above. The build enforces the first two agreeing.
 
 For live-cluster testing, use a non-production read-only `PVEAuditor` token and record the
-Collector API request count. Verify that each batch module makes one bulk request per interval
-and that Node Detail makes one `/nodes/{node}/status` request per discovered node. Do not use
-a per-guest production test loop.
+Collector API request count. Verify that Nodes, Guest Performance, Guest Status and Storage
+Capacity each make one `/cluster/resources` request per interval, that Node Detail makes one
+`/nodes/{node}/status` request per discovered node, and that the other node-scoped modules make one
+request per *online* node and none for offline ones. Do not use a per-guest production test loop.
 
 For live-HA-cluster testing, cover quorum loss and recovery, node membership changes, guest
 migration/failover, HA service error/fence states, and temporary HA endpoint unavailability.

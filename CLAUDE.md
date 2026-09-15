@@ -11,7 +11,9 @@ parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the bac
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
 implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
-superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. Everything in §4 past Tier 1 is unbuilt.
+superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. In §4, Tier 1, Tier 1a and all eight Tier 2
+modules are built; Tier 2a (BackupStatus, Migrations, NodeNetwork), Tier 3 and the TopologySource
+are not. §4's own status column is the authority on what exists.
 
 **§4 sorts the backlog on two axes, and they are independent.** *Scope* (Tier 1 core parity, Tier 2
 infrastructure, Tier 2a workload, Tier 3 per-guest detail) says whether something is worth
@@ -40,20 +42,65 @@ dist/                            GENERATED, gitignored — never edit, never com
 `build.py` concatenates the two. Edit shared behaviour in `pve_common.groovy` once; edit
 `dist/` never.
 
-**Discovery scripts are shared; collection scripts are not.** `Proxmox_VE_Guests.ad.groovy` backs
-both GuestPerformance and GuestStatus; `Proxmox_VE_Nodes.ad.groovy` backs both Nodes and NodeDetail.
-The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those modules
-discover identical instance sets and a single guest carries both a performance and a status
-instance. Editing a shared AD body changes every module naming it in `discoveryScript`.
+**Discovery scripts are shared; collection scripts are not.** Nine AD bodies back eleven
+multiInstance modules. `Proxmox_VE_Guests.ad.groovy` backs both GuestPerformance and GuestStatus;
+`Proxmox_VE_Nodes.ad.groovy` backs both Nodes and NodeDetail. The build emits a *copy* per consuming
+module as `dist/scripts/<Module>.ad.groovy`, so those modules discover identical instance sets and a
+single guest carries both a performance and a status instance. Editing a shared AD body changes
+every module naming it in `discoveryScript`.
 
-| Module | Method | Interval | Discovery |
-|---|---|---|---|
-| `Proxmox_VE_Cluster` | script | 5m | — (single instance) |
-| `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` |
-| `Proxmox_VE_NodeDetail` | script, per instance | 5m | `Nodes.ad` |
-| `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` |
-| `Proxmox_VE_GuestStatus` | batchscript | 3m | `Guests.ad` |
-| `Proxmox_VE_StorageCapacity` | batchscript | 10m | `Storage.ad` |
+**Two bodies discover nodes, and picking the wrong one is a silent bug.**
+`Proxmox_VE_Nodes.ad.groovy` discovers *every* node, offline ones included, so a down node still has
+an instance to alert on. `Proxmox_VE_OnlineNodes.ad.groovy` filters to `status == 'online'`, and
+exists for modules that reach into a node's own API: an offline node cannot answer, and an instance
+that can never collect is worse than no instance. A module reading node rows out of
+`/cluster/resources` wants Nodes; a module calling `/nodes/{node}/...` wants OnlineNodes.
+
+Fourteen DataSources and one PropertySource. `python build/build.py --check` prints the count, and
+is the fastest way to confirm this table has not drifted.
+
+| Module | Method | Interval | Discovery | Calls per interval |
+|---|---|---|---|---|
+| `Proxmox_VE_Cluster` | script | 5m | — (single instance) | 3, O(1) |
+| `Proxmox_VE_Ceph` | script | 5m | — (single instance) | 1, O(1) |
+| `Proxmox_VE_BackupCoverage` | script | 60m | — (single instance) | 1, O(1) |
+| `Proxmox_VE_NodeDetail` | script, per instance | 5m | `Nodes.ad` | 1 per node |
+| `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` | 1, O(1) |
+| `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` | 1, O(1) |
+| `Proxmox_VE_GuestStatus` | batchscript | 3m | `Guests.ad` | 1, O(1) |
+| `Proxmox_VE_CephOSD` | batchscript | 5m | `CephOSD.ad` | 2, O(1) — see below |
+| `Proxmox_VE_NodeServices` | batchscript | 5m | `NodeServices.ad` | 1 + 1 per online node |
+| `Proxmox_VE_StorageCapacity` | batchscript | 10m | `Storage.ad` | 1, O(1) |
+| `Proxmox_VE_Replication` | batchscript | 10m | `Replication.ad` | 1 + 1 per online node |
+| `Proxmox_VE_Certificates` | batchscript | 240m | `Certificates.ad` | 1 + 1 per online node |
+| `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
+| `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
+
+**There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
+the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
+instead fan out over nodes, and they all share
+one idiom — filter to online nodes first, then a **per-node `try`**:
+
+```groovy
+def nodes = (pveGet('/cluster/resources?type=node') ?: [])
+    .findAll { it.status?.toString() == 'online' }
+nodes.each { node ->
+    // Per-node try: one unreachable node must not cost the others their data.
+    try { pveGet('/nodes/' + nodeName + '/disks/list') }
+    catch (Exception nodeException) { System.err.println('... skipped for node ' + nodeName) }
+}
+```
+
+That inner `try` is not the optional-surface `try` described under Style — it logs to `System.err`
+and keeps going, so one sick node cannot blank the whole cluster's data. The `online` filter is what
+stops the fan-out spending a `pve.api.timeout` on every dead node. Where the same object can be
+reported by more than one node, discovery also carries a `seen` set: `Replication.ad` dedupes,
+because a job appears on both its source and its target node.
+
+**`Proxmox_VE_CephOSD` looks like fan-out and is not.** It loops online nodes but `break`s on the
+first that answers, because `/nodes/{node}/ceph/osd` returns the whole cluster-wide CRUSH tree
+whichever node is asked — so it is O(1), and DESIGN §4's table says so explicitly. When no node has
+Ceph it prints nothing and returns 0: a fourth exit shape, meaning *nothing to report*, not failure.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
@@ -100,8 +147,9 @@ true` is set on every multiInstance module and checked by neither the build nor 
 what makes the wildvalue the instance's identity, which is the entire point of the migration-safe
 IDs below. `threshold` is LogicMonitor's `"<op> warn error critical"` string (`"> 90 95 98"`).
 `technicalNotes` carries the per-module rationale shown in the portal; every module has one and
-Exchange review expects it. All five modules that discover override `discoveryInterval` to `60m`,
-where the build default is `1440m`.
+Exchange review expects it. Of the eleven modules that discover, seven override `discoveryInterval`
+to `60m`; the four slow ones — Certificates, Disks, NodeServices, Subscription — state `1440m`
+explicitly, which is also the build default.
 
 **There is no way to run a single test.** `tests/harness.groovy` is one program: it walks every
 `modules/*.json`, runs that module's assembled AD and collect scripts against an in-process mock
@@ -114,6 +162,11 @@ command: `docker compose -f tests/docker-compose.yml run --rm tests groovy /work
 like a harness gap rather than an empty result. Fixture keys in `tests/fixtures/pve_api.json` are
 the path after `/api2/json` plus the query string exactly as the script requests it
 (`/cluster/resources?type=vm`). A new endpoint needs a fixture before its module can be tested.
+
+**The fixture cluster is `pve1` online and `pve2` offline.** That is why only `/nodes/pve1/*`
+fixtures exist: every fan-out module filters to online nodes, so it reaches exactly one. Bringing
+`pve2` online in the fixture means adding a second copy of every per-node fixture, or five modules
+start taking the mock's 501.
 
 The harness is mutation-tested. If you change it, re-verify it still fails when you deliberately
 break something; a green suite that cannot go red is worse than no suite.
@@ -224,6 +277,12 @@ Never reintroduce the node name into a guest wildvalue. Changing an ID scheme or
 already-discovered instance in a customer's portal, so change discovery and collection together and
 say so explicitly.
 
+**The rule is about things that move.** The fan-out modules deliberately *do* put the node in the
+wildvalue — `pve1-sda`, `pve1-pveproxy-ssl` — because a physical disk, a certificate and a systemd
+unit are node-bound and would collide across nodes without it. Guests migrate; disks do not.
+Replication is the case worth copying when it is not obvious: its wildvalue is the bare job id
+(`100-0`), with no node, because the job follows the guest.
+
 ## Style
 
 Conventionally formatted Groovy, four-space indent, single quotes, explicit `return 0` / `return 2`.
@@ -249,6 +308,11 @@ Adding or changing a datapoint touches three places: the `pveEmit` call in the c
 the `datapoints` array in `modules/<Module>.json`, and the coverage table in `README.md`. The build
 enforces the first two agreeing; nothing enforces the third.
 
+**Adding a module drifts more than that table.** Module counts are written out in prose in
+`README.md`, `docs/INSTALL.md` (twice), `docs/DESIGN.md` §4 and §7, and the opening of
+`docs/VALIDATION.md`. Nothing checks any of them. Grep the docs for the previous count before
+claiming a module is done.
+
 **The drift check is a regex, not an interpreter.** `build.py` finds emitted names with
 `pveEmit(<anything>, '<Literal>'`. A datapoint name held in a variable or built by concatenation is
 invisible to it and will pass the build while printing an undeclared datapoint on a live Collector.
@@ -259,8 +323,8 @@ collect body, an AD body if it is `multiInstance` — reuse an existing one wher
 the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
 its `technicalNotes` naming what is unproven, and an entry in `docs/VALIDATION.md` saying what to
-compare it against. Four of the Tier 2 modules are in that state; a green harness on a hand-written
-fixture proves the parsing, not the shape.
+compare it against. Five modules are in that state today — Ceph, CephOSD, Disks, Replication and
+Subscription; a green harness on a hand-written fixture proves the parsing, not the shape.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
