@@ -43,6 +43,25 @@ one call per *online* node, because that data is only available from the node th
 the expensive ones sit on long intervals for exactly that reason (Certificates and Disks at 240m,
 Subscription at 720m). Node counts are small and grow slowly; guest counts are neither.
 
+## Dashboard
+
+`dashboards/Proxmox_VE_Tier1.json` is a LogicMonitor dashboard covering the six Tier 1 modules:
+cluster health and capacity, per-node utilisation and load, guest CPU/memory/network/disk,
+storage capacity, guest status, and an alert table. Twenty widgets, in the same widget types and
+theme LogicMonitor's own VMware, Hyper-V and Nutanix dashboards use.
+
+Import through **Dashboards → Add → From File** — a different path from the modules, which go
+through My Module Toolbox. It lands in a dashboard group called `Proxmox VE`; the import dialog
+lets you redirect that. The `defaultResourceGroup` token ships as `*`, so it matches whatever
+resource carries the token; scope it to a group if you have more than one cluster.
+
+Unlike the parity suites, widgets legend on the **instance** rather than the hostname, because a
+single Proxmox resource carries every node, guest and storage object as instances rather than as
+separate resources. That is what makes one tile show the whole cluster.
+
+`dashboards/` is not part of `build.py` and nothing validates it — it is a hand-maintained export.
+Renaming a module or its display name breaks every widget that references it, silently.
+
 ## Install
 
 **[`docs/INSTALL.md`](docs/INSTALL.md) is the full guide** — creating the Proxmox user, the

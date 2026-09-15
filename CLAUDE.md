@@ -35,6 +35,7 @@ tests/fixtures/pve_api.json      recorded API responses, keyed by path + query s
 docs/DESIGN.md                   parity analysis, design rationale, the backlog
 docs/INSTALL.md                  Proxmox user/token/permissions, module import, which hosts
 docs/VALIDATION.md               what is unverified and how someone with a cluster checks it
+dashboards/<Name>.json           LogicMonitor dashboard exports — NOT built, see below
 dist/                            GENERATED, gitignored — never edit, never commit
 ```
 
@@ -101,6 +102,25 @@ because a job appears on both its source and its target node.
 first that answers, because `/nodes/{node}/ceph/osd` returns the whole cluster-wide CRUSH tree
 whichever node is asked — so it is O(1), and DESIGN §4's table says so explicitly. When no node has
 Ceph it prints nothing and returns 0: a fourth exit shape, meaning *nothing to report*, not failure.
+
+**`dashboards/` is outside the build entirely.** `build.py` globs `modules/*.json` and knows
+nothing about dashboards; nothing validates them, and the harness never opens them. They are
+LogicMonitor *dashboard* exports, a different resource from a LogicModule — imported through
+Dashboards → Add → From File, not through My Module Toolbox. The schema was taken from
+LogicMonitor's own published exports (`logicmonitor/dashboards`, `Virtualization/Hyper-V.json`
+and `Virtualization/Nutanix.json`), the same way the module export field names were.
+
+Two things about them are load-bearing. A widget addresses a module as
+`"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — so **renaming a module or
+its `displayedAs` silently breaks every widget referencing it**, with nothing to catch it. And
+widgets here legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
+Hyper-V dashboards use: those suites give each hypervisor its own resource, while this one puts
+every node, guest and storage object on a single resource as instances. Legend on hostname and
+every series gets the same label.
+
+A dashboard that references a conditional datapoint renders blank rather than erroring, which is
+why the cluster tile shows `ClusterConfigured` (always emitted) instead of `Quorate` (withheld on
+a standalone host).
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
