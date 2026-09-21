@@ -22,7 +22,7 @@
       "alertBody": "Ceph OSD ##INSTANCE## is down. Check NoOutFlagSet before acting: if noout is set this may be planned maintenance."
     },
     {
-      "name": "In",
+      "name": "OSDIn",
       "description": "1 when the OSD is in the cluster. An OSD that is up but out is deliberately excluded from data placement, typically during a planned drain."
     },
     {

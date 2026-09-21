@@ -75,6 +75,13 @@ CONDITIONAL_KEY = "conditional"
 # script to paste into the UI rather than as a JSON that might not import.
 STANDALONE_SCRIPTS = ["addCategory_Proxmox_VE.groovy"]
 
+# Datapoint names LogicMonitor refuses as reserved words. Nothing local catches this: the
+# build, compile and harness all pass, and the portal rejects the module on import. The
+# list is what a portal has actually refused, not a guess at LogicMonitor's full set --
+# "In" (CephOSD) on 2026-09-21. Compared case-insensitively. Add any other name the
+# portal rejects here, rather than renaming it by hand in dist/.
+RESERVED_DATAPOINT_NAMES = {"in"}
+
 EMIT_RE = re.compile(r"""pveEmit\(\s*[^,]+,\s*'([A-Za-z0-9_]+)'""")
 
 # BatchScript post-processor keys are scoped to the instance with this token; see
@@ -188,6 +195,8 @@ def check_module(defn: dict, module: dict) -> list[str]:
     declared = {dp["name"] for dp in module["datapoints"]}
     conditional = {dp["name"] for dp in defn["datapoints"] if dp.get(CONDITIONAL_KEY)}
 
+    for reserved in sorted(n for n in declared if n.lower() in RESERVED_DATAPOINT_NAMES):
+        problems.append(f"{name}: datapoint '{reserved}' is a name LogicMonitor reserves")
     for missing in sorted(emitted - declared):
         problems.append(f"{name}: script prints '{missing}' but no datapoint declares it")
     for unfilled in sorted(declared - emitted - conditional):

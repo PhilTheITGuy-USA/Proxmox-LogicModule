@@ -174,8 +174,10 @@ un-rebuilt edit is silently tested in its previous form. The loop is always
 The build refuses to emit if a collection script prints an undeclared datapoint, if a declared
 datapoint is never printed (unless marked `"conditional": true` in the module definition), if a
 `batchscript` module is not `multiInstance` or a `multiInstance` module has no discovery script, or
-if brackets are unbalanced in an assembled script. Groovy is not installed on this machine — Docker
-is how these get compiled and run, and `groovy:4-jdk17` matches the Collector's runtime.
+if brackets are unbalanced in an assembled script, or if a datapoint uses a name LogicMonitor
+reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a portal, so the CephOSD datapoint is
+`OSDIn`). Groovy is not installed on this machine — Docker is how these get compiled and run, and
+`groovy:4-jdk17` matches the Collector's runtime.
 
 **`modules/<Module>.json` is the build's input, not the export format.** `build.py` supplies the
 defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: namevalue`,

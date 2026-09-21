@@ -102,7 +102,7 @@ def build() -> Dashboard:
 
     d.table(10, 1, 12, 3, "Ceph OSDs", CEPH_OSD, [
         d.column("Up", "Up", display_type="number", maximum=1, rounding=0),
-        d.column("In", "In", display_type="number", maximum=1, rounding=0),
+        d.column("OSDIn", "In", display_type="number", maximum=1, rounding=0),
         d.column("UsedPercent", "Used %", warn=75, error=85),
         d.column("PlacementGroups", "PGs", display_type="number", maximum="NaN",
                  rounding=0),

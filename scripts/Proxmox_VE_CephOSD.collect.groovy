@@ -68,7 +68,7 @@ try {
         if (!id) { return }
 
         pveEmit(id, 'Up', osd.status?.toString() == 'up' ? 1 : 0)
-        pveEmit(id, 'In', (osd.in ?: 0) as int > 0 ? 1 : 0)
+        pveEmit(id, 'OSDIn', (osd.in ?: 0) as int > 0 ? 1 : 0)
         pveEmit(id, 'NoOutFlagSet', nooutSet ? 1 : 0)
 
         if (osd.crush_weight != null) {
