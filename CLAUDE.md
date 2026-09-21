@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## What this repo is
 
 A LogicMonitor **LogicModule suite** for Proxmox VE, monitored over its HTTPS JSON API
@@ -269,16 +271,13 @@ an error on the discovery task, which is why `pveDiscover` drops empty ones. All
 
 Datapoints are configured with Raw Metric `output` and Post Processor `namevalue(<key>)` — in the
 export JSON, `"useValue": "output"` with `"interpretMethod": "namevalue"` and `"interpretExpr"` set
-to the key. So a key printed by the script must match the datapoint name exactly, and a datapoint
-declared in `modules/<Module>.json` must actually be printed on every successful run unless it is
+to the key. On a Script module the key is the bare datapoint name. On a BatchScript it is not: one
+execution prints every instance into a single stream, so a bare `CPUUsagePercent` matches no line,
+and the key must be `##WILDVALUE##.CPUUsagePercent`, which LogicMonitor substitutes per instance at
+poll time. `build.py` applies the prefix for `batchscript` modules, withholds it for `script`
+modules, and refuses to emit if a module's keys do not match its collection method. Either way, a
+datapoint declared in `modules/<Module>.json` must be printed on every successful run unless it is
 marked `"conditional": true`.
-
-**The post-processor key is not the datapoint name on a BatchScript.** One execution prints every
-instance into a single stream, so a bare `CPUUsagePercent` matches no line — every key in that
-stream is prefixed with an instance id. The key must be scoped to the instance as
-`##WILDVALUE##.CPUUsagePercent`, which LogicMonitor substitutes per instance at poll time. `build.py`
-applies the prefix for `batchscript` modules and withholds it for `script` modules, and refuses to
-emit if a module's keys do not match its collection method.
 
 This is the highest-consequence mistake in the repo, because every other signal stays green: the
 build passes, the scripts compile, the harness goes green, Active Discovery populates instances, and
@@ -287,9 +286,9 @@ every instance reads No Data. It shipped that way once. If a batchscript module 
 check `interpretExpr` in `dist/<Module>.json` before you touch anything else.
 
 **Every emitted value must be a number.** The harness asserts each one matches
-`^-?\d+(\.\d+)?([eE][-+]?\d+)?$` (`tests/harness.groovy:100`). Proxmox fields that are typed as
-strings — `loadavg` items, `status`, HA state — must be converted or mapped before `pveEmit`:
-NodeDetail does `toString().toDouble()`, GuestStatus maps `running` to 1. A string reaches
+`^-?\d+(\.\d+)?([eE][-+]?\d+)?$` (`isNumeric` in `tests/harness.groovy`). Proxmox fields that
+are typed as strings — `loadavg` items, `status`, HA state — must be converted or mapped before
+`pveEmit`: NodeDetail does `toString().toDouble()`, GuestStatus maps `running` to 1. A string reaches
 LogicMonitor as no-data and fails the harness.
 
 **Datapoint metric type is not always Gauge.** The API enum (`type` on the datapoint object) is
@@ -373,15 +372,14 @@ Subscription; a green harness on a hand-written fixture proves the parsing, not 
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
-properties. The harness fakes those in the `instanceBindings` map (`tests/harness.groovy:103`),
-hardcoded to `pve1` so it lines up with the `/nodes/pve1/status` fixture. A new module that calls
-`pveInstanceProp` needs an entry there plus a fixture keyed to the same node name — without it the
+properties through `pveInstanceProp` (see Property lookup). The harness fakes those in the
+`instanceBindings` map in `tests/harness.groovy`, hardcoded to `pve1` so it lines up with the
+`/nodes/pve1/status` fixture. A new module that calls `pveInstanceProp` needs an entry there plus a fixture keyed to the same node name — without it the
 collect script runs with no `taskProps`, and the harness reports a collection failure rather than a
 missing binding.
 
-A datapoint that is legitimately not emitted on every run needs `"conditional": true` in the module
-definition. Use it when the API genuinely has no value to report — QEMU used-disk, cluster quorum on
-a standalone host — so the datapoint reads as no-data. Do not emit a zero to keep the build quiet;
+Mark a datapoint `"conditional": true` only when the API genuinely has no value to report — QEMU
+used-disk, cluster quorum on a standalone host — so the datapoint reads as no-data. Do not emit a zero to keep the build quiet;
 a confident wrong number is worse than an absent one.
 
 ## Proxmox API facts (verified against the published API schema, 454 endpoints)
@@ -410,7 +408,8 @@ Other schema details that bite:
   `rrddata` call per guest is redundant — and `rrddata` returns an averaged historical series, not
   a current reading, which is the wrong thing to graph as a current value anyway.
 - **QEMU guests have no used-disk figure.** `/nodes/{node}/qemu` and qemu `status/current` expose
-  `maxdisk` but no `disk`; only LXC reports `disk`. `diskUsedBytes` is therefore always 0 for VMs.
+  `maxdisk` but no `disk`; only LXC reports `disk`. `GuestPerformance` therefore emits
+  `DiskUsedBytes` / `DiskUsagePercent` for LXC only (both `conditional`), leaving VMs at no-data.
   That is Proxmox behaviour, not a bug to fix — real VM disk usage needs the guest agent.
 - `template: true` marks templates. They are never running, so discovering them creates instances
   that alert as permanently down. Filter them out of guest discovery.
@@ -429,25 +428,13 @@ Migration from Groovy 2 removed `List.push`/`pop` (use `add` / `remove(size-1)`)
 Nothing in this repo uses those, so the scripts are Groovy 4 clean — keep it that way.
 LogicMonitor publishes `logicmonitor/GroovyRemix` to automate that migration.
 
-**There is a supported HTTP client.** `com.santaba.agent.groovyapi.http.HTTP` (`HTTP.open(host, port)`,
-`.get(url)`, `.getStatusCode()`, `.getResponseBody()`, `.close()`) is what LogicMonitor's own
+**There is a supported HTTP client — which this repo deliberately does not use (see Style).**
+`com.santaba.agent.groovyapi.http.HTTP` (`HTTP.open(host, port)`, `.get(url)`, `.getStatusCode()`, `.getResponseBody()`, `.close()`) is what LogicMonitor's own
 reference DataSources use, instead of raw `URL.openConnection()`. Reference examples live in
 `logicmonitor/monitoring-recipes` (see `DataSources/Groovy/HTTP/`).
 
-**Modules are distributed as JSON.** Real modules are exported and imported through
-**My Module Toolbox → Export** / **Add → Import from file** as a single `.json` (XML is the older
-format). The import API takes a type of `datasources`, `configsources`, `eventsources`, `batchjobs`,
-`logsources`, `oids`, `topologysources`, `functions` or `diagnosticsources`, plus a conflict policy
-(`FORCE_OVERWRITE` / `ERROR`) and a `FieldsToPreserve` list covering `NAME`, `APPLIES_TO_SCRIPT`,
-`COLLECTION_INTERVAL`, `ACTIVE_DISCOVERY_INTERVAL`, `MODULE_GROUP`, `DISPLAY_NAME`,
-`USE_WILD_VALUE_AS_UUID`, `DATAPOINT_ALERT_THRESHOLDS` and `TAGS`. `build/build.py` emits this
-format into `dist/`; the field names were taken from real exported modules, not guessed.
-
-**REST API v3.** Base `https://<portal>.logicmonitor.com/santaba/rest`, header `X-Version: 3`.
-Either `Authorization: Bearer <token>`, or LMv1: build `METHOD + epochMillis + body + resourcePath`
-(body omitted for GET/DELETE, resourcePath excludes the query string), HMAC-SHA256 it with the
-access key, lowercase-hex the digest, Base64 **the hex string**, and send
-`Authorization: LMv1 <accessId>:<base64>:<epochMillis>`. The `Logic.Monitor` PowerShell module
-implements this and ships `Export-LMLogicModule`, `Import-LMLogicModuleFromFile`,
-`Invoke-LMActiveDiscovery` and `Invoke-LMCollectorDebugCommand` — the last one runs `!groovy` against
-a real Collector, which is the closest thing to a test harness this project can have.
+**Modules are distributed as JSON**, exported and imported through **My Module Toolbox** as a single
+`.json`. `build/build.py` emits that format into `dist/`; the field names were taken from real
+exported modules, not guessed. The import API, REST API v3 / LMv1 signing, and the `Logic.Monitor`
+PowerShell module are in `docs/VALIDATION.md` §5 — its `Invoke-LMCollectorDebugCommand` runs
+`!groovy` on a real Collector, the closest thing to a live test harness this project has.

@@ -208,3 +208,27 @@ populated instances, Test Collection Script showed perfectly correct output, the
 whole test harness were green — and every datapoint on every instance read No Data. The build now
 refuses to emit a module whose keys do not match its collection method, but the symptom is
 distinctive enough to recognise.
+
+---
+
+## 5. Driving a portal from a script
+
+For importing modules and running scripts against a real Collector without clicking through the UI.
+
+**Modules are distributed as JSON.** Real modules are exported and imported through
+**My Module Toolbox → Export** / **Add → Import from file** as a single `.json` (XML is the older
+format). The import API takes a type of `datasources`, `configsources`, `eventsources`, `batchjobs`,
+`logsources`, `oids`, `topologysources`, `functions` or `diagnosticsources`, plus a conflict policy
+(`FORCE_OVERWRITE` / `ERROR`) and a `FieldsToPreserve` list covering `NAME`, `APPLIES_TO_SCRIPT`,
+`COLLECTION_INTERVAL`, `ACTIVE_DISCOVERY_INTERVAL`, `MODULE_GROUP`, `DISPLAY_NAME`,
+`USE_WILD_VALUE_AS_UUID`, `DATAPOINT_ALERT_THRESHOLDS` and `TAGS`. `build/build.py` emits this
+format into `dist/`; the field names were taken from real exported modules, not guessed.
+
+**REST API v3.** Base `https://<portal>.logicmonitor.com/santaba/rest`, header `X-Version: 3`.
+Either `Authorization: Bearer <token>`, or LMv1: build `METHOD + epochMillis + body + resourcePath`
+(body omitted for GET/DELETE, resourcePath excludes the query string), HMAC-SHA256 it with the
+access key, lowercase-hex the digest, Base64 **the hex string**, and send
+`Authorization: LMv1 <accessId>:<base64>:<epochMillis>`. The `Logic.Monitor` PowerShell module
+implements this and ships `Export-LMLogicModule`, `Import-LMLogicModuleFromFile`,
+`Invoke-LMActiveDiscovery` and `Invoke-LMCollectorDebugCommand` — the last one runs `!groovy` against
+a real Collector, which is the closest thing to a test harness this project can have.
