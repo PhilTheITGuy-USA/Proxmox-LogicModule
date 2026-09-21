@@ -43,7 +43,7 @@ one call per *online* node, because that data is only available from the node th
 the expensive ones sit on long intervals for exactly that reason (Certificates and Disks at 240m,
 Subscription at 720m). Node counts are small and grow slowly; guest counts are neither.
 
-## Dashboard
+## Dashboards
 
 `dist/dashboards/Proxmox_VE_Tier1.json`, built by `python build/build.py`, is a LogicMonitor
 dashboard covering the six Tier 1 modules: cluster health and capacity, per-node utilisation and
@@ -60,13 +60,21 @@ Unlike the parity suites, widgets legend on the **instance** rather than the hos
 single Proxmox resource carries every node, guest and storage object as instances rather than as
 separate resources. That is what makes one tile show the whole cluster.
 
-The definition lives in `dashboards/Proxmox_VE_Tier1.py`; the JSON is generated. The build
+`dist/dashboards/Proxmox_VE_Tier2.json` (**Proxmox VE Infrastructure**) covers the eight Tier 2
+modules in fifteen widgets: Ceph health, OSD and monitor counts, raw utilisation, per-OSD fill and
+latency; backup coverage; certificate and subscription expiry; replication jobs; physical disk
+SMART and wear; node service state; and the same alert table. Most Tier 2 datapoints are
+conditional, so on a cluster without Ceph the Ceph tiles are blank by design — `CephAvailable`
+sits on the Ceph Health tile to show why. It imports the same way and lands in the same group.
+
+Each definition lives in `dashboards/<Name>.py`; the JSON is generated. The build
 resolves every widget's module and datapoint reference against `modules/*.json`, because a widget
 addresses a module as `"<displayedAs> (<name>)"` with nothing in LogicMonitor enforcing it — a
 rename would otherwise leave the dashboard importing cleanly and rendering empty tiles.
 
-**Verified in a portal on 2026-09-15**: it imports, lays out, and all twenty widgets populate with
-live data. It covers the Tier 1 modules, which are the six with a live-collection record.
+**Tier 1 verified in a portal on 2026-09-15**: it imports, lays out, and all twenty widgets
+populate with live data. **Tier 2 is not yet portal-verified**: it passes the same build checks and
+follows the Tier 1 conventions, but has not been imported.
 
 ## Install
 

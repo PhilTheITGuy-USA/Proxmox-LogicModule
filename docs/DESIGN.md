@@ -294,6 +294,7 @@ eight were written afterwards and have not yet been through a portal or a live h
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 2 | built and green on the harness; **none imported to a portal or run live**. Five carry an explicit UNVERIFIED note, see `docs/VALIDATION.md` |
 | Tier 1 dashboard | **verified** — imports, lays out and populates with live data in a portal, 2026-09-15 |
+| Tier 2 dashboard | built, 15 widgets, validated by the build; **not yet imported to a portal** |
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on
@@ -302,8 +303,8 @@ use — a departure made because this suite puts every node, guest and storage o
 resource as instances, where those suites give each hypervisor its own resource. Either being
 wrong would have produced a dashboard that imported cleanly and rendered empty tiles, which is
 the same shape of defect as the `##WILDVALUE##` post-processor bug above and equally invisible to
-every local check. All twenty widgets carry real data, so both conventions hold. Build the Tier 2
-dashboard on them.
+every local check. All twenty widgets carry real data, so both conventions hold. The Tier 2
+dashboard (`dashboards/Proxmox_VE_Tier2.py`) is built on them.
 
 The harness is mutation-tested: reintroducing the template-discovery bug and the QEMU
 used-disk bug both make it fail, so a green run means something.
