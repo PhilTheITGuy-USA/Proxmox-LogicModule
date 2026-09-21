@@ -374,13 +374,13 @@ Subscription; a green harness on a hand-written fixture proves the parsing, not 
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
 properties through `pveInstanceProp` (see Property lookup). The harness fakes those in the
 `instanceBindings` map in `tests/harness.groovy`, hardcoded to `pve1` so it lines up with the
-`/nodes/pve1/status` fixture. A new module that calls `pveInstanceProp` needs an entry there plus a fixture keyed to the same node name — without it the
-collect script runs with no `taskProps`, and the harness reports a collection failure rather than a
-missing binding.
+`/nodes/pve1/status` fixture. A new module that calls `pveInstanceProp` needs an entry there plus a
+fixture keyed to the same node name — without it the collect script runs with no `taskProps`, and
+the harness reports a collection failure rather than a missing binding.
 
 Mark a datapoint `"conditional": true` only when the API genuinely has no value to report — QEMU
-used-disk, cluster quorum on a standalone host — so the datapoint reads as no-data. Do not emit a zero to keep the build quiet;
-a confident wrong number is worse than an absent one.
+used-disk, cluster quorum on a standalone host — so the datapoint reads as no-data. Do not emit a
+zero to keep the build quiet; a confident wrong number is worse than an absent one.
 
 ## Proxmox API facts (verified against the published API schema, 454 endpoints)
 
@@ -429,9 +429,10 @@ Nothing in this repo uses those, so the scripts are Groovy 4 clean — keep it t
 LogicMonitor publishes `logicmonitor/GroovyRemix` to automate that migration.
 
 **There is a supported HTTP client — which this repo deliberately does not use (see Style).**
-`com.santaba.agent.groovyapi.http.HTTP` (`HTTP.open(host, port)`, `.get(url)`, `.getStatusCode()`, `.getResponseBody()`, `.close()`) is what LogicMonitor's own
-reference DataSources use, instead of raw `URL.openConnection()`. Reference examples live in
-`logicmonitor/monitoring-recipes` (see `DataSources/Groovy/HTTP/`).
+`com.santaba.agent.groovyapi.http.HTTP` (`HTTP.open(host, port)`, `.get(url)`, `.getStatusCode()`,
+`.getResponseBody()`, `.close()`) is what LogicMonitor's own reference DataSources use, instead of
+raw `URL.openConnection()`. Reference examples live in `logicmonitor/monitoring-recipes` (see
+`DataSources/Groovy/HTTP/`).
 
 **Modules are distributed as JSON**, exported and imported through **My Module Toolbox** as a single
 `.json`. `build/build.py` emits that format into `dist/`; the field names were taken from real
