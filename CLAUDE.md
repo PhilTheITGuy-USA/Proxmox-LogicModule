@@ -175,7 +175,8 @@ It populated **sixteen of its twenty widgets**, not all twenty as this file clai
 2026-09-22; the four missing were `dynamicTable`s dropped at import for the invented values
 above, and a portal export is what revealed it. The lesson is that *a dashboard looking right in
 the portal is not evidence that it imported whole* — count the widgets, or better, export it and
-count them there. `Proxmox_VE_Tier2` has never yet imported whole.
+count them there. `Proxmox_VE_Tier2` reached 15 of 15 on 2026-09-22, once the module it depends
+on was re-imported first.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
@@ -402,9 +403,10 @@ collect body, an AD body if it is `multiInstance` — reuse an existing one wher
 the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
 its `technicalNotes` naming what is unproven, and an entry in `docs/VALIDATION.md` saying what to
-compare it against. Four modules are in that state today — Ceph, CephOSD, Replication and
-Subscription; a green harness on a hand-written fixture proves the parsing, not the shape. Disks
-left that list on 2026-09-22 when the wearout direction was confirmed against real disks.
+compare it against. **No module is in that state today**: the last four — Ceph, CephOSD,
+Replication and Subscription — were verified against a three-node cluster with Ceph on 2026-09-22,
+and Disks the same day. A green harness on a hand-written fixture proves the parsing, not the
+shape, so a new module still needs the note until someone runs it.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance

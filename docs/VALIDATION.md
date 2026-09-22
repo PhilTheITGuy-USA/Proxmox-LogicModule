@@ -1,17 +1,15 @@
 # Validating this suite against a real cluster
 
-The suite is fourteen modules. Tier 1's six have run against a live Proxmox host and report as
-expected. Five more have never run against the hardware they monitor — Ceph, Ceph OSD, Replication,
-Subscription, and one specific question in Disks — because a single node cannot provide a Ceph
-cluster, a replication job, a subscribed node or an SSD with a wear attribute. The Cluster module's
-HA datapoints are in the same position for a different reason: they need a real failover.
+The suite is fourteen modules, and **all fourteen have now run against real hardware**. Tier 1's
+six have been collecting against a live Proxmox host since 2026-09-10. Tier 2's eight were verified
+on 2026-09-22 against a three-node cluster with Ceph — which also exercised the five a single node
+cannot provide for at all: a Ceph cluster, per-OSD detail, a replication job, a subscribed node and
+an SSD with a wear attribute.
 
-**None of the eight Tier 2 modules has been imported into a portal yet**, so §2.0 below is the
-cheapest and highest-value thing on this list — it needs no special hardware at all, and it covers
-the one failure mode the local checks provably cannot see.
-
-This document is for whoever has that cluster. It says exactly what is unproven, what to look at,
-and what to send back.
+So most of what follows is now a **regression checklist** rather than a list of open questions: it
+says what each module should look like when it is right, which is what you need when something
+starts reading No Data. The two things still genuinely unproven are in §2.0, and both need an event
+to occur rather than hardware to exist.
 
 Nothing here is dangerous. Every endpoint the suite touches is a GET, the token is read-only, and
 no module writes anything to Proxmox.
@@ -47,18 +45,29 @@ definition, against your Proxmox resource. It shows stdout and stderr without wa
 
 ---
 
-## 2. What is unverified, and what to check
+## 2. What each module should look like when it is right
 
-### 2.0 First: do the Tier 2 modules import and collect at all?
+### 2.0 What is still actually unproven
 
-This needs nothing but a working Proxmox host, and it is the check that matters most. The build,
-the compile pass and the harness all validate what the *scripts emit*. None of them validates how
-the module JSON tells LogicMonitor to *parse* that output — and that layer has failed here before,
-silently: discovery populated instances, Test Collection Script showed perfect output, everything
-local was green, and every datapoint on every instance read No Data. See §4.
+Two branches have never executed against real conditions, because no healthy cluster produces them
+on demand:
 
-**Backup Coverage, Certificates, Node Services and Disks** need no Ceph, no replication and no
-subscription. Import them, let Active Discovery run, and confirm:
+- **`Proxmox_VE_Cluster`'s HA datapoints.** They need a real failover, not merely an HA cluster.
+  Covered in its own section below.
+- **`Proxmox_VE_Disks` with unreadable SMART.** A disk whose `health` reads `UNKNOWN` must report
+  `SmartHealthKnown=0` and **no** `SmartHealthOK` at all. That withholding is what stops an
+  unreadable disk alerting exactly like a failing one, and every disk seen so far has had readable
+  SMART. If you ever have a disk behind a RAID controller or a USB bridge, it is worth a look.
+
+Everything else below has been confirmed. Keep it as the comparison for when something breaks —
+the failure mode this suite has actually suffered is silent: discovery populates instances, Test
+Collection Script shows perfect output, everything local is green, and every datapoint on every
+instance reads No Data. See §4.
+
+### 2.1 The modules that need no special hardware
+
+**Backup Coverage, Certificates, Node Services and Disks.** After an import, let Active Discovery
+run and confirm:
 
 - **Certificates** — one instance per certificate per node (`pve-ssl`, `pveproxy-ssl`, and the
   cluster CA where present). `DaysUntilExpiry` should match the node's Certificates panel. It is
@@ -76,10 +85,10 @@ subscription. Import them, let Active Discovery run, and confirm:
 - **Disks** — `SizeGB`, `Mounted` and `SmartHealthKnown` on every physical disk, and
   `LifeRemainingKnown` 1 on SSD/NVMe and 0 on spinning disks.
 
-For each, the thing to report back is simply: did instances appear, and did the datapoints carry
-numbers or read No Data? If a module collects nothing, §4 is the first place to look.
+All four were confirmed on 2026-09-22. If one of them stops carrying numbers later, §4 is the
+first place to look.
 
-### `Proxmox_VE_CephOSD` — the least verified thing here
+### 2.2 `Proxmox_VE_CephOSD`
 
 Never run against Ceph. The endpoint shape and every field name came from reading
 `pve-manager`'s `PVE/API2/Ceph/OSD.pm`, not from a response.
@@ -99,7 +108,7 @@ Never run against Ceph. The endpoint shape and every field name came from readin
   `noout` (`ceph osd set noout`), confirm the datapoint goes to 1, then unset it
   (`ceph osd unset noout`).
 
-### `Proxmox_VE_Ceph`
+### 2.3 `Proxmox_VE_Ceph`
 
 The API declares `/cluster/ceph/status` as an **untyped object** — it passes through whatever
 `ceph status` produces, and the keys have moved between Ceph releases.
@@ -115,7 +124,7 @@ The API declares `/cluster/ceph/status` as an **untyped object** — it passes t
   *not* clean — deliberate, but worth confirming you agree with it.
 - **Is monitor quorum right?** `MonitorsInQuorum` against `ceph quorum_status`.
 
-### `Proxmox_VE_Replication`
+### 2.4 `Proxmox_VE_Replication`
 
 Needs a cluster with at least one replication job.
 
@@ -128,7 +137,7 @@ Needs a cluster with at least one replication job.
   specifically so a migration does not orphan the instance. Migrate a replicated guest and confirm
   the instance and its history persist.
 
-### `Proxmox_VE_Subscription`
+### 2.5 `Proxmox_VE_Subscription`
 
 Needs a subscribed node.
 
@@ -137,7 +146,7 @@ Needs a subscribed node.
 - **Does an unsubscribed node report no `DaysUntilDue` at all?** It must be absent, not zero — zero
   reads as "expires today".
 
-### `Proxmox_VE_Disks` — the wearout question, now answered
+### 2.6 `Proxmox_VE_Disks` — the wearout question, now answered
 
 `LifeRemainingPercent` comes from Proxmox's `wearout`. Reading `pve-storage`'s `Diskmanage.pm`, that
 is computed as `100 − percentage-used` for NVMe and as the normalised SMART wear attribute for SATA
@@ -156,7 +165,7 @@ cannot distinguish a spinning disk from a collection failure.
 Still worth confirming: a disk whose SMART cannot be read reports `SmartHealthKnown=0` and **no**
 `SmartHealthOK` at all, rather than `SmartHealthOK=0`.
 
-### `Proxmox_VE_Cluster` — HA on a real HA cluster
+### 2.7 `Proxmox_VE_Cluster` — HA on a real HA cluster, still unproven
 
 The HA datapoints are verified only against a mock.
 

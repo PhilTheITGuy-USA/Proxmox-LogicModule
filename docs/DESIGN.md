@@ -157,26 +157,24 @@ schema carries `content`, `shared` and `plugintype` but no `enabled`. That field
 
 ### Tier 2 — infrastructure surfaces the parity suites have and we do not
 
-All eight are built, and **none has yet been imported into a portal or run against a live host** —
-they were written after the 2026-09-10 Tier 1 verification. Four of them could only be written
-best-effort in the first place, because a single node cannot exercise them at all — Ceph, CephOSD,
-Replication and Subscription. Disks is a fifth, partial case: the
-module itself is straightforward, but the *direction* of its `wearout` value has never been checked
-against a real SSD, and a threshold that is backwards would alert on healthy disks and stay silent
-on dying ones. All five carry an UNVERIFIED note in their own `technicalNotes`, and
-`docs/VALIDATION.md` is the checklist for whoever does have the hardware — what to look at, what to
-compare it against, and what to send back.
+All eight are built and **all eight were verified against a real cluster on 2026-09-22** — a
+three-node cluster with Ceph, which also exercised the five that a single node cannot: Ceph,
+CephOSD, Replication, Subscription, and the `wearout` direction in Disks. That last one was the
+highest-consequence unknown in the suite, because a backwards threshold would have alerted on
+healthy disks and stayed silent on dying ones; it reads as life *remaining*, as shipped. None of
+the eight carries an UNVERIFIED note any more. `docs/VALIDATION.md` remains the checklist, now as
+a regression pass rather than a set of open questions.
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **untested live** | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
-| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built, **untested live** | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
-| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built, **untested live** | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
-| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built, **partly unverified** | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
-| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | built, **unverified** | Ceph is the Proxmox equivalent of vSAN. The endpoint returns an untyped passthrough of `ceph status`, so every field is read defensively. |
-| `Proxmox_VE_Replication` | `/nodes/{node}/replication` | O(nodes) | built, **unverified** | Job failures and replica staleness. Note the endpoint is the *node* one; `/cluster/replication` is `ReplicationConfig`, the job definitions, not their status. |
-| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | built, **unverified** | Renewal date. The status half is already free from the `level` field in Tier 1a; this module exists for `nextduedate`. |
-| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | **O(1)** | built, **unverified** | Per-OSD up/in, fill, latency, CRUSH weight. Costed as O(nodes) when this table was written, which was wrong: the endpoint returns the whole cluster-wide CRUSH tree whichever node is asked, so one call covers every OSD. The tree is walked rather than assumed to be any particular depth. |
+| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **verified live** 2026-09-22 | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
+| `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built, **verified live** 2026-09-22 | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
+| `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built, **verified live** 2026-09-22 | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
+| `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built, **verified live** 2026-09-22 | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
+| `Proxmox_VE_Ceph` | `/cluster/ceph/status` | O(1) | built, **verified live** 2026-09-22 | Ceph is the Proxmox equivalent of vSAN. The endpoint returns an untyped passthrough of `ceph status`, so every field is read defensively. |
+| `Proxmox_VE_Replication` | `/nodes/{node}/replication` | O(nodes) | built, **verified live** 2026-09-22 | Job failures and replica staleness. Note the endpoint is the *node* one; `/cluster/replication` is `ReplicationConfig`, the job definitions, not their status. |
+| `Proxmox_VE_Subscription` | `/nodes/{node}/subscription` | O(nodes) | built, **verified live** 2026-09-22 | Renewal date. The status half is already free from the `level` field in Tier 1a; this module exists for `nextduedate`. |
+| `Proxmox_VE_CephOSD` | `/nodes/{node}/ceph/osd` | **O(1)** | built, **verified live** 2026-09-22 | Per-OSD up/in, fill, latency, CRUSH weight. Costed as O(nodes) when this table was written, which was wrong: the endpoint returns the whole cluster-wide CRUSH tree whichever node is asked, so one call covers every OSD. The tree is walked rather than assumed to be any particular depth. |
 
 ### Tier 2a — workload surfaces
 
@@ -281,20 +279,21 @@ instance in a customer's portal.
 ## 7. Build status
 
 Tier 1, Tier 1a, all eight Tier 2 modules and the PropertySource are implemented and assembled.
-Tier 1's six DataSources have been collecting against a live cluster since 2026-09-10. The Tier 2
-eight were written afterwards and have not yet been through a portal or a live host.
+Tier 1's six DataSources have been collecting against a live cluster since 2026-09-10; the Tier 2
+eight were verified against a three-node cluster with Ceph on 2026-09-22.
 
 | | |
 |---|---|
 | Modules built | 14 DataSources + 1 PropertySource |
 | Scripts assembled | 26, compiled on Groovy 4 (the Collector's runtime) |
-| Harness checks | 959, against a mock Proxmox API |
-| Portal import | **verified for Tier 1's six** — they import and apply via `hasCategory("ProxmoxVE")`. Tier 2 is unproven at this layer |
-| Real Proxmox host | **verified for Tier 1's six** — collecting, 2026-09-10 |
+| Harness checks | 971, against a mock Proxmox API |
+| Portal import | **verified for all fourteen** — they import and apply via `hasCategory("ProxmoxVE")` |
+| Real Proxmox host | **verified for all fourteen** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
-| Tier 2 | built and green on the harness; **none imported to a portal or run live**. Five carry an explicit UNVERIFIED note, see `docs/VALIDATION.md` |
-| Tier 1 dashboard | **verified** — imports, lays out and populates with live data in a portal, 2026-09-15 |
-| Tier 2 dashboard | built, 15 widgets, validated by the build; **not yet imported to a portal** |
+| Tier 2 | **verified** against a three-node cluster with Ceph, 2026-09-22. No module carries an UNVERIFIED note |
+| Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see §6 |
+| Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
+| Still unproven | Cluster's HA datapoints (need a real failover) and Disks' unreadable-SMART branch |
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on

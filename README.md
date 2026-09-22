@@ -72,9 +72,9 @@ resolves every widget's module and datapoint reference against `modules/*.json`,
 addresses a module as `"<displayedAs> (<name>)"` with nothing in LogicMonitor enforcing it — a
 rename would otherwise leave the dashboard importing cleanly and rendering empty tiles.
 
-**Tier 1 verified in a portal on 2026-09-15**: it imports, lays out, and all twenty widgets
-populate with live data. **Tier 2 is not yet portal-verified**: it passes the same build checks and
-follows the Tier 1 conventions, but has not been imported.
+**Both dashboards are portal-verified.** Tier 1 on 2026-09-15 and again on 2026-09-22, when a
+widget-schema fix took it from the sixteen widgets it had silently been importing to all twenty.
+Tier 2 on 2026-09-22: all fifteen widgets import and populate with live data.
 
 ## Install
 
@@ -157,17 +157,16 @@ guests the cluster itself considers broken.
 
 ## Validating against a real cluster
 
-**The six Tier 1 modules are the ones with a live-collection record** — Cluster, Nodes, Node
-Detail, Guest Performance, Guest Status and Storage Capacity, collecting against a real host since
-2026-09-10. The eight Tier 2 modules were written afterwards and have not yet been imported into a
-portal or run against a host. They are green on the build, the compile check and the mock-API
-harness, which covers what the scripts emit but not how the module JSON tells LogicMonitor to parse
-it — a gap that has bitten this suite once before.
+**All fourteen modules now have a live-collection record.** The six Tier 1 modules — Cluster,
+Nodes, Node Detail, Guest Performance, Guest Status and Storage Capacity — have been collecting
+against a real host since 2026-09-10. The eight Tier 2 modules were verified on 2026-09-22 against
+a three-node cluster with Ceph, which also exercised the four that a single node cannot test at
+all: Ceph, Ceph OSD, Replication and Subscription. No module carries an UNVERIFIED note any more.
 
-Four of those eight also need hardware a single node cannot provide — Ceph, Ceph OSD, Replication
-and Subscription — and each carries an UNVERIFIED note in its own technical notes. Disks was a
-fifth until its wearout direction was confirmed against real SSD and NVMe disks on 2026-09-22. The Cluster module's HA datapoints are in the same position for a different
-reason: they need a real failover, not just an HA cluster.
+Two things are still unproven, and both need an event rather than hardware. The Cluster module's HA
+datapoints need a real failover, not merely an HA cluster. And Disks reports `SmartHealthKnown=0`
+with `SmartHealthOK` withheld for a disk whose SMART cannot be read — the branch that keeps an
+unreadable disk from alerting like a failing one, which no healthy fleet exercises.
 
 **`docs/VALIDATION.md` is the checklist for anyone with a cluster to test against**: what is
 unproven in each module, what to compare it against, and what to send back. The most useful thing
