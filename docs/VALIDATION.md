@@ -73,8 +73,8 @@ subscription. Import them, let Active Discovery run, and confirm:
   separate question about the *endpoint*: it reads 0 only on Proxmox versions that do not expose
   `/cluster/backup-info/not-backed-up`, and then no counts are emitted at all. Check which of the
   two you are looking at before reading a low number as good news.
-- **Disks** — `SizeBytes`, `Mounted` and `SmartHealthKnown` on every physical disk. The
-  `LifeRemainingPercent` question is separate and is covered below.
+- **Disks** — `SizeGB`, `Mounted` and `SmartHealthKnown` on every physical disk, and
+  `LifeRemainingKnown` 1 on SSD/NVMe and 0 on spinning disks.
 
 For each, the thing to report back is simply: did instances appear, and did the datapoints carry
 numbers or read No Data? If a module collects nothing, §4 is the first place to look.
@@ -137,19 +137,23 @@ Needs a subscribed node.
 - **Does an unsubscribed node report no `DaysUntilDue` at all?** It must be absent, not zero — zero
   reads as "expires today".
 
-### `Proxmox_VE_Disks` — one specific question
+### `Proxmox_VE_Disks` — the wearout question, now answered
 
 `LifeRemainingPercent` comes from Proxmox's `wearout`. Reading `pve-storage`'s `Diskmanage.pm`, that
 is computed as `100 − percentage-used` for NVMe and as the normalised SMART wear attribute for SATA
 SSDs — both of which are life **remaining**, so the shipped threshold alerts when it *falls*
 (`< 20 10 5`).
 
-**This has never been checked against a real disk.** On a nearly new SSD the value should be near
-100. If it is near 0 on a new disk, the sense is inverted and the threshold is backwards — which
-would mean the suite alerts on healthy disks and stays silent on dying ones. Worth five seconds
-with a real SSD, and it is the single highest-consequence unknown in the suite.
+**Confirmed against real SSD and NVMe disks on 2026-09-22**: the values read as life remaining and
+the threshold is the correct way round. This was the single highest-consequence unknown in the
+suite and it is closed.
 
-Also confirm a disk whose SMART cannot be read reports `SmartHealthKnown=0` and **no**
+Spinning disks expose no wear attribute, so `LifeRemainingPercent` is withheld there and
+`LifeRemainingKnown` reads 0. That pairing is the only way to say "not applicable" — a LogicMonitor
+datapoint carries numbers, never text, so no datapoint can print `N/A`, and a lone blank cell
+cannot distinguish a spinning disk from a collection failure.
+
+Still worth confirming: a disk whose SMART cannot be read reports `SmartHealthKnown=0` and **no**
 `SmartHealthOK` at all, rather than `SmartHealthOK=0`.
 
 ### `Proxmox_VE_Cluster` — HA on a real HA cluster

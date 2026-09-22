@@ -145,12 +145,17 @@ def build() -> Dashboard:
     d.table(16, 7, 6, 3, "Physical Disks", DISKS, [
         d.column("SmartHealthOK", "SMART OK", display_type="raw", rounding=0),
         d.column("SmartHealthKnown", "SMART Known", display_type="raw", rounding=0),
+        d.column("LifeRemainingKnown", "Wear Reported", display_type="raw",
+                 rounding=0),
         d.column("LifeRemainingPercent", "Life Left %"),
         d.column("Mounted", "Mounted", display_type="raw", rounding=0),
         d.column("SizeGB", "Size GB", display_type="raw", rounding=0),
     ], top_x=-1,
-       description="SMART OK is empty where SMART Known is 0. Life Left is reported "
-                   "only for SSDs that expose a wear attribute.")
+       description="SMART OK is empty where SMART Known is 0, and Life Left is empty "
+                   "where Wear Reported is 0 -- a spinning disk exposes no wear "
+                   "attribute, so the blank means not applicable rather than not "
+                   "collected. A datapoint cannot print \"N/A\": LogicMonitor takes "
+                   "numbers only.")
 
     # ----------------------------------------------- rows 19-21: node services
 

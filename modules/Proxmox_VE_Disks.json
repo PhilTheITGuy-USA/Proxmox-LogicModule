@@ -5,7 +5,7 @@
   "group": "Proxmox VE",
   "appliesTo": "hasCategory(\"ProxmoxVE\")",
   "searchKeywords": "proxmox,pve,disk,smart,health,wearout,ssd,nvme,hardware",
-  "technicalNotes": "BatchScript, one /nodes/{node}/disks/list call per online node per interval. Requires Sys.Audit on / or on /nodes/{node}. O(nodes).\n\nThis endpoint shells out to smartctl for every disk on the node, so it runs on a deliberately long interval. Partitions are not requested: a partition's SMART health is the health of the disk beneath it, and including them would duplicate every instance.\n\nTwo fields are not what they appear, and both are handled deliberately:\n\nhealth is a string that defaults to \"UNKNOWN\" when smartctl could not be read -- that is an absence of verdict, not a failure. It is therefore reported as two datapoints: SmartHealthKnown says whether there is a verdict at all, and SmartHealthOK says what it was -- and SmartHealthOK is withheld entirely when there is no verdict. Emitting a zero there would make an unreadable disk alert exactly like a failing one, which is the mistake this split exists to prevent.\n\nwearout is the literal string \"N/A\" on anything that is not SSD-like and wherever the wear attribute is missing, so LifeRemainingPercent is emitted only when the value is genuinely numeric. A zero there would read as a disk with no life left.\n\nUNVERIFIED: LifeRemainingPercent is Proxmox's wearout value, which its Diskmanage source computes as 100 minus the NVMe percentage-used, and as the normalised SMART wear attribute for SATA SSDs -- both of which are life *remaining*, so the threshold alerts when it falls. This has not been checked against a real disk. Confirm the direction before relying on the threshold.",
+  "technicalNotes": "BatchScript, one /nodes/{node}/disks/list call per online node per interval. Requires Sys.Audit on / or on /nodes/{node}. O(nodes).\n\nThis endpoint shells out to smartctl for every disk on the node, so it runs on a deliberately long interval. Partitions are not requested: a partition's SMART health is the health of the disk beneath it, and including them would duplicate every instance.\n\nTwo fields are not what they appear, and both are handled deliberately:\n\nhealth is a string that defaults to \"UNKNOWN\" when smartctl could not be read -- that is an absence of verdict, not a failure. It is therefore reported as two datapoints: SmartHealthKnown says whether there is a verdict at all, and SmartHealthOK says what it was -- and SmartHealthOK is withheld entirely when there is no verdict. Emitting a zero there would make an unreadable disk alert exactly like a failing one, which is the mistake this split exists to prevent.\n\nwearout is the literal string \"N/A\" on anything that is not SSD-like and wherever the wear attribute is missing, so LifeRemainingPercent is emitted only when the value is genuinely numeric. A zero there would read as a disk with no life left. LifeRemainingKnown carries that distinction as a datapoint of its own, so a spinning disk reads as an explicit 0 rather than as a gap.\n\nLifeRemainingPercent is Proxmox's wearout value, which its Diskmanage source computes as 100 minus the NVMe percentage-used, and as the normalised SMART wear attribute for SATA SSDs -- both of which are life *remaining*, so the threshold alerts when it falls. Confirmed against real SSD and NVMe disks on 2026-09-22: the direction is right and the threshold is the correct way round.",
   "collectionMethod": "batchscript",
   "collectionInterval": "240m",
   "multiInstance": true,
@@ -38,8 +38,12 @@
       "description": "1 when the disk is mounted on the node."
     },
     {
+      "name": "LifeRemainingKnown",
+      "description": "1 when the disk reports a wear attribute, which in practice means an SSD or NVMe. 0 on a spinning disk, where LifeRemainingPercent is deliberately absent rather than zero."
+    },
+    {
       "name": "LifeRemainingPercent",
-      "description": "SSD life remaining, from Proxmox's wearout value. Reported only for SSD-like disks that expose a wear attribute; absent elsewhere rather than zero.",
+      "description": "SSD life remaining, percent, from Proxmox's wearout value. Reported only for disks that expose a wear attribute; absent elsewhere rather than zero. Check LifeRemainingKnown to tell a spinning disk apart from a collection failure.",
       "threshold": "< 20 10 5",
       "conditional": true
     }

@@ -164,9 +164,9 @@ portal or run against a host. They are green on the build, the compile check and
 harness, which covers what the scripts emit but not how the module JSON tells LogicMonitor to parse
 it — a gap that has bitten this suite once before.
 
-Five of those eight also need hardware a single node cannot provide — Ceph, Ceph OSD, Replication,
-Subscription, and one specific question in Disks — and each carries an UNVERIFIED note in its own
-technical notes. The Cluster module's HA datapoints are in the same position for a different
+Four of those eight also need hardware a single node cannot provide — Ceph, Ceph OSD, Replication
+and Subscription — and each carries an UNVERIFIED note in its own technical notes. Disks was a
+fifth until its wearout direction was confirmed against real SSD and NVMe disks on 2026-09-22. The Cluster module's HA datapoints are in the same position for a different
 reason: they need a real failover, not just an HA cluster.
 
 **`docs/VALIDATION.md` is the checklist for anyone with a cluster to test against**: what is

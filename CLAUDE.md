@@ -400,8 +400,9 @@ collect body, an AD body if it is `multiInstance` — reuse an existing one wher
 the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
 its `technicalNotes` naming what is unproven, and an entry in `docs/VALIDATION.md` saying what to
-compare it against. Five modules are in that state today — Ceph, CephOSD, Disks, Replication and
-Subscription; a green harness on a hand-written fixture proves the parsing, not the shape.
+compare it against. Four modules are in that state today — Ceph, CephOSD, Replication and
+Subscription; a green harness on a hand-written fixture proves the parsing, not the shape. Disks
+left that list on 2026-09-22 when the wearout direction was confirmed against real disks.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance

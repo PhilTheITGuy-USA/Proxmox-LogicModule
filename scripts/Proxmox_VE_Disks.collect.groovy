@@ -63,9 +63,18 @@ try {
                  * wearout is a number only on SSD-like disks that report a wear attribute.
                  * Everywhere else it is the string "N/A", which must not become a zero --
                  * zero would read as a disk with no life left.
+                 *
+                 * Reported as a pair, for the same reason SMART health is: LifeRemainingKnown
+                 * says whether there is a wear figure at all, LifeRemainingPercent says what
+                 * it is and is withheld when there is not. A spinning disk is then an explicit
+                 * 0 beside a blank, which reads as "not applicable" rather than as a disk
+                 * this module failed to collect. A datapoint cannot say "N/A" itself --
+                 * LogicMonitor takes numbers only.
                  */
                 def wearout = disk.wearout
-                if (wearout != null && wearout.toString().isNumber()) {
+                def wearKnown = wearout != null && wearout.toString().isNumber()
+                pveEmit(id, 'LifeRemainingKnown', wearKnown ? 1 : 0)
+                if (wearKnown) {
                     pveEmit(id, 'LifeRemainingPercent', pveRound(wearout.toString().toDouble()))
                 }
             }
