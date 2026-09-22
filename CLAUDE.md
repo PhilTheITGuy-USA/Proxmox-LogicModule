@@ -121,10 +121,35 @@ names were. `REFERENCE_KEYS` and the enum tuples record what those files actuall
 `check_dashboard` refuses anything this project invented on its own — an unexpected key breaks an
 import as readily as a missing one, and neither reports an error in the portal.
 
+**"Invented" means the values too, not just the keys, and that lesson cost a portal round trip.**
+On 2026-09-22 a portal silently discarded nine of the Tier 2 dashboard's fifteen widgets and four
+of Tier 1's twenty, reporting only `Some widgets could not be created due to incompatible version
+or configuration errors` — once, on first load, naming no widget. The dashboard imported, the
+survivors looked perfect, and the gaps closed up because the grid floats widgets upward. Every
+casualty carried a value that appears nowhere in the reference exports: `displayType: "number"` on
+a column (the real vocabulary is `percent` and `raw`), `topX: 20` on a cgraph (only `10` and `25`
+exist), `topX` of `50`/`100` on a table (only `25` and `-1`), `colorThresholds: null` where the
+references always carry a list, and per-column `minValue`/`maxValue` other than `0`/`100` — the
+references use `0..100` on *every* column, including `raw` ones like Nutanix's `IOPs` whose values
+run far past 100, so the bounds are read for the percent bar and ignored otherwise. `COLUMN_*`,
+`CGRAPH_TOP_X` and `TABLE_TOP_X` in `build/dashboards.py` now pin all of it and `_check_column`
+enforces it, mutation-tested one field at a time. The `column()` helper no longer accepts bounds
+at all, which is the only way to keep them from drifting back.
+
+**Do not migrate the tables to the portal's newer `table` widget.** A current portal builds tables
+as `type: "table"` with `displaySettings.columnsV4` and serialises its rows as resolved integers —
+`deviceId`, `instanceId`, `dataPointId`, `dataSourceId`. Those are account-specific, so such a
+dashboard cannot ship to anyone else's portal. The legacy `dynamicTable` still imports and is the
+only form that expresses "every instance, wherever this resource lives" as globs.
+
 **The check that earns its keep is the module reference.** A widget addresses a module as
 `"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — a plain string with
 nothing in LogicMonitor enforcing it. Rename a module, its `displayedAs`, or a datapoint, and
-every widget pointing at it keeps importing and renders an empty tile. So the build resolves
+every widget pointing at it is **discarded at import** — confirmed on 2026-09-22, when the Tier 2
+dashboard was imported one module-rebuild too early and lost exactly the one widget naming a
+datapoint (`SizeGB`) the portal's copy of that module did not yet have. It fails the same silent
+way as the invented values above, which also means **a module the dashboard depends on must be
+imported before the dashboard**, not after. So the build resolves
 every widget reference against `modules/*.json` and fails if one does not exist. It also refuses
 overlapping widgets, which render on top of each other rather than erroring. Both checks are
 mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each
@@ -138,11 +163,17 @@ gives every series the same label. And a widget aimed at a *conditional* datapoi
 rather than erroring, which is why the cluster tile shows `ClusterConfigured` (always emitted)
 rather than `Quorate` (withheld on a standalone host).
 
-`Proxmox_VE_Tier1` imported, laid out and populated every one of its twenty widgets with live
-data. That is the only proof available that the `"<displayedAs> (<name>)"` reference form and the
-`##INSTANCE##` legend are right — both are plain strings LogicMonitor does not validate, and
-either being wrong yields a dashboard that imports cleanly and renders nothing. A new dashboard
-should copy those two conventions rather than re-deriving them.
+`Proxmox_VE_Tier1` imported and populated with live data, which is the only proof available that
+the `"<displayedAs> (<name>)"` reference form and the `##INSTANCE##` legend are right — both are
+plain strings LogicMonitor does not validate, and either being wrong yields a dashboard that
+imports cleanly and renders nothing. A new dashboard should copy those two conventions rather
+than re-deriving them.
+
+It populated **sixteen of its twenty widgets**, not all twenty as this file claimed until
+2026-09-22; the four missing were `dynamicTable`s dropped at import for the invented values
+above, and a portal export is what revealed it. The lesson is that *a dashboard looking right in
+the portal is not evidence that it imported whole* — count the widgets, or better, export it and
+count them there. `Proxmox_VE_Tier2` has never yet imported whole.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
 `hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
@@ -328,7 +359,7 @@ Replication is the case worth copying when it is not obvious: its wildvalue is t
 
 Conventionally formatted Groovy, four-space indent, single quotes, explicit `return 0` / `return 2`.
 Datapoint names are PascalCase to match LogicMonitor's published suites (`CPUUsagePercent`,
-`DataRateRx`, `UsedPercent`) — camelCase would be flagged in Exchange review.
+`DataRateRxMB`, `UsedPercent`) — camelCase would be flagged in Exchange review.
 
 `HttpURLConnection` is used rather than LogicMonitor's `com.santaba.agent.groovyapi.http.HTTP`. That
 is a deliberate departure from house style: the santaba class is Collector-only, and depending on it
@@ -411,7 +442,7 @@ Other schema details that bite:
   a current reading, which is the wrong thing to graph as a current value anyway.
 - **QEMU guests have no used-disk figure.** `/nodes/{node}/qemu` and qemu `status/current` expose
   `maxdisk` but no `disk`; only LXC reports `disk`. `GuestPerformance` therefore emits
-  `DiskUsedBytes` / `DiskUsagePercent` for LXC only (both `conditional`), leaving VMs at no-data.
+  `DiskUsedGB` / `DiskUsagePercent` for LXC only (both `conditional`), leaving VMs at no-data.
   That is Proxmox behaviour, not a bug to fix — real VM disk usage needs the guest agent.
 - `template: true` marks templates. They are never running, so discovering them creates instances
   that alert as permanently down. Filter them out of guest discovery.

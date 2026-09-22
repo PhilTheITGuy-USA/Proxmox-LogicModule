@@ -73,13 +73,12 @@ def build() -> Dashboard:
     d.table(4, 1, 5, 3, "Nodes by Utilisation", NODES, [
         d.column("CPUUsagePercent", "CPU %", warn=85, error=92),
         d.column("MemoryUsagePercent", "Memory %", warn=85, error=92),
-        d.column("Status", "Up", display_type="number", maximum=1, rounding=0),
+        d.column("Status", "Up", display_type="raw", rounding=0),
     ])
 
     d.table(4, 6, 4, 3, "Storage by Utilisation", STORAGE, [
         d.column("UsedPercent", "Used %", warn=80, error=90),
-        d.column("FreeSpace", "Free Bytes", display_type="number", maximum="NaN",
-                 rounding=0),
+        d.column("FreeGB", "Free GB", display_type="raw", rounding=0),
     ])
 
     # --------------------------------------------------- rows 7-12: node detail
@@ -113,16 +112,16 @@ def build() -> Dashboard:
     ])
 
     d.graph(16, 1, 6, 3, "Guest Network Throughput", [
-        d.series(GUEST_PERF, "DataRateRx", legend="##INSTANCE## rx"),
-        d.series(GUEST_PERF, "DataRateTx", legend="##INSTANCE## tx"),
-    ], "bytes/sec", maximum="NaN",
+        d.series(GUEST_PERF, "DataRateRxMB", legend="##INSTANCE## rx"),
+        d.series(GUEST_PERF, "DataRateTxMB", legend="##INSTANCE## tx"),
+    ], "MB/sec", maximum="NaN",
        description="netin/netout are cumulative counters in Proxmox and are collected "
                    "as derive, so this is a rate rather than a climbing total.")
 
     d.graph(16, 7, 6, 3, "Guest Disk Throughput", [
-        d.series(GUEST_PERF, "DiskReadRate", legend="##INSTANCE## read"),
-        d.series(GUEST_PERF, "DiskWriteRate", legend="##INSTANCE## write"),
-    ], "bytes/sec", maximum="NaN",
+        d.series(GUEST_PERF, "DiskReadRateMB", legend="##INSTANCE## read"),
+        d.series(GUEST_PERF, "DiskWriteRateMB", legend="##INSTANCE## write"),
+    ], "MB/sec", maximum="NaN",
        description="Byte counters only. Proxmox exposes no per-guest IOPS or storage "
                    "latency, so there is no equivalent of the Nutanix latency graphs.")
 
@@ -134,10 +133,8 @@ def build() -> Dashboard:
 
     d.table(19, 7, 6, 3, "Storage Capacity", STORAGE, [
         d.column("UsedPercent", "Used %", warn=80, error=90),
-        d.column("UsedBytes", "Used Bytes", display_type="number", maximum="NaN",
-                 rounding=0),
-        d.column("Capacity", "Capacity Bytes", display_type="number", maximum="NaN",
-                 rounding=0),
+        d.column("UsedGB", "Used GB", display_type="raw", rounding=0),
+        d.column("CapacityGB", "Capacity GB", display_type="raw", rounding=0),
     ])
 
     # ------------------------------------------------- row 22: guest inventory
@@ -145,15 +142,12 @@ def build() -> Dashboard:
     # Power state, lock and HA health are inventory facts rather than trends, so a
     # full-width table reads better than a graph.
     d.table(22, 1, 12, 3, "Guest Status", GUEST_STATUS, [
-        d.column("Status", "Running", display_type="number", maximum=1, rounding=0),
-        d.column("HAManaged", "HA Managed", display_type="number", maximum=1,
-                 rounding=0),
-        d.column("HAError", "HA Error", display_type="number", maximum=1, warn=1,
-                 rounding=0),
-        d.column("Locked", "Locked", display_type="number", maximum=1, rounding=0),
-        d.column("UpTimeSeconds", "Uptime (s)", display_type="number", maximum="NaN",
-                 rounding=0),
-    ], top_x=50,
+        d.column("Status", "Running", display_type="raw", rounding=0),
+        d.column("HAManaged", "HA Managed", display_type="raw", rounding=0),
+        d.column("HAError", "HA Error", display_type="raw", warn=1, rounding=0),
+        d.column("Locked", "Locked", display_type="raw", rounding=0),
+        d.column("UpTimeSeconds", "Uptime (s)", display_type="raw", rounding=0),
+    ], top_x=-1,
        description="Status ships without a threshold: a stopped guest is usually "
                    "stopped on purpose. HAError only fires for guests the cluster "
                    "itself considers broken.")

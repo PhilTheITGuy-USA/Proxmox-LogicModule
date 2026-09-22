@@ -68,6 +68,20 @@ REFERENCE_KEYS: dict[str, set[str]] = {
 THEMES = ("newSolidDarkBlue", "newBorderDarkBlue")
 TIMESCALES = ("8hour", "12hour", "day", "2days", "7days")
 DISPLAY_TYPES = ("line", "area", "stack")
+# A dynamicTable column renders as one of these. "number" is NOT one of them -- this
+# project invented it, and a portal drops the whole widget rather than reporting it.
+COLUMN_DISPLAY_TYPES = ("percent", "raw")
+# topX values the reference exports use. A cgraph takes 10 or 25; a dynamicTable takes
+# 25 or -1, which means every row. Anything else is an invention, and 20 on a cgraph was
+# confirmed in a portal to drop the widget.
+CGRAPH_TOP_X = (10, 25)
+TABLE_TOP_X = (25, -1)
+# Every dynamicTable column in the reference exports carries these bounds, including the
+# "raw" ones whose values run far past 100 (Nutanix graphs IOPs this way). They are read
+# for the percent bar and ignored otherwise, so they are fixed rather than per-column:
+# varying them is one of the things that made a portal refuse to create the widget.
+COLUMN_MIN_VALUE = 0
+COLUMN_MAX_VALUE = 100
 # LogicMonitor severity levels. Only warn and error appear in the reference dashboards'
 # colorThresholds, so only those are offered here rather than assuming critical works.
 LEVEL_WARN = 2
@@ -140,9 +154,15 @@ class Dashboard:
         }
 
     def column(self, datapoint: str, label: str, display_type: str = "percent",
-               minimum=0, maximum=100, warn=None, error=None, unit: str = "",
-               rounding: int = 2) -> dict:
-        """One column of a dynamicTable."""
+               warn=None, error=None, unit: str = "", rounding: int = 2) -> dict:
+        """
+        One column of a dynamicTable, shaped exactly like the reference exports.
+
+        There is deliberately no way to set the bounds: see COLUMN_MIN_VALUE. A column
+        with no thresholds gets an empty list, not null -- null is another value the
+        reference exports never contain, and it travels with every column that a portal
+        refused, so it is not worth keeping just because it reads more naturally.
+        """
         thresholds: list[dict] = []
         if warn is not None:
             thresholds.append({"level": LEVEL_WARN, "threshold": warn, "relation": ">="})
@@ -153,10 +173,10 @@ class Dashboard:
             "rpn": "",
             "dataPointName": datapoint,
             "displayType": display_type,
-            "minValue": minimum,
+            "minValue": COLUMN_MIN_VALUE,
             "unitLabel": unit,
-            "maxValue": maximum,
-            "colorThresholds": thresholds or None,
+            "maxValue": COLUMN_MAX_VALUE,
+            "colorThresholds": thresholds,
             "columnName": label,
             "enableForecast": False,
             "roundingDecimal": rounding,
@@ -413,6 +433,10 @@ def check_dashboard(label: str, dashboard: dict,
                             f"not one the reference exports use")
 
         if kind == "cgraph":
+            if config["graphInfo"]["topX"] not in CGRAPH_TOP_X:
+                problems.append(f"{label}: {name!r} graph topX "
+                                f"{config['graphInfo']['topX']!r} is not one the "
+                                f"reference exports use {CGRAPH_TOP_X}")
             for series in config["graphInfo"]["dataPoints"]:
                 references.append((series["dataSourceFullName"],
                                    series["dataPointName"], name))
@@ -421,9 +445,13 @@ def check_dashboard(label: str, dashboard: dict,
                                     f"{series['display']['type']!r} is not one the "
                                     f"reference exports use")
         elif kind == "dynamicTable":
+            if config["topX"] not in TABLE_TOP_X:
+                problems.append(f"{label}: {name!r} table topX {config['topX']!r} is "
+                                f"not one the reference exports use {TABLE_TOP_X}")
             for column in config["columns"]:
                 references.append((config["dataSourceFullName"],
                                    column["dataPointName"], name))
+                problems.extend(_check_column(label, name, column))
         elif kind == "bigNumber":
             for series in config["bigNumberInfo"]["dataPoints"]:
                 references.append((series["dataSourceFullName"],
@@ -440,6 +468,31 @@ def check_dashboard(label: str, dashboard: dict,
                             f"datapoint {datapoint!r}")
 
     problems.extend(_check_grid(label, dashboard["widgets"]))
+    return problems
+
+
+def _check_column(label: str, widget: str, column: dict) -> list[str]:
+    """
+    A dynamicTable column, against the reference exports field by field.
+
+    This check exists because every one of these was got wrong at once, and a portal
+    reported it only as "Some widgets could not be created due to incompatible version
+    or configuration errors" -- on first load, naming no widget. The dashboard imported,
+    the offending widgets were silently discarded, and the survivors looked perfect.
+    """
+    problems: list[str] = []
+    where = f"{label}: {widget!r} column {column['columnName']!r}"
+    if column["displayType"] not in COLUMN_DISPLAY_TYPES:
+        problems.append(f"{where} has displayType {column['displayType']!r}, which "
+                        f"appears in no reference export {COLUMN_DISPLAY_TYPES}")
+    if not isinstance(column["colorThresholds"], list):
+        problems.append(f"{where} has colorThresholds "
+                        f"{column['colorThresholds']!r}; the reference exports always "
+                        f"carry a list, empty when there are no thresholds")
+    if column["minValue"] != COLUMN_MIN_VALUE or column["maxValue"] != COLUMN_MAX_VALUE:
+        problems.append(f"{where} has bounds {column['minValue']!r}.."
+                        f"{column['maxValue']!r}; every reference column is "
+                        f"{COLUMN_MIN_VALUE}..{COLUMN_MAX_VALUE}")
     return problems
 
 

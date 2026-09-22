@@ -44,6 +44,9 @@ try {
                 def known = !unknownStates.contains(health)
 
                 pveEmit(id, 'SizeBytes', disk.size ?: 0)
+                // SizeBytes stays for anything doing arithmetic; SizeGB is what a
+                // dashboard can print. See pveGB in the preamble.
+                pveEmit(id, 'SizeGB', pveGB(disk.size))
                 pveEmit(id, 'SmartHealthKnown', known ? 1 : 0)
                 pveEmit(id, 'Mounted', disk.mounted ? 1 : 0)
 

@@ -93,25 +93,22 @@ def build() -> Dashboard:
     # ------------------------------------------------------- rows 7-12: OSDs
 
     d.graph(7, 1, 4, 3, "OSD Fill",
-            [d.series(CEPH_OSD, "UsedPercent")], "%", top_x=20,
+            [d.series(CEPH_OSD, "UsedPercent")], "%", top_x=25,
             description="An uneven spread across OSDs points at CRUSH weighting.")
     d.graph(7, 5, 4, 3, "OSD Commit Latency",
-            [d.series(CEPH_OSD, "CommitLatencyMs")], "ms", maximum="NaN", top_x=20)
+            [d.series(CEPH_OSD, "CommitLatencyMs")], "ms", maximum="NaN", top_x=25)
     d.graph(7, 9, 4, 3, "OSD Apply Latency",
-            [d.series(CEPH_OSD, "ApplyLatencyMs")], "ms", maximum="NaN", top_x=20)
+            [d.series(CEPH_OSD, "ApplyLatencyMs")], "ms", maximum="NaN", top_x=25)
 
     d.table(10, 1, 12, 3, "Ceph OSDs", CEPH_OSD, [
-        d.column("Up", "Up", display_type="number", maximum=1, rounding=0),
-        d.column("OSDIn", "In", display_type="number", maximum=1, rounding=0),
+        d.column("Up", "Up", display_type="raw", rounding=0),
+        d.column("OSDIn", "In", display_type="raw", rounding=0),
         d.column("UsedPercent", "Used %", warn=75, error=85),
-        d.column("PlacementGroups", "PGs", display_type="number", maximum="NaN",
-                 rounding=0),
-        d.column("CommitLatencyMs", "Commit ms", display_type="number",
-                 maximum="NaN", rounding=0),
-        d.column("ApplyLatencyMs", "Apply ms", display_type="number",
-                 maximum="NaN", rounding=0),
-        d.column("Reweight", "Reweight", display_type="number", maximum=1),
-    ], top_x=50,
+        d.column("PlacementGroups", "PGs", display_type="raw", rounding=0),
+        d.column("CommitLatencyMs", "Commit ms", display_type="raw", rounding=0),
+        d.column("ApplyLatencyMs", "Apply ms", display_type="raw", rounding=0),
+        d.column("Reweight", "Reweight", display_type="raw"),
+    ], top_x=-1,
        description="Reweight below 1.0 means the OSD has been down-weighted. A large "
                    "PG imbalance across OSDs indicates a CRUSH or weighting problem.")
 
@@ -121,60 +118,48 @@ def build() -> Dashboard:
     # expresses ">=", and for these a low value is the bad one. The module
     # thresholds still alert.
     d.table(13, 1, 6, 3, "Certificates", CERTS, [
-        d.column("Expired", "Expired", display_type="number", maximum=1, warn=1,
-                 rounding=0),
-        d.column("DaysUntilExpiry", "Days Left", display_type="number",
-                 maximum="NaN", rounding=0),
-        d.column("PublicKeyBits", "Key Bits", display_type="number",
-                 maximum="NaN", rounding=0),
+        d.column("Expired", "Expired", display_type="raw", warn=1, rounding=0),
+        d.column("DaysUntilExpiry", "Days Left", display_type="raw", rounding=0),
+        d.column("PublicKeyBits", "Key Bits", display_type="raw", rounding=0),
     ], description="One row per certificate per node: the cluster CA, pve-ssl and "
                    "pveproxy-ssl expire independently.")
 
     d.table(13, 7, 6, 3, "Subscriptions", SUBSCRIPTION, [
-        d.column("Active", "Active", display_type="number", maximum=1, rounding=0),
-        d.column("DaysUntilDue", "Days to Renewal", display_type="number",
-                 maximum="NaN", rounding=0),
-        d.column("Sockets", "Sockets", display_type="number", maximum="NaN",
-                 rounding=0),
+        d.column("Active", "Active", display_type="raw", rounding=0),
+        d.column("DaysUntilDue", "Days to Renewal", display_type="raw", rounding=0),
+        d.column("Sockets", "Sockets", display_type="raw", rounding=0),
     ], description="Days to Renewal is empty on a node with no subscription.")
 
     # ------------------------------------------ rows 16-18: replication and disks
 
     d.table(16, 1, 6, 3, "Replication Jobs", REPLICATION, [
-        d.column("Failed", "Failed", display_type="number", maximum=1, warn=1,
+        d.column("Failed", "Failed", display_type="raw", warn=1, rounding=0),
+        d.column("FailCount", "Fail Count", display_type="raw", warn=1, error=3,
                  rounding=0),
-        d.column("FailCount", "Fail Count", display_type="number", maximum="NaN",
-                 warn=1, error=3, rounding=0),
-        d.column("SecondsSinceLastSync", "Replica Age (s)", display_type="number",
-                 maximum="NaN", rounding=0),
-        d.column("Running", "Running", display_type="number", maximum=1, rounding=0),
-        d.column("Disabled", "Disabled", display_type="number", maximum=1,
+        d.column("SecondsSinceLastSync", "Replica Age (s)", display_type="raw",
                  rounding=0),
+        d.column("Running", "Running", display_type="raw", rounding=0),
+        d.column("Disabled", "Disabled", display_type="raw", rounding=0),
     ], description="Replica Age is empty for a job that has never run.")
 
     d.table(16, 7, 6, 3, "Physical Disks", DISKS, [
-        d.column("SmartHealthOK", "SMART OK", display_type="number", maximum=1,
-                 rounding=0),
-        d.column("SmartHealthKnown", "SMART Known", display_type="number",
-                 maximum=1, rounding=0),
+        d.column("SmartHealthOK", "SMART OK", display_type="raw", rounding=0),
+        d.column("SmartHealthKnown", "SMART Known", display_type="raw", rounding=0),
         d.column("LifeRemainingPercent", "Life Left %"),
-        d.column("Mounted", "Mounted", display_type="number", maximum=1, rounding=0),
-        d.column("SizeBytes", "Size Bytes", display_type="number", maximum="NaN",
-                 rounding=0),
-    ], top_x=50,
+        d.column("Mounted", "Mounted", display_type="raw", rounding=0),
+        d.column("SizeGB", "Size GB", display_type="raw", rounding=0),
+    ], top_x=-1,
        description="SMART OK is empty where SMART Known is 0. Life Left is reported "
                    "only for SSDs that expose a wear attribute.")
 
     # ----------------------------------------------- rows 19-21: node services
 
     d.table(19, 1, 12, 3, "Node Services", SERVICES, [
-        d.column("Failed", "Failed", display_type="number", maximum=1, warn=1,
-                 rounding=0),
-        d.column("Running", "Running", display_type="number", maximum=1, rounding=0),
-        d.column("Enabled", "Enabled", display_type="number", maximum=1, rounding=0),
-        d.column("Installed", "Installed", display_type="number", maximum=1,
-                 rounding=0),
-    ], top_x=100,
+        d.column("Failed", "Failed", display_type="raw", warn=1, rounding=0),
+        d.column("Running", "Running", display_type="raw", rounding=0),
+        d.column("Enabled", "Enabled", display_type="raw", rounding=0),
+        d.column("Installed", "Installed", display_type="raw", rounding=0),
+    ], top_x=-1,
        description="Running ships without a threshold: several Proxmox services are "
                    "legitimately stopped on a node that does not use them. Failed is "
                    "the one that means something broke.")

@@ -2,7 +2,7 @@
  * BatchScript collection: guest performance, cluster-wide, in one API call.
  *
  * netin/netout/diskread/diskwrite are cumulative counters since guest start. They are
- * emitted raw and declared as "derive" datapoints so LogicMonitor computes the rate and
+ * scaled to MB and declared as "derive" datapoints so LogicMonitor computes the rate and
  * discards the negative delta produced when a guest restarts and its counters reset.
  */
 if (pveConfigError) {
@@ -20,11 +20,11 @@ try {
         pveEmit(id, 'CPUUsagePercent', pveRound(((guest.cpu ?: 0) as double) * 100.0d))
         pveEmit(id, 'CPUCount', guest.maxcpu ?: 0)
 
-        pveEmit(id, 'MemoryUsedBytes', guest.mem ?: 0)
-        pveEmit(id, 'MemoryCapacityBytes', guest.maxmem ?: 0)
+        pveEmit(id, 'MemoryUsedMB', pveMB(guest.mem))
+        pveEmit(id, 'MemoryCapacityMB', pveMB(guest.maxmem))
         pveEmit(id, 'MemoryUsagePercent', pvePercent(guest.mem, guest.maxmem))
 
-        pveEmit(id, 'DiskCapacityBytes', guest.maxdisk ?: 0)
+        pveEmit(id, 'DiskCapacityGB', pveGB(guest.maxdisk))
 
         /*
          * memhost is the host's view of the guest's memory footprint; mem is the guest's
@@ -33,13 +33,17 @@ try {
          * so it is withheld rather than reported as a zero-sized gap.
          */
         if (guest.memhost != null) {
-            pveEmit(id, 'MemoryHostBytes', guest.memhost)
+            pveEmit(id, 'MemoryHostMB', pveMB(guest.memhost))
         }
 
-        pveEmit(id, 'DataRateRx', guest.netin ?: 0)
-        pveEmit(id, 'DataRateTx', guest.netout ?: 0)
-        pveEmit(id, 'DiskReadRate', guest.diskread ?: 0)
-        pveEmit(id, 'DiskWriteRate', guest.diskwrite ?: 0)
+        /*
+         * Converted but still cumulative: these stay counters, and scaling a counter is
+         * monotonic, so the derive rate LogicMonitor computes is simply MB per second.
+         */
+        pveEmit(id, 'DataRateRxMB', pveMB(guest.netin))
+        pveEmit(id, 'DataRateTxMB', pveMB(guest.netout))
+        pveEmit(id, 'DiskReadRateMB', pveMB(guest.diskread))
+        pveEmit(id, 'DiskWriteRateMB', pveMB(guest.diskwrite))
 
         /*
          * Only LXC reports used disk. QEMU exposes maxdisk but never disk -- real usage
@@ -48,7 +52,7 @@ try {
          * rather than a confident and wrong zero.
          */
         if (guest.type == 'lxc') {
-            pveEmit(id, 'DiskUsedBytes', guest.disk ?: 0)
+            pveEmit(id, 'DiskUsedGB', pveGB(guest.disk))
             pveEmit(id, 'DiskUsagePercent', pvePercent(guest.disk, guest.maxdisk))
         }
     }

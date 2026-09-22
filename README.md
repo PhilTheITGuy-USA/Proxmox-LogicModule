@@ -179,7 +179,7 @@ These are Proxmox API limits, not implementation shortcuts:
 
 - **No per-guest storage latency or IOPS.** Proxmox exposes byte counters only, so there
   is no equivalent of Nutanix's `citAvgLatencyUsecs` or `vmReadIOPerSecond`.
-- **QEMU reports no used-disk figure.** `DiskUsedBytes` and `DiskUsagePercent` are
+- **QEMU reports no used-disk figure.** `DiskUsedGB` and `DiskUsagePercent` are
   collected for LXC containers only. Real usage inside a VM requires the guest agent, in
   the same way VMware requires VMware Tools. Those datapoints are left as no-data for VMs
   rather than reported as a misleading zero.

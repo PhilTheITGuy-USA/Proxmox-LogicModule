@@ -19,6 +19,10 @@
       "description": "Disk capacity in bytes."
     },
     {
+      "name": "SizeGB",
+      "description": "Disk capacity in GB (decimal, 10^9 bytes), the same figure as SizeBytes in a unit a dashboard table can print. LogicMonitor renders a raw byte count of this magnitude in scientific notation."
+    },
+    {
       "name": "SmartHealthOK",
       "description": "1 when SMART reports the disk as PASSED or OK, 0 when it reports a failure. Emitted only when a verdict exists: a disk whose SMART cannot be read reports no data here rather than a zero, so it cannot alert as though it were failing. Check SmartHealthKnown to tell the two situations apart.",
       "threshold": "< 1 1 1",

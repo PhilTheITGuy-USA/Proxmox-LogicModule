@@ -229,12 +229,12 @@ PascalCase, with metric type chosen deliberately:
 |---|---|---|
 | `CPUUsagePercent` | gauge | `cpu * 100` |
 | `MemoryUsagePercent` | gauge | `mem / maxmem * 100` |
-| `MemoryUsedBytes`, `MemoryCapacityBytes` | gauge | `mem`, `maxmem` |
-| `DataRateRx`, `DataRateTx` | **derive** | `netin`, `netout` |
-| `DiskReadRate`, `DiskWriteRate` | **derive** | `diskread`, `diskwrite` |
+| `MemoryUsedMB`, `MemoryCapacityMB` | gauge | `mem`, `maxmem` |
+| `DataRateRxMB`, `DataRateTxMB` | **derive** | `netin`, `netout` |
+| `DiskReadRateMB`, `DiskWriteRateMB` | **derive** | `diskread`, `diskwrite` |
 | `UpTimeSeconds` | gauge | `uptime` |
 | `Status` | gauge (status) | `running` → 1 |
-| `UsedPercent`, `Capacity`, `FreeSpace` | gauge | storage |
+| `UsedPercent`, `CapacityGB`, `FreeGB` | gauge | storage |
 
 `netin`/`netout`/`diskread`/`diskwrite` are **cumulative counters since guest start**. Configured as
 gauge — as the pre-rebuild module was — they graph as an ever-climbing total instead of throughput,

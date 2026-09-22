@@ -325,7 +325,7 @@ recovered — delete and recreate.
 **Some datapoints permanently No Data.** Often correct rather than broken — the suite withholds a
 value rather than emitting a zero, because a confident wrong number is worse than an absent one:
 
-- `DiskUsedBytes` / `DiskUsagePercent` on QEMU guests. Proxmox reports no used-disk figure for VMs;
+- `DiskUsedGB` / `DiskUsagePercent` on QEMU guests. Proxmox reports no used-disk figure for VMs;
   LXC containers do report one. Real VM usage needs the guest agent.
 - Cluster quorum datapoints on a standalone host.
 - Every Ceph datapoint where Ceph is not configured. `CephAvailable` reads 0.

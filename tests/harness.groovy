@@ -219,10 +219,10 @@ def keysFor = { String prefix ->
     guestCollect.stdout.readLines().findAll { it.startsWith(prefix + '.') }
         .collect { it.substring(prefix.length() + 1).split('=')[0] } as Set
 }
-note('qemu-disk', !keysFor('qemu-101').contains('DiskUsedBytes'),
-     'DiskUsedBytes was emitted for a QEMU guest, which reports no used-disk figure')
-note('lxc-disk', keysFor('lxc-200').contains('DiskUsedBytes'),
-     'DiskUsedBytes was not emitted for an LXC guest, which does report one')
+note('qemu-disk', !keysFor('qemu-101').contains('DiskUsedGB'),
+     'DiskUsedGB was emitted for a QEMU guest, which reports no used-disk figure')
+note('lxc-disk', keysFor('lxc-200').contains('DiskUsedGB'),
+     'DiskUsedGB was not emitted for an LXC guest, which does report one')
 
 // An unreachable API must fail loudly rather than report zeroes, so that LogicMonitor
 // keeps existing instances instead of tearing them down during an outage.

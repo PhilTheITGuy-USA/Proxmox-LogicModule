@@ -16,9 +16,9 @@ try {
 
         // "available" is the status Proxmox reports for a storage it can actually reach.
         pveEmit(id, 'Status', store.status?.toString() == 'available' ? 1 : 0)
-        pveEmit(id, 'UsedBytes', used)
-        pveEmit(id, 'Capacity', total)
-        pveEmit(id, 'FreeSpace', total > used ? total - used : 0)
+        pveEmit(id, 'UsedGB', pveGB(used))
+        pveEmit(id, 'CapacityGB', pveGB(total))
+        pveEmit(id, 'FreeGB', pveGB(total > used ? total - used : 0))
         pveEmit(id, 'UsedPercent', pvePercent(used, total))
         pveEmit(id, 'Shared', store.shared ? 1 : 0)
     }

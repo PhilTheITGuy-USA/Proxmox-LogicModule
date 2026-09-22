@@ -153,6 +153,20 @@ def pveRound = { double value ->
     Math.round(value * 100.0d) / 100.0d
 }
 
+/*
+ * Bytes are what the API reports and what a datapoint should hold for arithmetic, but
+ * they are not what a dashboard can print: LogicMonitor renders 500107862016 as 5.001E11.
+ * Capacity figures are therefore emitted in GB and rates in MB, decimal in both cases
+ * (10^9 / 10^6) to match how drive and link capacities are labelled.
+ */
+def pveGB = { value ->
+    pveRound(((value ?: 0) as double) / 1000000000.0d)
+}
+
+def pveMB = { value ->
+    pveRound(((value ?: 0) as double) / 1000000.0d)
+}
+
 def pvePercent = { used, total ->
     def totalValue = (total ?: 0) as double
     totalValue > 0 ? pveRound(((used ?: 0) as double) * 100.0d / totalValue) : 0

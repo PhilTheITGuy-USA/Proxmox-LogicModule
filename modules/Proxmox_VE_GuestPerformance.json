@@ -5,7 +5,7 @@
   "group": "Proxmox VE",
   "appliesTo": "hasCategory(\"ProxmoxVE\")",
   "searchKeywords": "proxmox,pve,vm,qemu,lxc,container,guest,virtualization,performance",
-  "technicalNotes": "BatchScript: one /cluster/resources?type=vm call per interval, whether the cluster has 10 guests or 5000.\n\nInstance IDs are the Proxmox resource id (qemu/<vmid>, lxc/<vmid>), which is cluster-unique and unchanged by live migration or HA failover, so instances and their history survive a guest moving between nodes.\n\nDataRateRx, DataRateTx, DiskReadRate and DiskWriteRate are declared as derive because Proxmox reports these as counters accumulated since guest start; a minimum of 0 discards the negative delta produced when a guest restarts.\n\nDiskUsedBytes and DiskUsagePercent are reported for LXC containers only. QEMU exposes no used-disk figure -- real usage inside a VM requires the guest agent, exactly as VMware requires VMware Tools -- so those datapoints are deliberately left as no-data for VMs rather than reported as zero.\n\nTemplates are excluded from discovery: they are never running and would otherwise appear as permanently down instances.",
+  "technicalNotes": "BatchScript: one /cluster/resources?type=vm call per interval, whether the cluster has 10 guests or 5000.\n\nInstance IDs are the Proxmox resource id (qemu/<vmid>, lxc/<vmid>), which is cluster-unique and unchanged by live migration or HA failover, so instances and their history survive a guest moving between nodes.\n\nDataRateRxMB, DataRateTxMB, DiskReadRateMB and DiskWriteRateMB are declared as derive because Proxmox reports these as counters accumulated since guest start; a minimum of 0 discards the negative delta produced when a guest restarts. The counters are scaled to MB before emission, which is monotonic and so leaves the derive rate correct.\n\nDiskUsedGB and DiskUsagePercent are reported for LXC containers only. QEMU exposes no used-disk figure -- real usage inside a VM requires the guest agent, exactly as VMware requires VMware Tools -- so those datapoints are deliberately left as no-data for VMs rather than reported as zero.\n\nTemplates are excluded from discovery: they are never running and would otherwise appear as permanently down instances.",
   "collectionMethod": "batchscript",
   "collectionInterval": "5m",
   "multiInstance": true,
@@ -25,12 +25,12 @@
       "description": "vCPUs allocated to the guest."
     },
     {
-      "name": "MemoryUsedBytes",
-      "description": "Memory in use, bytes."
+      "name": "MemoryUsedMB",
+      "description": "Memory in use, MB (decimal, 10^6 bytes)."
     },
     {
-      "name": "MemoryCapacityBytes",
-      "description": "Memory allocated to the guest, bytes."
+      "name": "MemoryCapacityMB",
+      "description": "Memory allocated to the guest, MB (decimal, 10^6 bytes)."
     },
     {
       "name": "MemoryUsagePercent",
@@ -39,12 +39,12 @@
       "triggerInterval": 5
     },
     {
-      "name": "DiskCapacityBytes",
-      "description": "Root disk size, bytes."
+      "name": "DiskCapacityGB",
+      "description": "Root disk size, GB (decimal, 10^9 bytes)."
     },
     {
-      "name": "DiskUsedBytes",
-      "description": "Root disk used, bytes. LXC containers only; QEMU reports no used-disk figure.",
+      "name": "DiskUsedGB",
+      "description": "Root disk used, GB (decimal, 10^9 bytes). LXC containers only; QEMU reports no used-disk figure.",
       "conditional": true
     },
     {
@@ -54,32 +54,32 @@
       "conditional": true
     },
     {
-      "name": "DataRateRx",
-      "description": "Network bytes received per second.",
+      "name": "DataRateRxMB",
+      "description": "Network MB received per second (decimal, 10^6 bytes).",
       "type": "derive",
       "min": "0"
     },
     {
-      "name": "DataRateTx",
-      "description": "Network bytes sent per second.",
+      "name": "DataRateTxMB",
+      "description": "Network MB sent per second (decimal, 10^6 bytes).",
       "type": "derive",
       "min": "0"
     },
     {
-      "name": "DiskReadRate",
-      "description": "Bytes read from block devices per second.",
+      "name": "DiskReadRateMB",
+      "description": "MB read from block devices per second (decimal, 10^6 bytes).",
       "type": "derive",
       "min": "0"
     },
     {
-      "name": "DiskWriteRate",
-      "description": "Bytes written to block devices per second.",
+      "name": "DiskWriteRateMB",
+      "description": "MB written to block devices per second (decimal, 10^6 bytes).",
       "type": "derive",
       "min": "0"
     },
     {
-      "name": "MemoryHostBytes",
-      "description": "The host's view of the guest's memory footprint, bytes. The gap between this and MemoryUsedBytes is the balloon at work. Not reported by older Proxmox.",
+      "name": "MemoryHostMB",
+      "description": "The host's view of the guest's memory footprint, MB (decimal, 10^6 bytes). The gap between this and MemoryUsedMB is the balloon at work. Not reported by older Proxmox.",
       "conditional": true
     }
   ]
