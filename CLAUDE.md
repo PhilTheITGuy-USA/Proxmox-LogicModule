@@ -134,7 +134,9 @@ references use `0..100` on *every* column, including `raw` ones like Nutanix's `
 run far past 100, so the bounds are read for the percent bar and ignored otherwise. `COLUMN_*`,
 `CGRAPH_TOP_X` and `TABLE_TOP_X` in `build/dashboards.py` now pin all of it and `_check_column`
 enforces it, mutation-tested one field at a time. The `column()` helper no longer accepts bounds
-at all, which is the only way to keep them from drifting back.
+at all, which is the only way to keep them from drifting back. A dashboard `description` is
+capped at **256 characters** — the portal truncates past it and says nothing — so
+`check_dashboard` measures it; Tier 2's was 266 and lost its last sentence.
 
 **Do not migrate the tables to the portal's newer `table` widget.** A current portal builds tables
 as `type: "table"` with `displaySettings.columnsV4` and serialises its rows as resolved integers —

@@ -87,6 +87,9 @@ COLUMN_MAX_VALUE = 100
 LEVEL_WARN = 2
 LEVEL_ERROR = 3
 
+# The portal truncates a dashboard description past this, and says nothing about it.
+DESCRIPTION_MAX_CHARS = 256
+
 DEFAULT_THEME = THEMES[0]
 GROUP_TOKEN = "##defaultResourceGroup##"
 INSTANCE_LEGEND = "##INSTANCE##"
@@ -410,6 +413,11 @@ def check_dashboard(label: str, dashboard: dict,
     """
     problems: list[str] = []
     references: list[tuple[str, str, str]] = []
+
+    description = dashboard.get("description", "")
+    if len(description) > DESCRIPTION_MAX_CHARS:
+        problems.append(f"{label}: description is {len(description)} characters; the "
+                        f"portal truncates past {DESCRIPTION_MAX_CHARS} without saying so")
 
     for widget in dashboard["widgets"]:
         config = widget["config"]

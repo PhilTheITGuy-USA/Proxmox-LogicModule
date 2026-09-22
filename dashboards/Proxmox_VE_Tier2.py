@@ -44,8 +44,7 @@ def build() -> Dashboard:
         description=(
             "Infrastructure metrics for Proxmox VE: Ceph cluster and per-OSD health, "
             "backup coverage, certificate and subscription expiry, replication jobs, "
-            "physical disk SMART and wear, and node service state. Covers the eight "
-            "Tier 2 modules of the Proxmox VE LogicModule suite."
+            "physical disk SMART and wear, and node service state."
         ),
         group="Proxmox VE",
         # "*" matches whatever resource carries the API token. Scope it to a resource
