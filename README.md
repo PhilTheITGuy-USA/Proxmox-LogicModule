@@ -39,11 +39,13 @@ independently, so there is no dependable cross-DataSource response cache. Combin
 DataSource could reduce the count further, but would couple unrelated alerting and collection
 intervals. This is the practical low-load boundary while preserving separate modules.
 
-**Nothing in the suite scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are
-also fixed-cost. Node Detail, Node Services, Replication, Certificates, Disks and Subscription make
-one call per *online* node, because that data is only available from the node that owns it — and
-the expensive ones sit on long intervals for exactly that reason (Certificates and Disks at 240m,
-Subscription at 720m). Node counts are small and grow slowly; guest counts are neither.
+**No DataSource scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are also
+fixed-cost. Node Services, Replication, Certificates, Disks and Subscription make one call per
+*online* node, and Node Detail one per node, because that data is only available from the node
+that owns it — and the expensive ones sit on long intervals for exactly that reason (Certificates
+and Disks at 240m, Subscription at 720m). Node counts are small and grow slowly; guest counts are
+neither. The one per-guest cost in the suite is the optional TopologySource, which reads each
+guest's config for its MAC address once an hour.
 
 ## Dashboards
 
@@ -145,6 +147,10 @@ These are Proxmox API limits, not implementation shortcuts:
   zero.
 - **No node hardware identifier.** Nothing in the API returns a node's MAC or UUID, which is why
   the topology map needs `addERI_Proxmox_VE` to give a node's resource a key it can match on.
+- **A guest reaches the topology map only through its own resource.** The map draws a guest only
+  when that guest is monitored as its own LogicMonitor resource *and* that resource's
+  `predef.externalResourceID` carries the guest's MAC — which LogicMonitor fills in from SNMP. An
+  unmonitored guest, or a monitored one that does not answer SNMP, is left off the map.
 - **Templates are excluded from discovery.** They are never running and would otherwise appear as
   permanently down instances.
 

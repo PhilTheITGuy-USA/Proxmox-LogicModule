@@ -31,8 +31,8 @@ enforced here:
 cluster with `type`, `id`, `node`, `vmid`, `storage`, `name`, `status`, `cpu`, `maxcpu`, `mem`,
 `maxmem`, `memhost`, `disk`, `maxdisk`, `netin`, `netout`, `diskread`, `diskwrite`, `uptime`,
 `template`, `tags`, `pool`, `lock`, `level`, `shared`, `plugintype` and `hastate`. It works
-identically on a standalone host. `memhost`, `level` and storage `enabled` are returned today and
-not yet emitted — see Tier 1a in §4.
+identically on a standalone host. `memhost` and `level` were returned and discarded until Tier 1a
+in §4 put them to use; storage `enabled`, once thought to be here, is not (see §4).
 
 So Nodes, Guest Performance, Guest Status and Storage Capacity are all served by **one** call per
 interval, as BatchScripts. On a 500-guest cluster that is 1 request per interval instead of ~1000.
@@ -65,7 +65,7 @@ needs `Sys.Audit` on `/`, and takes `local-only`, `node-list`, `start-time` and 
 
 ## 3. Instance IDs: use Proxmox's own `id`
 
-**The current `qemu__<node>__<vmid>` scheme is broken for clusters.** It embeds the node, so the
+**The original `qemu__<node>__<vmid>` scheme was broken for clusters.** It embeds the node, so the
 moment a guest migrates — vMotion equivalent, HA failover, or a manual move — the wildvalue changes.
 LogicMonitor deletes the old instance and discovers a new one: alert history gone, SDTs gone,
 thresholds gone, and a spurious "instance deleted" churn on every migration. In an HA cluster that
@@ -118,7 +118,7 @@ NodeDetail is already O(nodes) and that is fine.
 
 | Module | Display name | Source | Cost | Notes |
 |---|---|---|---|---|
-| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` | O(1) | Single-instance. Quorum, expected vs actual votes, node count, HA manager state. Auto-disables on standalone. |
+| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` + `/cluster/resources` | O(1) | Single-instance. Quorum, expected vs actual votes, node count, HA manager state, and the Tier 1a allocation rollups. On a standalone host `ClusterConfigured` reads 0 and the quorum datapoints are withheld. |
 | `Proxmox_VE_Nodes` | Proxmox VE Nodes | `/cluster/resources?type=node` | O(1) | BatchScript. CPU, memory, uptime, online state. |
 | `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | O(nodes) | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. |
 | `Proxmox_VE_GuestPerformance` | Proxmox VE Guest Performance | `/cluster/resources?type=vm` | O(1) | BatchScript. CPU, memory, network rates, disk IO rates. QEMU + LXC. |
@@ -127,9 +127,9 @@ NodeDetail is already O(nodes) and that is fine.
 
 ### Tier 1a — fields already fetched and thrown away
 
-Not new modules. These are omissions inside the six above: the responses are already being parsed
-and these fields discarded. No new endpoint, no new call, no interval change. Each is a `pveEmit`
-line plus a datapoint declaration.
+Not new modules. These were omissions inside the six above: the responses were already being
+parsed and these fields discarded. No new endpoint, no new call, no interval change. Each is a
+`pveEmit` line plus a datapoint declaration. **All built, and verified live on 2026-09-10** (§7).
 
 | What | Field | Belongs in | Why it matters |
 |---|---|---|---|
@@ -204,8 +204,9 @@ populated on the target version before designing around it.
 
 - **`addCategory_Proxmox_VE` (PropertySource)** — probes the API and sets `system.categories` to
   include `ProxmoxVE`. Every module then uses `AppliesTo: hasCategory("ProxmoxVE")`.
-  **This is required for Exchange.** The current design makes the user hand-set `pve.monitor=true`
-  on every resource, which no published module does.
+  **This is required for Exchange.** It replaced the pre-rebuild design, which made the user
+  hand-set `pve.monitor=true` on every resource, as no published module does. It ships as an
+  importable module like the rest.
 - **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22,
   verified in a portal 2026-09-23 (§7). Cluster → node → guest edges, so Proxmox appears in topology
   maps the way vSphere does, and a node's alerts can explain its guests'. A guest matches its own
@@ -340,7 +341,7 @@ module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend 
 use — a departure made because this suite puts every node, guest and storage object on a single
 resource as instances, where those suites give each hypervisor its own resource. Either being
 wrong would have produced a dashboard that imported cleanly and rendered empty tiles, which is
-the same shape of defect as the `##WILDVALUE##` post-processor bug above and equally invisible to
+the same shape of defect as the `##WILDVALUE##` post-processor bug below and equally invisible to
 every local check. All twenty widgets carry real data, so both conventions hold. The Tier 2
 dashboard (`dashboards/Proxmox_VE_Tier2.py`) is built on them.
 
