@@ -291,7 +291,7 @@ Discovery then populates instances, and collection starts on each module's own i
 | Guest Status | 3m | one per guest, templates excluded | there are no guests |
 | Cluster | 5m | single instance | — |
 | Nodes | 5m | one per node, offline ones included | — |
-| Node Detail | 5m | one per node | — |
+| Node Detail | 5m | one per online node | — |
 | Guest Performance | 5m | one per guest, templates excluded | there are no guests |
 | Node Services | 5m | one per systemd unit per online node | — |
 | Ceph | 5m | single instance | — (reports `CephAvailable=0` without Ceph) |
@@ -303,8 +303,8 @@ Discovery then populates instances, and collection starts on each module's own i
 | Disks | 240m | one per physical disk per online node | — |
 | Subscription | 720m | one per online node | — |
 
-Modules that reach into a node's own API — Node Services, Certificates, Disks, Subscription,
-Replication — discover **online** nodes only. An offline node cannot answer, and an instance that
+Modules that reach into a node's own API — Node Detail, Node Services, Certificates, Disks,
+Subscription, Replication — discover **online** nodes only. An offline node cannot answer, and an instance that
 can never collect is worse than none. Instances discovered earlier survive a node going offline.
 
 ---

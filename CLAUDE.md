@@ -51,8 +51,8 @@ dist/                            GENERATED, gitignored — never edit, never com
 
 **Discovery scripts are shared; collection scripts are not.** Nine AD bodies back eleven
 multiInstance modules. `Proxmox_VE_Guests.ad.groovy` backs both GuestPerformance and GuestStatus;
-`Proxmox_VE_Nodes.ad.groovy` backs both Nodes and NodeDetail. The build emits a *copy* per consuming
-module as `dist/scripts/<Module>.ad.groovy`, so those modules discover identical instance sets and a
+`Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription. The build emits a *copy*
+per consuming module as `dist/scripts/<Module>.ad.groovy`, so those modules discover identical instance sets and a
 single guest carries both a performance and a status instance. Editing a shared AD body changes
 every module naming it in `discoveryScript`.
 
@@ -62,9 +62,8 @@ an instance to alert on. `Proxmox_VE_OnlineNodes.ad.groovy` filters to `status =
 exists for modules that reach into a node's own API: an offline node cannot answer, and an instance
 that can never collect is worse than no instance. A module reading node rows out of
 `/cluster/resources` wants Nodes; a module calling `/nodes/{node}/...` wants OnlineNodes.
-`Proxmox_VE_NodeDetail` is the one exception: it calls `/nodes/{node}/status` yet discovers through
-Nodes, so a node that is offline at discovery time gets an instance whose collection exits 2
-until the node returns. It predates OnlineNodes; do not copy it.
+NodeDetail discovered through Nodes until 2026-09-23 and was moved; both bodies emit the same
+wildvalue, the node's Proxmox `id`, which is what made the move safe for existing instances.
 
 Fourteen DataSources, two PropertySources and one TopologySource. `python build/build.py
 --check` prints the count, and
@@ -75,7 +74,7 @@ is the fastest way to confirm this table has not drifted.
 | `Proxmox_VE_Cluster` | script | 5m | — (single instance) | 3, O(1) |
 | `Proxmox_VE_Ceph` | script | 5m | — (single instance) | 1, O(1) |
 | `Proxmox_VE_BackupCoverage` | script | 60m | — (single instance) | 1, O(1) |
-| `Proxmox_VE_NodeDetail` | script, per instance | 5m | `Nodes.ad` | 1 per node |
+| `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |
 | `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` | 1, O(1) |
 | `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` | 1, O(1) |
 | `Proxmox_VE_GuestStatus` | batchscript | 3m | `Guests.ad` | 1, O(1) |
