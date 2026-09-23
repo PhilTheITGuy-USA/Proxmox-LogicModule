@@ -112,6 +112,18 @@ def scriptsDir = new File(ROOT, 'dist/scripts')
 modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.name }.each { defFile ->
     def defn = new JsonSlurper().parse(defFile)
     String name = defn.name
+
+    /*
+     * A TopologySource has no datapoints and prints edges rather than metrics, and its
+     * script is the one in the suite that cannot run here at all -- it works through
+     * Collector-only snippet classes, which is why build.py emits it outside
+     * dist/scripts/. Its Proxmox-side logic lives in the preamble helpers instead, and
+     * those are asserted further down like anything else.
+     */
+    if (defn.moduleType in ['topologysource', 'propertysource']) {
+        return
+    }
+
     def declared = defn.datapoints.collectEntries { [(it.name): it.conditional as boolean] }
     def required = declared.findAll { key, conditional -> !conditional }.keySet()
 
@@ -266,6 +278,104 @@ note('propertysource', notProxmox.exit == 0,
      "exit was ${notProxmox.exit} on a non-Proxmox host, expected 0")
 note('propertysource', notProxmox.stdout.trim().isEmpty(),
      "set properties on a host with no Proxmox credentials: ${notProxmox.stdout}")
+
+// --------------------------------------------------------------- topology
+//
+// Proxmox_VE_Topology itself cannot run here. It works through Collector-only snippet
+// classes, which is the whole reason build.py emits it outside dist/scripts/. What can
+// be tested is the half that is ours: the two preamble helpers that decide a vertex's
+// identity. Get either wrong and the map draws vertices that resolve to nothing, which
+// looks exactly like a working topology until you click one.
+
+def runSource = { String source, Map bindings ->
+    def outBuffer = new ByteArrayOutputStream()
+    def errBuffer = new ByteArrayOutputStream()
+    def realOut = System.out
+    def realErr = System.err
+    def result = null
+    Throwable thrown = null
+    try {
+        System.setOut(new PrintStream(outBuffer, true, 'UTF-8'))
+        System.setErr(new PrintStream(errBuffer, true, 'UTF-8'))
+        result = new GroovyShell(new Binding(bindings)).evaluate(source)
+    } catch (Throwable t) {
+        thrown = t
+    } finally {
+        System.setOut(realOut)
+        System.setErr(realErr)
+    }
+    [exit: result, stdout: new String(outBuffer.toByteArray(), 'UTF-8'),
+     stderr: new String(errBuffer.toByteArray(), 'UTF-8'), thrown: thrown]
+}
+
+def preamble = new File(ROOT, 'scripts/lib/pve_common.groovy').text
+def helpers = runSource(preamble + """
+return [
+    cluster : pveTopoKey('pve-cluster', null),
+    node    : pveTopoKey('PVE Cluster', 'pve1.example.com'),
+    qemu    : pveGuestMac(['net0': 'virtio=BC:24:11:F8:1E:58,bridge=vmbr0,firewall=1']),
+    lxc     : pveGuestMac(['net0': 'name=eth0,bridge=vmbr0,hwaddr=BC:24:11:0A:1B:2C,type=veth']),
+    ordered : pveGuestMac(['net1': 'virtio=AA:BB:CC:DD:EE:02', 'net0': 'virtio=AA:BB:CC:DD:EE:01']),
+    noNic   : pveGuestMac(['name': 'nothing-here', 'cores': 2]),
+    nothing : pveGuestMac(null),
+]
+""", [hostProps: hostProps])
+
+note('topo-helpers', helpers.thrown == null, "preamble helpers threw ${helpers.thrown}")
+def helper = helpers.exit ?: [:]
+
+note('topo-helpers', helper.cluster == 'proxmoxve--pve-cluster',
+     "cluster vertex key was ${helper.cluster}")
+// Folded to the ERI-safe alphabet: a node is routinely an FQDN and a cluster name can
+// carry spaces, and neither may reach a key that addERI_Proxmox_VE has to reproduce.
+note('topo-helpers', helper.node == 'proxmoxve--pve-cluster--pve1-example-com',
+     "node vertex key was ${helper.node}")
+
+// QEMU writes the MAC after the model, LXC after hwaddr. Both must yield the same
+// lowercase form LogicMonitor keys a resource's ERI on.
+note('topo-helpers', helper.qemu == 'bc:24:11:f8:1e:58',
+     "QEMU guest MAC was ${helper.qemu}")
+note('topo-helpers', helper.lxc == 'bc:24:11:0a:1b:2c',
+     "LXC guest MAC was ${helper.lxc}")
+// net0 wins over net1 whatever order the map iterates in; a guest that changed which
+// adapter it was identified by would change identity and move on the map.
+note('topo-helpers', helper.ordered == 'aa:bb:cc:dd:ee:01',
+     "did not take the lowest-numbered adapter: ${helper.ordered}")
+// No NIC is a permanent fact and must read as absent, not as a wrong MAC.
+note('topo-helpers', helper.noNic == null,
+     "invented a MAC for a guest with no adapter: ${helper.noNic}")
+note('topo-helpers', helper.nothing == null,
+     "invented a MAC from a null config: ${helper.nothing}")
+
+// The ERI PropertySource is the other half of the node vertex, and it cannot run here
+// either: LogicMonitor's own addERI_* modules build the ERI output through lm.topo's
+// emitEri and printEriArray rather than printing JSON, so this script imports the same
+// Collector-only classes the TopologySource does.
+//
+// What is left to assert is structural, and it is the thing that actually breaks. Both
+// halves must derive the node key from pveTopoKey. If either ever inlines its own
+// version, they can drift apart and every node vertex stops matching its resource --
+// with nothing failing anywhere, because each half is individually correct.
+def eriScript = new File(ROOT, 'scripts/addERI_Proxmox_VE.groovy').text
+def topoScript = new File(ROOT, 'scripts/Proxmox_VE_Topology.topo.groovy').text
+
+note('addERI', eriScript.contains('pveTopoKey('),
+     'the ERI PropertySource builds its node key without pveTopoKey')
+note('addERI', topoScript.contains('pveTopoKey('),
+     'the TopologySource builds its node key without pveTopoKey')
+note('addERI', !eriScript.contains('rawERIs'),
+     'the ERI PropertySource hand-writes the rawERIs JSON instead of using emitEri')
+note('addERI', eriScript.contains('lmtopo.emitEri(') &&
+               eriScript.contains('lmtopo.printEriArray('),
+     'the ERI PropertySource does not use the documented emitEri/printEriArray pair')
+
+// Silence is the contract addCategory_Proxmox_VE also keeps: most resources in a portal
+// are not Proxmox, and a PropertySource that prints on one it does not understand
+// corrupts that resource's properties. Asserted by reading the guard, since the script
+// cannot be executed here.
+note('addERI', eriScript.contains('if (pveConfigError) {') &&
+               eriScript.contains('return 0'),
+     'the ERI PropertySource does not return silently when unconfigured')
 
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),

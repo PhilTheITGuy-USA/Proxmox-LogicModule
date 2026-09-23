@@ -1,0 +1,10 @@
+{
+  "name": "addCategory_Proxmox_VE",
+  "moduleType": "propertysource",
+  "description": "Detects Proxmox VE through its API and sets the ProxmoxVE category that every module in the suite applies to.",
+  "group": "Proxmox VE",
+  "appliesTo": "true()",
+  "searchKeywords": "proxmox,pve,category,discovery,groovy4",
+  "collectScript": "addCategory_Proxmox_VE.groovy",
+  "technicalNotes": "The hinge of the whole suite. Every module's AppliesTo is hasCategory(\"ProxmoxVE\") and this is what sets it, by calling /version with the configured token.\n\nIt stays completely silent -- exit 0, no output -- on any host that is not Proxmox or has no token, which is why it can safely apply to every resource. Break that silence and the suite starts applying itself to unrelated Linux hosts. It is also why the token property, not this module's AppliesTo, is the switch that decides which resources the suite monitors: see docs/INSTALL.md section 4.1.\n\nOn a Proxmox host it sets system.categories, pve.version, pve.release where present, and pve.clustered. That last exists so a cluster-only module can target standalone-versus-cluster in its AppliesTo without a second probe.\n\nUnlike addERI_Proxmox_VE this is a plain PropertySource: no propertySourceType and no collectionInterval, matching a published addCategory_* export. It uses no Collector-only classes, so it compiles and runs in the test harness like the DataSources."
+}

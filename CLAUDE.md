@@ -29,6 +29,8 @@ interval is precisely what §2 was written to avoid.
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
 scripts/<Subject>.ad.groovy      Active Discovery bodies, named per subject and often shared
 scripts/<Module>.collect.groovy  collection bodies, one per module
+scripts/<Module>.topo.groovy     TopologySource body; Collector-only, see below
+scripts/addCategory_*.groovy     PropertySource bodies, likewise one per module
 modules/<Module>.json            build-time module definition: metadata + datapoint declarations
 build/build.py                   assembles preamble + body into importable module JSON,
                                  and renders dashboards/*.py into dist/dashboards/
@@ -36,9 +38,9 @@ build/groovylint.py              bracket-balance check over the assembled script
 build/dashboards.py              dashboard widget builders + schema/reference validation
 tests/harness.groovy             runs the assembled scripts against a mock Proxmox API
 tests/fixtures/pve_api.json      recorded API responses, keyed by path + query string
-docs/DESIGN.md                   parity analysis, design rationale, the backlog
+docs/DESIGN.md                   design rationale, the backlog, and §7: the ONLY record
+                                 of what is verified and what is not
 docs/INSTALL.md                  Proxmox user/token/permissions, module import, which hosts
-docs/VALIDATION.md               what is unverified and how someone with a cluster checks it
 dashboards/<Name>.py             dashboard definitions, one per dashboard — see below
 dist/                            GENERATED, gitignored — never edit, never commit
 ```
@@ -61,7 +63,8 @@ exists for modules that reach into a node's own API: an offline node cannot answ
 that can never collect is worse than no instance. A module reading node rows out of
 `/cluster/resources` wants Nodes; a module calling `/nodes/{node}/...` wants OnlineNodes.
 
-Fourteen DataSources and one PropertySource. `python build/build.py --check` prints the count, and
+Fourteen DataSources, two PropertySources and one TopologySource. `python build/build.py
+--check` prints the count, and
 is the fastest way to confirm this table has not drifted.
 
 | Module | Method | Interval | Discovery | Calls per interval |
@@ -179,12 +182,17 @@ count them there. `Proxmox_VE_Tier2` reached 15 of 15 on 2026-09-22, once the mo
 on was re-imported first.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE.groovy` is what sets that category, by calling
+`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE` is what sets that category, by calling
 `/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
-has no token. It is the one script with no module definition (`STANDALONE_SCRIPTS` in `build.py`),
-because the PropertySource export schema could not be verified against a published sample, so it
-ships as an assembled script to paste into the UI. Break its silence and the whole suite starts
-applying itself to unrelated Linux hosts.
+has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that
+is safe *only* because of the silence. Break it and the whole suite starts applying itself to
+unrelated Linux hosts.
+
+It used to ship as a script to paste into the UI, because no published sample was available to
+verify the PropertySource export schema against. Two exports settled that on 2026-09-22: `type` 5
+for every PropertySource, with `script` as `{type, content}`, and an **ERI** one additionally
+carrying `propertySourceType: 1` and a `collectionInterval` that a plain one omits entirely. Both
+kinds are now ordinary importable modules.
 
 On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
 (when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
@@ -369,6 +377,17 @@ is a deliberate departure from house style: the santaba class is Collector-only,
 would make every script impossible to compile or run outside a Collector, costing us the compile
 check and the whole test harness. See `docs/DESIGN.md` §6.
 
+**Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and
+`addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets`, because LogicMonitor's own topology and
+ERI modules produce their output through the `lm.topo` snippet — `eriPreProcessor`, `isMac`,
+`emitEri`, `printEriArray`, `generateTopology` — and those formats are not documented well enough
+to reimplement. Hand-writing them would mean inventing a format, which is the failure this suite
+has actually suffered. `build.py` emits both to `dist/scripts/collector-only/`, a directory the
+compile job's `dist/scripts/*.groovy` glob does not reach, and the harness skips modules whose
+`moduleType` is `topologysource` or `propertysource`. Their Proxmox-side logic lives in preamble
+helpers — `pveTopoKey`, `pveGuestMac` — precisely so the harness can still reach it. Do not add a
+third without the same treatment, and do not move these two back.
+
 The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and default-off.
 
 Every body opens with the same guard, because the preamble reports missing configuration through
@@ -384,9 +403,12 @@ the `datapoints` array in `modules/<Module>.json`, and the coverage table in `RE
 enforces the first two agreeing; nothing enforces the third.
 
 **Adding a module drifts more than that table.** Module counts are written out in prose in
-`README.md`, `docs/INSTALL.md` (twice), `docs/DESIGN.md` §4 and §7, and the opening of
-`docs/VALIDATION.md`. Nothing checks any of them. Grep the docs for the previous count before
-claiming a module is done.
+`README.md`, `docs/INSTALL.md` and `docs/DESIGN.md` §4 and §7. Nothing checks any of them. Grep
+the docs for the previous count before claiming a module is done.
+
+**Verification status belongs in exactly one place: `docs/DESIGN.md` §7.** It used to be restated
+in README, INSTALL and a whole `docs/VALIDATION.md`, which is how "Tier 1 imports all twenty
+widgets" stayed written down for a week after it stopped being true. Record it in §7 and link.
 
 **The drift check is a regex, not an interpreter.** `build.py` finds emitted names with
 `pveEmit(<anything>, '<Literal>'`. A datapoint name held in a variable or built by concatenation is
@@ -402,11 +424,10 @@ matching the reference exports.
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
 the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and an entry in `docs/VALIDATION.md` saying what to
-compare it against. **No module is in that state today**: the last four — Ceph, CephOSD,
-Replication and Subscription — were verified against a three-node cluster with Ceph on 2026-09-22,
-and Disks the same day. A green harness on a hand-written fixture proves the parsing, not the
-shape, so a new module still needs the note until someone runs it.
+its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. Two modules are in
+that state today — `Proxmox_VE_Topology` and `addERI_Proxmox_VE`, neither yet imported. A green
+harness on a hand-written fixture proves the parsing, not the shape, so a new module keeps the
+note until someone runs it.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
@@ -475,5 +496,5 @@ raw `URL.openConnection()`. Reference examples live in `logicmonitor/monitoring-
 **Modules are distributed as JSON**, exported and imported through **My Module Toolbox** as a single
 `.json`. `build/build.py` emits that format into `dist/`; the field names were taken from real
 exported modules, not guessed. The import API, REST API v3 / LMv1 signing, and the `Logic.Monitor`
-PowerShell module are in `docs/VALIDATION.md` §5 — its `Invoke-LMCollectorDebugCommand` runs
+PowerShell module are in `docs/INSTALL.md`'s appendix — its `Invoke-LMCollectorDebugCommand` runs
 `!groovy` on a real Collector, the closest thing to a live test harness this project has.

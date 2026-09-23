@@ -176,28 +176,36 @@ network between Collector and Proxmox is trusted.
 python build/build.py
 ```
 
-This writes `dist/*.json` (the importable modules) and `dist/scripts/*.groovy` (the assembled
-scripts). `dist/` is generated and is not in git — always build before installing.
+This writes `dist/*.json` (the importable modules) and `dist/scripts/` (the assembled scripts,
+which you do not need for an install). `dist/` is generated and is not in git — always build
+before installing.
 
-### 3.2 Import each module
+### 3.2 Import every module
 
 **Settings → LogicModules → My Module Toolbox → Add → Import from file**, once per `dist/*.json`.
+That is all seventeen: fourteen DataSources, two PropertySources and the TopologySource. There is
+no longer any module to create by hand.
 
-All 14 have an AppliesTo of `hasCategory("ProxmoxVE")`, so none of them applies to anything until
-Part 4 is done.
+`addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
+completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Every
+other module applies on `hasCategory("ProxmoxVE")`, so nothing applies to anything until Part 4
+sets the token.
 
-### 3.3 Create the PropertySource by hand
+### 3.3 The topology modules, if you want a map
 
-The PropertySource ships as a script rather than an importable JSON, because its export schema
-could not be verified against a published sample.
+`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional and only earn their place if the guests
+are **also monitored as their own LogicMonitor resources**. They draw cluster → node → guest edges
+so that a node's alerts can explain its guests'.
 
-**Settings → LogicModules → Add → PropertySource.**
-- Name: `addCategory_Proxmox_VE`
-- AppliesTo: something that reaches your Proxmox hosts. `system.displayname =~ "pve"` is typical;
-  plain `true` also works, because the script stays completely silent — exit 0, no output — on any
-  host that is not Proxmox or has no token set.
-- Script type: Groovy
-- Paste the contents of `dist/scripts/addCategory_Proxmox_VE.groovy`
+A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
+sides already know, so no naming convention is required. A node cannot be matched that way —
+Proxmox exposes no MAC or hardware UUID for a node anywhere in its API — so `addERI_Proxmox_VE`
+stamps a synthesised key on the node's resource for the map to attach to.
+
+**That PropertySource only runs where the token is set.** On the one-resource-per-cluster layout
+below, that is a single node: the others still appear on the map, but as vertices matching no
+resource, so their alerts will not suppress their guests'. Setting the token on every node fixes
+it, at the duplication cost §4.1 describes.
 
 ---
 
@@ -252,7 +260,7 @@ the resource gains:
 | `pve.release` | the release, e.g. `8.2` |
 | `pve.clustered` | `true` on a cluster member, `false` on a standalone host |
 
-As soon as `ProxmoxVE` appears in `system.categories`, all 14 modules apply themselves. Active
+As soon as `ProxmoxVE` appears in `system.categories`, the rest of the suite applies itself. Active
 Discovery then populates instances, and collection starts on each module's own interval.
 
 ---
@@ -341,8 +349,23 @@ Each module's technical notes say which of its datapoints are conditional and wh
 
 ---
 
-## Testing against a cluster you do not have
+## Appendix — driving a portal from a script
 
-Five modules — Ceph, CephOSD, Replication, Subscription, and one question in Disks — have never run
-against the hardware they monitor. `docs/VALIDATION.md` is the checklist for anyone who does have a
-suitable cluster: what is unproven in each, what to compare it against, and what to send back.
+For importing modules and running scripts against a real Collector without clicking through the UI.
+
+**Modules are distributed as JSON**, exported and imported through **My Module Toolbox → Export** /
+**Add → Import from file** as a single `.json` (XML is the older format). The import API takes a
+type of `datasources`, `propertyrules`, `configsources`, `eventsources`, `batchjobs`, `logsources`,
+`oids`, `topologysources`, `functions` or `diagnosticsources`, plus a conflict policy
+(`FORCE_OVERWRITE` / `ERROR`) and a `FieldsToPreserve` list covering `NAME`, `APPLIES_TO_SCRIPT`,
+`COLLECTION_INTERVAL`, `ACTIVE_DISCOVERY_INTERVAL`, `MODULE_GROUP`, `DISPLAY_NAME`,
+`USE_WILD_VALUE_AS_UUID`, `DATAPOINT_ALERT_THRESHOLDS` and `TAGS`.
+
+**REST API v3.** Base `https://<portal>.logicmonitor.com/santaba/rest`, header `X-Version: 3`.
+Either `Authorization: Bearer <token>`, or LMv1: build `METHOD + epochMillis + body + resourcePath`
+(body omitted for GET/DELETE, resourcePath excludes the query string), HMAC-SHA256 it with the
+access key, lowercase-hex the digest, Base64 **the hex string**, and send
+`Authorization: LMv1 <accessId>:<base64>:<epochMillis>`. The `Logic.Monitor` PowerShell module
+implements this and ships `Export-LMLogicModule`, `Import-LMLogicModuleFromFile`,
+`Invoke-LMActiveDiscovery` and `Invoke-LMCollectorDebugCommand` — the last runs `!groovy` against a
+real Collector, which is the closest thing to a live test harness this project has.

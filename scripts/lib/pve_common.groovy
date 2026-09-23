@@ -167,6 +167,37 @@ def pveMB = { value ->
     pveRound(((value ?: 0) as double) / 1000000.0d)
 }
 
+/*
+ * The synthesised topology key for a Proxmox vertex, used for the cluster and for every
+ * node. Proxmox exposes no hardware identifier for a node anywhere in its API, so the node
+ * vertex cannot be matched on something it already has the way a guest is matched on its
+ * MAC. addERI_Proxmox_VE stamps the identical key on the node's own resource, and this is
+ * the only place its shape is defined -- change it here and there together or the two stop
+ * matching, which shows up as a map full of vertices that resolve to nothing.
+ */
+def pveTopoKey = { String cluster, String node ->
+    def parts = node ? ['proxmoxve', cluster, node] : ['proxmoxve', cluster]
+    parts.collect { it.toString().toLowerCase().replaceAll('[^a-z0-9_-]', '-') }.join('--')
+}
+
+/*
+ * The MAC of a guest's first virtual NIC, out of a guest config.
+ *
+ * QEMU writes it as "virtio=BC:24:11:F8:1E:58,bridge=vmbr0" and LXC as
+ * "name=eth0,bridge=vmbr0,hwaddr=BC:24:11:...,type=veth", so the key differs but the shape
+ * of the value does not: pull the first thing that looks like a MAC. Lowercased, because
+ * that is how LogicMonitor stores an ERI key and the two have to compare equal.
+ */
+def pveGuestMac = { config ->
+    if (!config) { return null }
+    def interfaces = config.keySet().findAll { it.toString() ==~ /net\d+/ }.sort()
+    for (name in interfaces) {
+        def matcher = (config[name].toString() =~ /([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})/)
+        if (matcher.find()) { return matcher.group(1).toLowerCase() }
+    }
+    return null
+}
+
 def pvePercent = { used, total ->
     def totalValue = (total ?: 0) as double
     totalValue > 0 ? pveRound(((used ?: 0) as double) * 100.0d / totalValue) : 0

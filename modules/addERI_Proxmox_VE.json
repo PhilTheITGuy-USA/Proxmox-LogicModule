@@ -1,0 +1,12 @@
+{
+  "name": "addERI_Proxmox_VE",
+  "moduleType": "propertysource",
+  "eri": true,
+  "description": "Sets an ERI on a Proxmox VE node's resource so Proxmox_VE_Topology can attach its node vertex to it.",
+  "group": "ERI",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,eri,topology,node,groovy4",
+  "collectionInterval": 1800,
+  "collectScript": "addERI_Proxmox_VE.groovy",
+  "technicalNotes": "Stamps one ERI key, in its own category \"proxmoxve\" so it combines with the MAC-based ERIs a monitored Linux resource already carries rather than replacing them -- LogicMonitor keeps the highest priority within a category and merges across categories.\n\nThe key is synthesised from the cluster and node names because Proxmox exposes no hardware identifier for a node anywhere in its API: /cluster/status gives name, ip and nodeid, /nodes/{node}/status gives none, and /nodes/{node}/network has no hwaddr. VMware does not need this because vCenter hands out each ESXi host's hardware UUID. pveTopoKey in the preamble is the single definition of the key's shape, and Proxmox_VE_Topology calls the same helper -- the two must produce byte-identical keys or every node vertex silently stops matching its resource.\n\nThe node it stamps is the one the resource is, not any node in the cluster: /cluster/status marks the responding node with local=true. Without that, every node would be stamped with the same key.\n\nSilent on any failure, like addCategory_Proxmox_VE: it runs against resources that may not be Proxmox, and a PropertySource that prints on a host it does not understand corrupts that resource's properties.\n\nUNVERIFIED: not yet imported into a portal. The export shape follows a published addERI_VMware_VeloCloud export (type 5, propertySourceType 1, group ERI, script as {type, content}), but the registryMetadata and integrationMetadata blocks a published module carries are Exchange lineage and are not fabricated here. Confirm the property appears on a Proxmox node's resource, and that its value matches the node vertex Proxmox_VE_Topology emits."
+}
