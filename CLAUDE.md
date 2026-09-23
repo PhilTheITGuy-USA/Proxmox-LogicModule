@@ -14,8 +14,8 @@ parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the bac
 change from the current implementation", reads like a to-do list but every one of its ten items is
 implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
 superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. In §4, Tier 1, Tier 1a and all eight Tier 2
-modules are built; Tier 2a (BackupStatus, Migrations, NodeNetwork), Tier 3 and the TopologySource
-are not. §4's own status column is the authority on what exists.
+modules are built, and so is the TopologySource; Tier 2a (BackupStatus, Migrations, NodeNetwork)
+and Tier 3 are not. §4's own status column is the authority on what exists.
 
 **§4 sorts the backlog on two axes, and they are independent.** *Scope* (Tier 1 core parity, Tier 2
 infrastructure, Tier 2a workload, Tier 3 per-guest detail) says whether something is worth
@@ -424,8 +424,9 @@ matching the reference exports.
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
 the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. Two modules are in
-that state today — `Proxmox_VE_Topology` and `addERI_Proxmox_VE`, neither yet imported. A green
+its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. No module is in
+that state today; the last two, `Proxmox_VE_Topology` and `addERI_Proxmox_VE`, were confirmed in a
+portal on 2026-09-23. A green
 harness on a hand-written fixture proves the parsing, not the shape, so a new module keeps the
 note until someone runs it.
 

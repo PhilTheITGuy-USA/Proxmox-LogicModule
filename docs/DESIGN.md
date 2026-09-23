@@ -206,13 +206,13 @@ populated on the target version before designing around it.
   include `ProxmoxVE`. Every module then uses `AppliesTo: hasCategory("ProxmoxVE")`.
   **This is required for Exchange.** The current design makes the user hand-set `pve.monitor=true`
   on every resource, which no published module does.
-- **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22;
-  the TopologySource imports as of 2026-09-23, and §7 records what is still unseen. Cluster → node → guest edges, so Proxmox appears in topology maps the way vSphere
-  does, and a node's alerts can explain its guests'. A guest matches its own resource on the MAC of
-  its first virtual NIC, which both sides already know. A node cannot: Proxmox exposes no MAC or
-  hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE` stamps a synthesised key on
-  the node's resource and `pveTopoKey` is the single definition of its shape. Modelled on
-  `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
+- **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22,
+  verified in a portal 2026-09-23 (§7). Cluster → node → guest edges, so Proxmox appears in topology
+  maps the way vSphere does, and a node's alerts can explain its guests'. A guest matches its own
+  resource on the MAC of its first virtual NIC, which both sides already know. A node cannot:
+  Proxmox exposes no MAC or hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE`
+  stamps a synthesised key on the node's resource and `pveTopoKey` is the single definition of its
+  shape. Modelled on `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
 
 ---
 
@@ -291,25 +291,31 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Modules built | 14 DataSources, 2 PropertySources, 1 TopologySource |
 | Scripts assembled | 26 compiled on Groovy 4, plus 2 Collector-only that cannot be |
 | Harness checks | 984, against a mock Proxmox API |
-| Portal import | **verified** for the 14 DataSources and `addCategory_Proxmox_VE` |
+| Portal import | **verified** for all 17 modules |
 | Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
-| TopologySource | **imports**, 2026-09-23, after one shape fix (below). Map not yet confirmed |
+| TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23 |
+
+**The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
+`non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an
+object holding only `scriptgroovy`; LogicMonitor's own exports carry it as a JSON-encoded *string*
+of eight keys, `scripttype: "embed"` among them, with `type` and `collectionIntervalSec` as integers
+rather than strings. Matching that shape fixed it — the same lesson as the dashboard values: copy
+the reference's types, not just its key names. It also settled that an import does not need the
+`registryMetadata` / `integrationMetadata` lineage blocks. Once imported, both identity schemes held
+on a standalone host (`ProxMox A`): the node resource carries `proxmoxve--proxmox-a--proxmox-a` from
+`addERI_Proxmox_VE` and its map vertex opens that resource, and the vertex for the LXC guest `Plex`
+opens the separately monitored `Plex Media Server` resource, whose ERI is the guest's MAC
+`bc:24:11:f8:1e:58` — no naming convention involved. Not yet seen: a multi-node cluster's map, where
+the cluster vertex takes its name from `/cluster/status` rather than falling back to the node's, and
+a QEMU guest, whose MAC is read from the `virtio=` form rather than LXC's `hwaddr=` (the harness
+covers both).
 
 Four things are unproven, and each needs something no healthy lab produces on demand:
 
-- **`Proxmox_VE_Topology` imports; whether it maps correctly is unseen.** The first import, on
-  2026-09-23, was refused with `non empty field value required`, naming no field. The build had
-  emitted `collectionAttrs` as an object holding only `scriptgroovy`; LogicMonitor's own exports
-  carry it as a JSON-encoded *string* of eight keys, `scripttype: "embed"` among them, with `type`
-  and `collectionIntervalSec` as integers rather than strings. Matching that shape fixed it — the
-  same lesson as the dashboard values: copy the reference's types, not just its key names. It also
-  settled that an import does not need the `registryMetadata` / `integrationMetadata` lineage
-  blocks. Still to confirm: that `addERI_Proxmox_VE` imports, that a map renders, and — the whole
-  point of the module — that a guest vertex resolves to that guest's own resource rather than
-  standing alone.
+- **A multi-node cluster's topology map** — see above; the one host that has run it is standalone.
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
