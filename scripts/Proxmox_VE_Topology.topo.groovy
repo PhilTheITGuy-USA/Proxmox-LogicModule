@@ -111,8 +111,9 @@ try {
          * Per-guest try, and the two failures it distinguishes are not the same thing.
          *
          * A config that reads but has no MAC is a guest with no virtual NIC. That is a
-         * permanent fact, so the synthesised fallback key is stable and the guest draws
-         * on the map without resolving to a resource -- what VMware's VM topology does.
+         * permanent fact, so the synthesised fallback key is stable -- what VMware's VM
+         * topology does. It resolves to no resource, and the portal draws no vertex that
+         * matches nothing, so such a guest is emitted but stays off the map.
          *
          * A config that cannot be read is transient. Falling back there would change the
          * guest's identity for one run and change it back on the next, rewriting the map

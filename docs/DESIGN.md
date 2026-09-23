@@ -313,6 +313,16 @@ the cluster vertex takes its name from `/cluster/status` rather than falling bac
 a QEMU guest, whose MAC is read from the `virtio=` form rather than LXC's `hwaddr=` (the harness
 covers both).
 
+**The portal draws only vertices that match a resource.** Test Script on `ProxMox A` emitted all
+seven guests' edges, but the map drew four. The unmonitored LXC guest `Crosslisting` was not drawn
+at all, so a guest reaches the map only when it is its own resource *and* that resource's
+`predef.externalResourceID` carries the guest's MAC — which LogicMonitor's own discovery supplies
+over SNMP. Two monitored guests, `Wish-relay` and the QEMU `homeassistant`, were also left off the
+map, and for the same reason: neither answers SNMP, so neither resource carries
+`predef.externalResourceID`, `auto.network.mac_address` or `auto.snmp.operational` at all. The
+module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
+own resource, not in this suite.
+
 Four things are unproven, and each needs something no healthy lab produces on demand:
 
 - **A multi-node cluster's topology map** — see above; the one host that has run it is standalone.
