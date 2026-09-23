@@ -83,9 +83,24 @@ TOPOLOGYSOURCE = "topologysource"
 PROPERTYSOURCE = "propertysource"
 
 # LogicMonitor's LogicModule type id for a TopologySource, read off a real export
-# (VMware_vCenter_Cluster_Topology, type "9") rather than guessed. So was the rest of the
-# TopologySource export shape in build_topologysource.
-TOPOLOGY_TYPE_ID = "9"
+# (VMware_vCenter_Cluster_Topology, type 9 -- an integer) rather than guessed. So was the
+# rest of the TopologySource export shape in build_topologysource.
+TOPOLOGY_TYPE_ID = 9
+
+# collectionAttrs in a TopologySource export is not an object but a JSON-encoded *string*,
+# and it carries every script slot, empty ones included. The first build emitted a bare
+# {"scriptgroovy": ...} object; a portal refused it on 2026-09-23 with "non empty field
+# value required", naming no field. scripttype "embed" is the one non-empty value besides
+# the script itself, and the likeliest thing it wanted. Key order and the empty slots are
+# copied from VMware_vCenter_Cluster_Topology and VMware_vSphere_VirtualMachine_Topology.
+TOPOLOGY_EMPTY_ATTRS = (
+    "linuxscript",
+    "linuxcmdline",
+    "windowscmdline",
+    "manualConnections",
+    "windowsscript",
+    "properties",
+)
 
 # And the PropertySource ids, read off a published addERI_* export
 # (addERI_VMware_VeloCloud): type 5 with propertySourceType 1, both integers, the script
@@ -240,8 +255,9 @@ def build_topologysource(defn: dict) -> tuple[dict, dict[str, str]]:
     Return (module JSON, {output filename: assembled script}) for a TopologySource.
 
     Field names and shape come from a real portal export rather than from the API model:
-    collectionAttrs carries the Groovy under "scriptgroovy", the interval is seconds as a
-    string, and type is "9". The registryMetadata and integrationMetadata blocks a
+    collectionAttrs is a JSON-encoded string carrying the Groovy under "scriptgroovy",
+    scripttype "embed" and the empty script slots; the interval is integer seconds, and
+    type is the integer 9. The registryMetadata and integrationMetadata blocks a
     published module carries are Exchange lineage and are deliberately not fabricated
     here -- see this module's UNVERIFIED note.
     """
@@ -256,8 +272,11 @@ def build_topologysource(defn: dict) -> tuple[dict, dict[str, str]]:
         "technicalNotes": defn.get("technicalNotes", ""),
         "searchKeywords": defn.get("searchKeywords", ""),
         "collectionMethod": "script",
-        "collectionIntervalSec": str(defn["collectionIntervalSec"]),
-        "collectionAttrs": {"scriptgroovy": script},
+        "collectionIntervalSec": int(defn["collectionIntervalSec"]),
+        "collectionAttrs": json.dumps(
+            {"scriptgroovy": script, "scripttype": "embed"}
+            | {key: "" for key in TOPOLOGY_EMPTY_ATTRS}
+        ),
         "type": TOPOLOGY_TYPE_ID,
     }
     return module, {filename: script}
