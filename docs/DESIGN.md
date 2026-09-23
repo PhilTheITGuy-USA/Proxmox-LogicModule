@@ -10,24 +10,18 @@ LogicMonitor's own module conventions as observed in `logicmonitor/dashboards` a
 
 ---
 
-## 1. What the parity targets actually look like
+## 1. What the parity targets look like
 
-Mined from LogicMonitor's official dashboards, which reference real module and datapoint names:
+Mined from LogicMonitor's own published dashboards, which reference real module and datapoint
+names: VMware vSphere, Nutanix and Hyper-V. Three conventions came from them and are still
+enforced here:
 
-| Suite | Modules | Datapoint style |
-|---|---|---|
-| VMware vSphere | `VMware_vSphere_Clusters`, `VMware_vSphere_VirtualMachinePerformance`, `VMware_vSphere_VirtualMachineStatus`, `VMware_vSphere_VirtualMachineDiskCapacity`, `VMware_vSphere_DatastoreUsage`, `VMware_vSphere_DatastoreThroughput`, `VMware_vSphere_NetworkState` | `CpuUsagePercent`, `MemoryUsagePercent`, `DataRateRx`, `DataRateTx`, `vDiskReads`, `PercentUsed`, `Capacity`, `FreeSpace` |
-| Nutanix | `Nutanix_Cluster_GlobalStats`, `Nutanix_Hypervisors`, `Nutanix_VirtualMachines`, `Nutanix_Containers`, `Nutanix_StoragePools`, `Nutanix_Controller_VMs` | `hypervisorCpuUsagePercentage`, `vmRxBytes`, `spitUsedPercentage`, `citAvgLatencyUsecs` |
-| Hyper-V | `Win_HyperV_VirtualMachines` | `PercentGuestRunTime`, `MeanBytesReceivedPerSec`, `ReadBytesPersec` |
-
-Three conventions to copy:
-
-1. **`Vendor_Product_Component` module names**, with human display names ("VMware vSphere VM Performance").
+1. **`Vendor_Product_Component` module names**, with human display names ("Proxmox VE Guest
+   Performance").
 2. **Capacity, performance and status are separate modules**, not one fat module. VMware splits
-   datastore capacity from datastore throughput, and VM performance from VM status. Different
-   collection intervals and different alert thresholds naturally belong to each.
-3. **PascalCase datapoint names.** The current `cpuPct` / `memUsedPct` / `netInBytes` names are
-   off-convention and would be flagged in Exchange review.
+   datastore capacity from datastore throughput, and VM performance from VM status; different
+   collection intervals and alert thresholds naturally belong to each.
+3. **PascalCase datapoint names.** Anything else would be flagged in Exchange review.
 
 ---
 
@@ -162,8 +156,7 @@ three-node cluster with Ceph, which also exercised the five that a single node c
 CephOSD, Replication, Subscription, and the `wearout` direction in Disks. That last one was the
 highest-consequence unknown in the suite, because a backwards threshold would have alerted on
 healthy disks and stayed silent on dying ones; it reads as life *remaining*, as shipped. None of
-the eight carries an UNVERIFIED note any more. `docs/VALIDATION.md` remains the checklist, now as
-a regression pass rather than a set of open questions.
+the eight carries an UNVERIFIED note any more.
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
@@ -213,9 +206,13 @@ populated on the target version before designing around it.
   include `ProxmoxVE`. Every module then uses `AppliesTo: hasCategory("ProxmoxVE")`.
   **This is required for Exchange.** The current design makes the user hand-set `pve.monitor=true`
   on every resource, which no published module does.
-- **`Proxmox_VE_Topology` (TopologySource)** — guest → node → cluster edges, so Proxmox appears in
-  topology maps the way vSphere does. This is a large part of what "hybrid observability" means in
-  the LM product.
+- **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22, not
+  yet imported. Cluster → node → guest edges, so Proxmox appears in topology maps the way vSphere
+  does, and a node's alerts can explain its guests'. A guest matches its own resource on the MAC of
+  its first virtual NIC, which both sides already know. A node cannot: Proxmox exposes no MAC or
+  hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE` stamps a synthesised key on
+  the node's resource and `pveTopoKey` is the single definition of its shape. Modelled on
+  `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
 
 ---
 
@@ -269,6 +266,15 @@ instance in a customer's portal.
    `HttpURLConnection` also gives per-request control over timeouts and the TLS trust manager,
    which the opt-in `pve.api.insecure` path needs. This is a deliberate departure from house
    style, in exchange for the scripts being testable.
+
+   **That rule has exactly one exception, added with the TopologySource.** `Proxmox_VE_Topology`
+   and `addERI_Proxmox_VE` both work through `com.logicmonitor.mod.Snippets`, because the ERI and
+   topology output formats are produced by LogicMonitor's own `lm.topo` snippet — `eriPreProcessor`,
+   `isMac`, `emitEri`, `printEriArray`, `generateTopology` — and are not documented well enough to
+   reimplement. Hand-writing them would mean inventing a format, which is the failure this suite
+   has actually suffered. So those two take the dependency, the build emits them to
+   `dist/scripts/collector-only/` where `groovyc` and the harness cannot reach them, and their
+   Proxmox-side logic lives in preamble helpers that the harness *can* reach.
 10. Handle Proxmox paging/permission behaviour: `/cluster/resources` is `user: all` and silently
     returns only what the token may see, so an under-privileged token yields *empty discovery*
     rather than an error. Discovery must distinguish "no permission" from "nothing there".
@@ -278,22 +284,35 @@ instance in a customer's portal.
 
 ## 7. Build status
 
-Tier 1, Tier 1a, all eight Tier 2 modules and the PropertySource are implemented and assembled.
-Tier 1's six DataSources have been collecting against a live cluster since 2026-09-10; the Tier 2
-eight were verified against a three-node cluster with Ceph on 2026-09-22.
+The single record of what is proven and what is not. Nothing else in the repository restates it.
 
 | | |
 |---|---|
-| Modules built | 14 DataSources + 1 PropertySource |
-| Scripts assembled | 26, compiled on Groovy 4 (the Collector's runtime) |
-| Harness checks | 971, against a mock Proxmox API |
-| Portal import | **verified for all fourteen** — they import and apply via `hasCategory("ProxmoxVE")` |
-| Real Proxmox host | **verified for all fourteen** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 |
+| Modules built | 14 DataSources, 2 PropertySources, 1 TopologySource |
+| Scripts assembled | 26 compiled on Groovy 4, plus 2 Collector-only that cannot be |
+| Harness checks | 984, against a mock Proxmox API |
+| Portal import | **verified** for the 14 DataSources and `addCategory_Proxmox_VE` |
+| Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
-| Tier 2 | **verified** against a three-node cluster with Ceph, 2026-09-22. No module carries an UNVERIFIED note |
-| Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see §6 |
+| Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
-| Still unproven | Cluster's HA datapoints (need a real failover) and Disks' unreadable-SMART branch |
+| TopologySource, ERI PropertySource | **not yet imported.** Built 2026-09-22 |
+
+Four things are unproven, and each needs something no healthy lab produces on demand:
+
+- **`Proxmox_VE_Topology` and `addERI_Proxmox_VE` have never been imported.** Their export shapes
+  were taken from real exports (`VMware_vCenter_Cluster_Topology`, `addERI_VMware_VeloCloud`), but
+  the `registryMetadata` and `integrationMetadata` blocks a published module carries are Exchange
+  lineage and are deliberately not fabricated; whether an import needs them is unknown. The thing
+  to check first is whether a guest vertex resolves to that guest's own resource rather than
+  standing alone — that is the whole point of the module.
+- **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
+- **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
+  `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
+  unreadable disk alerting exactly like a failing one, and every disk seen so far has readable
+  SMART.
+- **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
+  §2, not measured at scale.
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on

@@ -28,6 +28,7 @@ import argparse
 import importlib.util
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -70,10 +71,45 @@ DATAPOINT_DEFAULTS = {
 # a LogicMonitor field, so it is stripped before the datapoint reaches the export.
 CONDITIONAL_KEY = "conditional"
 
-# Scripts that are not DataSources and so have no module definition. The PropertySource
-# export schema was not verifiable from any published sample, so it ships as an assembled
-# script to paste into the UI rather than as a JSON that might not import.
-STANDALONE_SCRIPTS = ["addCategory_Proxmox_VE.groovy"]
+# Every script in this suite now has a module definition. The PropertySource export
+# schema was unverifiable for a long time, so addCategory_Proxmox_VE shipped as an
+# assembled script to paste into the UI; two published exports settled it on 2026-09-22
+# and it is an ordinary importable module like everything else.
+
+# A module definition without "moduleType" is a DataSource, which is all this suite had
+# until the TopologySource. The values here are ours, not LogicMonitor's.
+DATASOURCE = "datasource"
+TOPOLOGYSOURCE = "topologysource"
+PROPERTYSOURCE = "propertysource"
+
+# LogicMonitor's LogicModule type id for a TopologySource, read off a real export
+# (VMware_vCenter_Cluster_Topology, type "9") rather than guessed. So was the rest of the
+# TopologySource export shape in build_topologysource.
+TOPOLOGY_TYPE_ID = "9"
+
+# And the PropertySource ids, read off a published addERI_* export
+# (addERI_VMware_VeloCloud): type 5 with propertySourceType 1, both integers, the script
+# under "script" as {type, content} rather than under collectionAttrs, and group "ERI".
+# That export is also what retired this repo's long-standing note that a PropertySource
+# export schema could not be verified -- but it is an *ERI* PropertySource, and whether
+# propertySourceType 1 is right for a plain one like addCategory_Proxmox_VE is still
+# unknown, which is why that one continues to ship as a script to paste.
+# type 5 is every PropertySource. What separates an ERI one from a plain one is what
+# the plain one LEAVES OUT: addERI_VMware_VeloCloud carries propertySourceType 1 and a
+# collectionInterval, and addCategory_VMwareHorizonConnectionServer carries neither.
+# So "eri": true in a definition adds both, and omitting it adds neither -- guessing in
+# either direction would produce a module that imports and then does the wrong thing.
+PROPERTYSOURCE_TYPE_ID = 5
+ERI_PROPERTYSOURCE_SUBTYPE = 1
+ERI_GROUP = "ERI"
+
+# TopologySource scripts are the one place this suite depends on Collector-only classes:
+# LogicMonitor's own topology scripts do all their work through com.logicmonitor.mod
+# .Snippets, and reimplementing ERI normalisation, the blocked-key list and the output
+# format would mean inventing a format -- the exact mistake that cost thirteen dashboard
+# widgets. The trade is that groovyc and the harness cannot touch these, so they are
+# emitted into a subdirectory that the compile job's dist/scripts/*.glob does not reach.
+COLLECTOR_ONLY_DIR = "collector-only"
 
 # Datapoint names LogicMonitor refuses as reserved words. Nothing local catches this: the
 # build, compile and harness all pass, and the portal rejects the module on import. The
@@ -130,11 +166,101 @@ REQUIRED_KEYS = [
 ]
 
 
+# A TopologySource has no datapoints and no collection method to declare -- it prints
+# edges, not metrics -- so it answers to a shorter list than REQUIRED_KEYS.
+TOPOLOGY_REQUIRED_KEYS = [
+    "name",
+    "description",
+    "appliesTo",
+    "collectionIntervalSec",
+    "collectScript",
+]
+
+PROPERTYSOURCE_REQUIRED_KEYS = [
+    "name",
+    "description",
+    "appliesTo",
+    "collectScript",
+]
+
+
+def module_type(defn: dict) -> str:
+    return defn.get("moduleType", DATASOURCE)
+
+
 def check_definition(path: Path, defn: dict) -> list[str]:
-    missing = [key for key in REQUIRED_KEYS if key not in defn]
+    kind = module_type(defn)
+    if kind not in (DATASOURCE, TOPOLOGYSOURCE, PROPERTYSOURCE):
+        return [f"{path.name}: unknown moduleType {kind!r}"]
+    required = {
+        TOPOLOGYSOURCE: TOPOLOGY_REQUIRED_KEYS,
+        PROPERTYSOURCE: PROPERTYSOURCE_REQUIRED_KEYS,
+    }.get(kind, REQUIRED_KEYS)
+    missing = [key for key in required if key not in defn]
     if missing:
         return [f"{path.name}: module definition is missing {', '.join(missing)}"]
+    if kind != DATASOURCE and defn.get("datapoints"):
+        return [f"{path.name}: a {kind} declares no datapoints"]
     return []
+
+
+def build_propertysource(defn: dict) -> tuple[dict, dict[str, str]]:
+    """
+    Return (module JSON, {output filename: assembled script}) for an ERI PropertySource.
+
+    Collector-only for the same reason the TopologySource is: LogicMonitor's own addERI_*
+    modules build the ERI output through lm.topo's emitEri and printEriArray, which also
+    apply topo.namespace and topo.blacklist. Writing that JSON by hand would mean guessing
+    a format, so the assembled script goes where groovyc and the harness cannot reach it.
+    """
+    name = defn["name"]
+    eri = bool(defn.get("eri"))
+    # Only the ERI ones reach for Collector-only classes; a plain PropertySource is
+    # ordinary Groovy and stays where groovyc and the harness can see it.
+    filename = f"{COLLECTOR_ONLY_DIR}/{name}.groovy" if eri else f"{name}.groovy"
+    script = assemble(defn["collectScript"])
+    module = {
+        "name": name,
+        "group": defn.get("group", ERI_GROUP if eri else "Proxmox VE"),
+        "description": defn["description"],
+        "appliesTo": defn["appliesTo"],
+        "technicalNotes": defn.get("technicalNotes", ""),
+        "searchKeywords": defn.get("searchKeywords", ""),
+        "script": {"type": "groovy", "content": script},
+        "type": PROPERTYSOURCE_TYPE_ID,
+    }
+    if eri:
+        module["propertySourceType"] = ERI_PROPERTYSOURCE_SUBTYPE
+        module["collectionInterval"] = int(defn["collectionInterval"])
+    return module, {filename: script}
+
+
+def build_topologysource(defn: dict) -> tuple[dict, dict[str, str]]:
+    """
+    Return (module JSON, {output filename: assembled script}) for a TopologySource.
+
+    Field names and shape come from a real portal export rather than from the API model:
+    collectionAttrs carries the Groovy under "scriptgroovy", the interval is seconds as a
+    string, and type is "9". The registryMetadata and integrationMetadata blocks a
+    published module carries are Exchange lineage and are deliberately not fabricated
+    here -- see this module's UNVERIFIED note.
+    """
+    name = defn["name"]
+    filename = f"{COLLECTOR_ONLY_DIR}/{name}.topo.groovy"
+    script = assemble(defn["collectScript"])
+    module = {
+        "name": name,
+        "group": defn.get("group", "Proxmox VE"),
+        "description": defn["description"],
+        "appliesTo": defn["appliesTo"],
+        "technicalNotes": defn.get("technicalNotes", ""),
+        "searchKeywords": defn.get("searchKeywords", ""),
+        "collectionMethod": "script",
+        "collectionIntervalSec": str(defn["collectionIntervalSec"]),
+        "collectionAttrs": {"scriptgroovy": script},
+        "type": TOPOLOGY_TYPE_ID,
+    }
+    return module, {filename: script}
 
 
 def build_module(defn: dict) -> tuple[dict, dict[str, str]]:
@@ -266,7 +392,10 @@ def build_dashboards(
     if not DASHBOARDS.is_dir():
         return built, problems
 
-    index = module_datapoint_index(definitions)
+    index = module_datapoint_index(
+        [p for p in definitions
+         if module_type(json.loads(read(p))) == DATASOURCE]
+    )
     for path in sorted(DASHBOARDS.glob("*.py")):
         try:
             dashboard = load_dashboard(path).render()
@@ -290,12 +419,6 @@ def main() -> int:
 
     problems: list[str] = []
     built: list[tuple[dict, dict[str, str]]] = []
-    standalone: dict[str, str] = {}
-
-    for filename in STANDALONE_SCRIPTS:
-        content = assemble(filename)
-        standalone[filename] = content
-        problems.extend(balance_check(filename, content))
 
     for path in definitions:
         defn = json.loads(read(path))
@@ -303,8 +426,13 @@ def main() -> int:
         if incomplete:
             problems.extend(incomplete)
             continue
-        module, scripts = build_module(defn)
-        problems.extend(check_module(defn, module))
+        if module_type(defn) == TOPOLOGYSOURCE:
+            module, scripts = build_topologysource(defn)
+        elif module_type(defn) == PROPERTYSOURCE:
+            module, scripts = build_propertysource(defn)
+        else:
+            module, scripts = build_module(defn)
+            problems.extend(check_module(defn, module))
         for filename, content in scripts.items():
             problems.extend(balance_check(filename, content))
         built.append((module, scripts))
@@ -324,19 +452,34 @@ def main() -> int:
         )
         return 0
 
+    # Wipe dist/ rather than writing over it. The build used to leave whatever it had
+    # written before, so a script that was renamed, moved or dropped stayed behind --
+    # and a stale one still compiles, still looks like output, and is still there to be
+    # imported. addERI_Proxmox_VE left exactly that trap behind when it moved into
+    # collector-only/. dist/ is generated and gitignored, so there is nothing here to
+    # preserve; --check returns above without reaching this.
+    if DIST.exists():
+        shutil.rmtree(DIST)
     (DIST / "scripts").mkdir(parents=True, exist_ok=True)
-    for filename, content in standalone.items():
-        (DIST / "scripts" / filename).write_text(content, encoding="utf-8")
     for module, scripts in built:
         target = DIST / f"{module['name']}.json"
         target.write_text(json.dumps(module, indent=2) + "\n", encoding="utf-8")
         for filename, content in scripts.items():
-            (DIST / "scripts" / filename).write_text(content, encoding="utf-8")
+            out = DIST / "scripts" / filename
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(content, encoding="utf-8")
+        if "datapoints" not in module:
+            if module["type"] == PROPERTYSOURCE_TYPE_ID:
+                kind = "propertysource"
+                note = ("eri, Collector-only" if "propertySourceType" in module
+                        else "category")
+            else:
+                kind = "topologysource"
+                note = "Collector-only"
+            print(f"  {module['name']:34} {kind}  ({note})")
+            continue
         dp_count = len(module["datapoints"])
         print(f"  {module['name']:34} {module['collectionMethod']:12} {dp_count:2} datapoints")
-
-    for filename in standalone:
-        print(f"  {filename:34} propertysource  (script only, no JSON)")
 
     if dashboards:
         (DIST / "dashboards").mkdir(parents=True, exist_ok=True)
