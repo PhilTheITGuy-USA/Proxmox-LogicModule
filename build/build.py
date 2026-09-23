@@ -259,7 +259,7 @@ def build_topologysource(defn: dict) -> tuple[dict, dict[str, str]]:
     scripttype "embed" and the empty script slots; the interval is integer seconds, and
     type is the integer 9. The registryMetadata and integrationMetadata blocks a
     published module carries are Exchange lineage and are deliberately not fabricated
-    here -- see this module's UNVERIFIED note.
+    here; a portal import on 2026-09-23 confirmed they are not required.
     """
     name = defn["name"]
     filename = f"{COLLECTOR_ONLY_DIR}/{name}.topo.groovy"

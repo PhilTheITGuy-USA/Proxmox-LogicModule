@@ -152,7 +152,7 @@ These are Proxmox API limits, not implementation shortcuts:
 
 The DataSources and both dashboards are verified against real hardware — Tier 1 collecting since
 2026-09-10, Tier 2 against a three-node cluster with Ceph on 2026-09-22. The TopologySource and
-`addERI_Proxmox_VE` are new and have not yet been imported into a portal.
+`addERI_Proxmox_VE` were confirmed in a portal on 2026-09-23.
 
 `docs/DESIGN.md` §7 is the single record of what is proven and what is not; nothing else in the
 repository restates it.
