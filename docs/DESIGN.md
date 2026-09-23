@@ -206,8 +206,8 @@ populated on the target version before designing around it.
   include `ProxmoxVE`. Every module then uses `AppliesTo: hasCategory("ProxmoxVE")`.
   **This is required for Exchange.** The current design makes the user hand-set `pve.monitor=true`
   on every resource, which no published module does.
-- **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22, not
-  yet imported. Cluster → node → guest edges, so Proxmox appears in topology maps the way vSphere
+- **`Proxmox_VE_Topology` (TopologySource)** and **`addERI_Proxmox_VE`** — built 2026-09-22;
+  the TopologySource imports as of 2026-09-23, and §7 records what is still unseen. Cluster → node → guest edges, so Proxmox appears in topology maps the way vSphere
   does, and a node's alerts can explain its guests'. A guest matches its own resource on the MAC of
   its first virtual NIC, which both sides already know. A node cannot: Proxmox exposes no MAC or
   hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE` stamps a synthesised key on
@@ -296,16 +296,20 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
-| TopologySource, ERI PropertySource | **not yet imported.** Built 2026-09-22 |
+| TopologySource | **imports**, 2026-09-23, after one shape fix (below). Map not yet confirmed |
 
 Four things are unproven, and each needs something no healthy lab produces on demand:
 
-- **`Proxmox_VE_Topology` and `addERI_Proxmox_VE` have never been imported.** Their export shapes
-  were taken from real exports (`VMware_vCenter_Cluster_Topology`, `addERI_VMware_VeloCloud`), but
-  the `registryMetadata` and `integrationMetadata` blocks a published module carries are Exchange
-  lineage and are deliberately not fabricated; whether an import needs them is unknown. The thing
-  to check first is whether a guest vertex resolves to that guest's own resource rather than
-  standing alone — that is the whole point of the module.
+- **`Proxmox_VE_Topology` imports; whether it maps correctly is unseen.** The first import, on
+  2026-09-23, was refused with `non empty field value required`, naming no field. The build had
+  emitted `collectionAttrs` as an object holding only `scriptgroovy`; LogicMonitor's own exports
+  carry it as a JSON-encoded *string* of eight keys, `scripttype: "embed"` among them, with `type`
+  and `collectionIntervalSec` as integers rather than strings. Matching that shape fixed it — the
+  same lesson as the dashboard values: copy the reference's types, not just its key names. It also
+  settled that an import does not need the `registryMetadata` / `integrationMetadata` lineage
+  blocks. Still to confirm: that `addERI_Proxmox_VE` imports, that a map renders, and — the whole
+  point of the module — that a guest vertex resolves to that guest's own resource rather than
+  standing alone.
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
@@ -347,5 +351,5 @@ portal with no corrections needed. The difference is that Tier 1a changed only *
 emit*, which is exactly the layer the local checks do cover.
 
 Tier 2 (Ceph, CephOSD, Replication, BackupCoverage, NodeServices, Subscription, Certificates,
-Disks) is built — §4's status column carries each module's state. Tier 2a, Tier 3 and the
-TopologySource are designed above but not built.
+Disks) is built — §4's status column carries each module's state. Tier 2a and Tier 3 are
+designed above but not built.
