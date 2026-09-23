@@ -3,7 +3,7 @@
 Three things have to happen, in this order:
 
 1. **In Proxmox** — create a read-only user, give it audit permissions, and create an API token.
-2. **In LogicMonitor** — import the modules and create the PropertySource.
+2. **In LogicMonitor** — import the modules. The PropertySources are ordinary modules too.
 3. **On the resource** — set one property. Everything else applies itself.
 
 The whole suite is read-only. Every endpoint it touches is a GET, and no module writes anything to
@@ -37,8 +37,8 @@ The suite needs `PVEAuditor` on `/` with propagation. That single role covers ev
 | Privilege | Needed for |
 |---|---|
 | `Sys.Audit` on `/` | `/cluster/status`, HA status, Ceph status, backup coverage |
-| `Sys.Audit` on `/nodes/{node}` | node status, services, disks, tasks |
-| `VM.Audit` on `/vms/{vmid}` | guest status and performance, replication jobs |
+| `Sys.Audit` on `/nodes/{node}` | node status, services, disks, certificates, subscription |
+| `VM.Audit` on `/vms/{vmid}` | guest status and performance, replication jobs, guest config (topology) |
 | `Datastore.Audit` on `/storage/{storage}` | storage capacity |
 
 **Web UI:** Datacenter → Permissions → Add → User Permission.
@@ -195,17 +195,25 @@ sets the token.
 
 `Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional and only earn their place if the guests
 are **also monitored as their own LogicMonitor resources**. They draw cluster → node → guest edges
-so that a node's alerts can explain its guests'.
+so that a node's alerts can explain its guests'. Import `addERI_Proxmox_VE` first.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —
 Proxmox exposes no MAC or hardware UUID for a node anywhere in its API — so `addERI_Proxmox_VE`
 stamps a synthesised key on the node's resource for the map to attach to.
 
+**The map draws only what matches a resource.** A guest appears only when its own resource carries
+the guest's MAC in `predef.externalResourceID`, and LogicMonitor fills that in from SNMP — so a
+guest that is not monitored, or is monitored but does not answer SNMP, is left off the map. The
+TopologySource still reports it; the portal has nothing to draw it as. Check a missing guest's
+resource for `auto.snmp.operational` and `predef.externalResourceID` before suspecting the module.
+**Test Script** on `Proxmox_VE_Topology` lists every edge it emits, one `Compute` edge per guest,
+which separates "not emitted" from "not drawn".
+
 **That PropertySource only runs where the token is set.** On the one-resource-per-cluster layout
-below, that is a single node: the others still appear on the map, but as vertices matching no
-resource, so their alerts will not suppress their guests'. Setting the token on every node fixes
-it, at the duplication cost §4.1 describes.
+below, that is a single node: the other nodes' resources carry no matching key, so by the same rule
+they are not drawn, and their alerts cannot explain their guests'. Setting the token on every node
+fixes it, at the duplication cost §4.1 describes.
 
 ---
 
@@ -316,13 +324,13 @@ treated as having no token at all and will go quiet rather than erroring.
 **Empty discovery, no error.** Usually the token ACL — see 1.4, then re-run the check in 1.5.
 **Two modules are the exception.** Ceph OSD discovers nothing where Ceph is not installed, and
 Replication discovers nothing where no replication job is defined. Both are the normal result on
-most installs, and both say so on stderr in the discovery task log rather than failing. Check that
-log before going back to the ACL: if the other modules discovered instances, the token is fine.
+most installs and neither fails; Ceph OSD also says so on stderr in the discovery task log. If the
+other modules discovered instances, the token is fine.
 
 **A module has instances but no data yet.** Check its collection interval before anything else.
 Backup Coverage is 60m, Certificates and Disks are 240m, and Subscription is 720m — these endpoints
-are expensive (Disks shells out to `smartctl` per disk) or the data changes daily at most, so they
-are deliberately slow. Press **Poll Now** instead of waiting out the interval.
+are expensive (listing disks makes Proxmox run `smartctl` on every disk) or the data changes daily
+at most, so they are deliberately slow. Press **Poll Now** instead of waiting out the interval.
 
 **HTTP 401 in the task log.** The secret is wrong or the token was deleted. Tokens cannot be
 recovered — delete and recreate.

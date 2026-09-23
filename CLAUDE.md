@@ -62,6 +62,9 @@ an instance to alert on. `Proxmox_VE_OnlineNodes.ad.groovy` filters to `status =
 exists for modules that reach into a node's own API: an offline node cannot answer, and an instance
 that can never collect is worse than no instance. A module reading node rows out of
 `/cluster/resources` wants Nodes; a module calling `/nodes/{node}/...` wants OnlineNodes.
+`Proxmox_VE_NodeDetail` is the one exception: it calls `/nodes/{node}/status` yet discovers through
+Nodes, so a node that is offline at discovery time gets an instance whose collection exits 2
+until the node returns. It predates OnlineNodes; do not copy it.
 
 Fourteen DataSources, two PropertySources and one TopologySource. `python build/build.py
 --check` prints the count, and
