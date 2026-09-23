@@ -291,7 +291,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 |---|---|
 | Modules built | 14 DataSources, 2 PropertySources, 1 TopologySource |
 | Scripts assembled | 26 compiled on Groovy 4, plus 2 Collector-only that cannot be |
-| Harness checks | 984, against a mock Proxmox API |
+| Harness checks | 979, against a mock Proxmox API |
 | Portal import | **verified** for all 17 modules |
 | Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |

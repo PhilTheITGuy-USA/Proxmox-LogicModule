@@ -5,13 +5,13 @@
   "group": "Proxmox VE",
   "appliesTo": "hasCategory(\"ProxmoxVE\")",
   "searchKeywords": "proxmox,pve,node,load,swap,rootfs,filesystem",
-  "technicalNotes": "Script collection: one /nodes/{node}/status call per node per interval. Node counts are bounded by cluster size, which is why this is acceptable here and would not be for guests.\n\nLoadPerCore normalises load average by logical CPU count so a single threshold is meaningful across differently sized nodes. Proxmox returns load average values as strings; the script coerces them explicitly.",
+  "technicalNotes": "Script collection: one /nodes/{node}/status call per node per interval. Discovery is online nodes only: an offline node cannot answer its own API, so an instance created for it would never collect. An instance already discovered survives the node going offline, and Proxmox_VE_Nodes is what reports the node as down. Node counts are bounded by cluster size, which is why this is acceptable here and would not be for guests.\n\nLoadPerCore normalises load average by logical CPU count so a single threshold is meaningful across differently sized nodes. Proxmox returns load average values as strings; the script coerces them explicitly.",
   "collectionMethod": "script",
   "collectionInterval": "5m",
   "multiInstance": true,
   "useWildValueAsUniqueIdentifier": true,
   "collectScript": "Proxmox_VE_NodeDetail.collect.groovy",
-  "discoveryScript": "Proxmox_VE_Nodes.ad.groovy",
+  "discoveryScript": "Proxmox_VE_OnlineNodes.ad.groovy",
   "discoveryInterval": "60m",
   "datapoints": [
     {
