@@ -97,13 +97,29 @@ Fourteen DataSources, two PropertySources and one TopologySource. `python build/
 | `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
 | `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
-| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only | 30m | — | 1, O(1) |
-| `Proxmox_VE_Topology` | TopologySource, Collector-only | 60m | — | 3 + 1 per guest on an online node |
+| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, **optional** | 30m | — | 1 with a token, 0 without |
+| `Proxmox_VE_Topology` | TopologySource, Collector-only, **optional** | 60m | — | 3 + 1 per guest on an online node |
 
 The TopologySource is the one O(guests) module: it reads each guest's `config` for its MAC, which
-is why it runs hourly. The docs call it and `addERI_Proxmox_VE` optional, but both apply by default
-on every Proxmox resource — a deliberate choice for now; making them opt-in is a follow-up in
-DESIGN §4.
+is why it runs hourly and is opt-in.
+
+**An optional module must not apply by default.** Mark it `"optional": true` in
+`modules/<Module>.json` and add `&& pve.<feature>.enabled == "true"` to its AppliesTo; its
+`technicalNotes` must name that property, since the portal is where someone will look for how to
+turn it on. `check_optional` in `build.py` enforces all three, and the reverse — an opt-in clause on
+an unmarked module — so the mark and the AppliesTo cannot drift apart. The two topology modules
+share `pve.topology.enabled` because neither works without the other. AppliesTo compares the
+string exactly, so the value is lowercase `true`.
+
+**`addERI_Proxmox_VE` is the one module that runs without the token**, and so the one not gated
+on `hasCategory("ProxmoxVE")`. The map needs its key on *every* node's resource, while the token
+belongs on one node per cluster — put it on every node and every DataSource collects the whole
+cluster once per node. Where a token is present it asks `/cluster/status`; otherwise
+`pveTopoNodeIdentity` in the preamble builds the identity from `pve.topology.cluster` and
+`pve.topology.node` or the short hostname, and returns null rather than guess. Its key must equal
+the TopologySource's byte for byte, which is why both go through `pveTopoKey` and why
+`addCategory_Proxmox_VE` publishes `pve.cluster.name` for the user to copy. Do not put a
+`pveConfigError` return back at the top of the script; the harness checks for it.
 
 **There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
 the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
@@ -187,20 +203,22 @@ widgets — better, export it and count them there. Tier 1 was missing four widg
 an export showed it.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE` is what sets that category, by calling
-`/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
-has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that is
-safe *only* because of the silence. Break it and the whole suite starts applying itself to unrelated
-Linux hosts.
+`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones (`addERI_Proxmox_VE`, above, is
+the exception); `addCategory_Proxmox_VE` is what sets that category, by calling `/version` and
+staying completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Its
+own AppliesTo is `true()`, so it runs on every resource in the portal, and that is safe *only*
+because of the silence. Break it and the whole suite starts applying itself to unrelated Linux
+hosts.
 
 The PropertySource export schema comes from real exports: `type` 5 for every PropertySource, with
 `script` as `{type, content}`; an **ERI** one additionally carries `propertySourceType: 1` and a
 `collectionInterval` that a plain one omits entirely.
 
 On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
-(when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
-so a cluster-only module can target standalone-versus-cluster in its AppliesTo without a second
-probe — dropping it breaks the harness and any future cluster-only module.
+(when present), `pve.clustered` and, on a cluster, `pve.cluster.name`; the harness pins all but
+`pve.release`. `pve.clustered` exists so a cluster-only module can target standalone-versus-cluster
+in its AppliesTo without a second probe — dropping it breaks the harness and any future cluster-only
+module.
 
 ## Build and verification
 
@@ -368,16 +386,16 @@ is a deliberate departure from house style: the santaba class is Collector-only,
 would make every script impossible to compile or run outside a Collector, costing us the compile
 check and the whole test harness. See `docs/DESIGN.md` §6.
 
-**Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and
-`addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets`, because LogicMonitor's own topology and
-ERI modules produce their output through the `lm.topo` snippet — `eriPreProcessor`, `isMac`,
-`emitEri`, `printEriArray`, `generateTopology` — and those formats are not documented well enough
-to reimplement. Hand-writing them would mean inventing a format, which is the failure this suite
-has actually suffered. `build.py` emits both to `dist/scripts/collector-only/`, a directory the
-compile job's `dist/scripts/*.groovy` glob does not reach, and the harness skips modules whose
-`moduleType` is `topologysource` or `propertysource`. Their Proxmox-side logic lives in preamble
-helpers — `pveTopoKey`, `pveGuestMac` — precisely so the harness can still reach it. Do not add a
-third without the same treatment, and do not move these two back.
+**Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and `addERI_Proxmox_VE`
+import `com.logicmonitor.mod.Snippets`, because LogicMonitor's own topology and ERI modules produce
+their output through the `lm.topo` snippet — `eriPreProcessor`, `isMac`, `emitEri`, `printEriArray`,
+`generateTopology` — and those formats are not documented well enough to reimplement. Hand-writing
+them would mean inventing a format, which is the failure this suite has actually suffered.
+`build.py` emits both to `dist/scripts/collector-only/`, a directory the compile job's
+`dist/scripts/*.groovy` glob does not reach, and the harness skips modules whose `moduleType` is
+`topologysource` or `propertysource`. Their Proxmox-side logic lives in preamble helpers —
+`pveTopoKey`, `pveGuestMac`, `pveTopoNodeIdentity` — precisely so the harness can still reach it. Do
+not add a third without the same treatment, and do not move these two back.
 
 The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and default-off.
 
@@ -413,11 +431,12 @@ matching the reference exports.
 
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
-the same — a row in the README table, and a fixture for every endpoint it calls. If the module
+the same — a row in the README table, and a fixture for every endpoint it calls. Anything
+O(guests), or otherwise not wanted on every Proxmox host, is `"optional": true`. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness on a
-hand-written fixture proves the parsing, not the shape, so a new module keeps the note until someone
-runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
+its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness
+on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
+someone runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance

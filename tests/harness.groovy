@@ -270,6 +270,10 @@ note('propertysource', detectedProps['pve.version'] == '8.2.2',
      "did not report the Proxmox version: ${detectedProps}")
 note('propertysource', detectedProps['pve.clustered'] == 'true',
      "did not detect cluster membership: ${detectedProps}")
+// The value a user copies into pve.topology.cluster on the token-less node resources. It
+// has to be the name the TopologySource keys the cluster on, which is this same row.
+note('propertysource', detectedProps['pve.cluster.name'] == 'pve-cluster',
+     "did not publish the cluster name: ${detectedProps}")
 
 // A portal is mostly non-Proxmox resources. The PropertySource must stay silent on them
 // rather than applying the whole suite to unrelated hosts.
@@ -347,6 +351,47 @@ note('topo-helpers', helper.noNic == null,
 note('topo-helpers', helper.nothing == null,
      "invented a MAC from a null config: ${helper.nothing}")
 
+// A node resource without the API token names itself from its properties. The key it
+// arrives at must be the one the TopologySource builds from /cluster/status for the same
+// node, or that node is not drawn -- and nothing reports the mismatch.
+def identityOf = { Map props ->
+    def run = runSource(preamble + '\nreturn pveTopoNodeIdentity()', [hostProps: props])
+    note('topo-identity', run.thrown == null, "pveTopoNodeIdentity threw ${run.thrown}")
+    run.exit
+}
+def keyOf = { Map props ->
+    def run = runSource(preamble + '''
+def id = pveTopoNodeIdentity()
+return id ? pveTopoKey(id.cluster, id.node) : null''', [hostProps: props])
+    run.exit
+}
+def clusterProp = ['pve.topology.cluster': 'pve-cluster']
+
+note('topo-identity', keyOf(clusterProp + ['system.hostname': 'pve2.example.com']) ==
+                      'proxmoxve--pve-cluster--pve2',
+     'an FQDN hostname did not yield the key the TopologySource builds for that node')
+note('topo-identity', identityOf(clusterProp + ['system.hostname': 'pve2']) ==
+                      [cluster: 'pve-cluster', node: 'pve2'],
+     'a short hostname was not taken as the node name')
+// sysname is what the host calls itself; hostname is whatever the resource was added as.
+note('topo-identity', identityOf(clusterProp + ['system.sysname': 'pve3',
+                                                'system.hostname': 'proxmox-c.lan'])?.node == 'pve3',
+     'system.hostname was preferred over system.sysname')
+note('topo-identity', identityOf(clusterProp + ['system.sysname': 'pve3',
+                                                'system.hostname': '10.0.0.13'])?.node == 'pve3',
+     'an IP hostname displaced a usable sysname')
+note('topo-identity', identityOf(clusterProp + ['pve.topology.node': 'pve4',
+                                                'system.sysname': 'pve3'])?.node == 'pve4',
+     'pve.topology.node did not override the derived name')
+// An address names nothing. Guessing would stamp a key that matches no vertex.
+note('topo-identity', identityOf(clusterProp + ['system.hostname': '10.0.0.12']) == null,
+     'an IPv4 address was taken as a node name')
+note('topo-identity', identityOf(clusterProp + ['system.hostname': 'fd00::12']) == null,
+     'an IPv6 address was taken as a node name')
+// No cluster name, no key: the TopologySource keys every node under the cluster's name.
+note('topo-identity', identityOf(['system.hostname': 'pve2']) == null,
+     'produced an identity with no pve.topology.cluster')
+
 // The ERI PropertySource is the other half of the node vertex, and it cannot run here
 // either: LogicMonitor's own addERI_* modules build the ERI output through lm.topo's
 // emitEri and printEriArray rather than printing JSON, so this script imports the same
@@ -373,9 +418,14 @@ note('addERI', eriScript.contains('lmtopo.emitEri(') &&
 // are not Proxmox, and a PropertySource that prints on one it does not understand
 // corrupts that resource's properties. Asserted by reading the guard, since the script
 // cannot be executed here.
-note('addERI', eriScript.contains('if (pveConfigError) {') &&
+note('addERI', eriScript.contains('if (!identity) {') &&
                eriScript.contains('return 0'),
-     'the ERI PropertySource does not return silently when unconfigured')
+     'the ERI PropertySource does not return silently when it cannot name the node')
+// The point of the property path: a node with no token still gets its key. If the script
+// ever returns on pveConfigError again, only the token-holding node can be drawn.
+note('addERI', eriScript.contains('pveTopoNodeIdentity()') &&
+               !eriScript.contains('if (pveConfigError) {'),
+     'the ERI PropertySource requires the API token again')
 
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),

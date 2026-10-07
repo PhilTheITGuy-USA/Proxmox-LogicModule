@@ -27,7 +27,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Subscription | BatchScript | Subscription status and renewal date, per node |
 | Proxmox VE Topology | TopologySource | Cluster, node and guest vertices and the edges between them |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
-| addERI_Proxmox_VE | PropertySource (ERI) | Gives a node's resource the ERI the topology map attaches to |
+| addERI_Proxmox_VE | PropertySource (ERI) | Gives each node's resource the ERI the topology map attaches to; needs no token |
 
 **Four modules carry the bulk of the suite on one API call each.** Nodes, Guest Performance,
 Guest Status and Storage Capacity each make **one** call per collection interval no matter how
@@ -45,7 +45,8 @@ fixed-cost. Node Services, Replication, Certificates, Disks and Subscription mak
 that owns it — and the expensive ones sit on long intervals for exactly that reason (Certificates
 and Disks at 240m, Subscription at 720m). Node counts are small and grow slowly; guest counts are
 neither. The one per-guest cost in the suite is the optional TopologySource, which reads each
-guest's config for its MAC address once an hour.
+guest's config for its MAC address once an hour — and it applies only where
+`pve.topology.enabled=true` is set.
 
 ## Dashboards
 
@@ -100,7 +101,9 @@ python build/build.py       # writes dist/
 Import every `dist/*.json` through **My Module Toolbox → Add → Import from file**, then set
 **`pve.api.token.credential`** on one Proxmox resource to the whole token string,
 `monitor@pve!logicmonitor=<secret>`. The PropertySource adds the `ProxmoxVE` category and every
-module applies itself from there.
+module applies itself from there — except the two optional topology modules, which need
+`pve.topology.enabled=true` and `pve.topology.cluster` on every node's resource, token or not
+(`docs/INSTALL.md` §3.3).
 
 Two things account for most failed installs:
 

@@ -161,6 +161,9 @@ secret is readable by anyone who can view the resource. Do not shorten it to `pv
 | `pve.api.port` | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | `false` | `true` accepts self-signed certificates. **Lab use only** |
+| `pve.topology.enabled` | unset | `true` (lowercase) turns on the optional topology modules — see §3.3 |
+| `pve.topology.cluster` | unset | The cluster's name, for node resources without the token — see §3.3 |
+| `pve.topology.node` | the short hostname | The node's Proxmox name, where the resource was added by IP — see §3.3 |
 
 Proxmox ships a self-signed certificate by default. If your Collector does not trust it, either
 install a trusted certificate on the node or set `pve.api.insecure=true` — the latter only where the
@@ -189,13 +192,41 @@ no longer any module to create by hand.
 `addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
 completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Every
 other module applies on `hasCategory("ProxmoxVE")`, so nothing applies to anything until Part 4
-sets the token.
+sets the token. The two optional modules in §3.3 additionally need their own property, so importing
+them changes nothing until you opt in.
 
 ### 3.3 The topology modules, if you want a map
 
 `Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional and only earn their place if the guests
 are **also monitored as their own LogicMonitor resources**. They draw cluster → node → guest edges
 so that a node's alerts can explain its guests'. Import `addERI_Proxmox_VE` first.
+
+**Both are off by default.** One property, `pve.topology.enabled=true`, turns on both — lowercase,
+since AppliesTo compares the string exactly. The TopologySource is also the one module whose cost
+grows with guest count (one config read per guest, hourly), which is a second reason it is not
+applied unasked.
+
+**Where to set it.** Every node of the cluster needs to be a LogicMonitor resource, because a node
+is drawn only through its own resource. Then, on those node resources — most simply on a resource
+group that holds the cluster's nodes and nothing else:
+
+| Property | Value |
+|---|---|
+| `pve.topology.enabled` | `true` |
+| `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `pve.cluster.name` |
+| `pve.topology.node` | only on a node whose resource was added by IP address — its Proxmox node name |
+
+That is all. The API token stays on one node, as §4.1 recommends:
+
+- `Proxmox_VE_Topology` runs only where the token is, and reports the whole cluster from there.
+- `addERI_Proxmox_VE` runs on every node. Where the resource has the token, it asks the API which
+  node it is; where it does not, it takes the cluster from `pve.topology.cluster` and the node name
+  from `pve.topology.node`, else from the resource's hostname. Proxmox requires a node's name to be
+  its hostname, so `pve2.example.com` is node `pve2` — but an IP address names nothing, hence
+  `pve.topology.node`.
+
+A **standalone host** needs only `pve.topology.enabled=true` on that host. Keep the property off
+guest resources: on a guest the ERI module would stamp a node key the map never asks for.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —
@@ -210,10 +241,10 @@ resource for `auto.snmp.operational` and `predef.externalResourceID` before susp
 **Test Script** on `Proxmox_VE_Topology` lists every edge it emits, one `Compute` edge per guest,
 which separates "not emitted" from "not drawn".
 
-**That PropertySource only runs where the token is set.** On the one-resource-per-cluster layout
-below, that is a single node: the other nodes' resources carry no matching key, so by the same rule
-they are not drawn, and their alerts cannot explain their guests'. Setting the token on every node
-fixes it, at the duplication cost §4.1 describes.
+**A node missing from the map** carries no matching key. Check its resource for
+`pve.topology.cluster` and, if it was added by IP, `pve.topology.node`; a name that differs from
+Proxmox's own in anything but case or punctuation matches nothing, silently. If the token is on
+every node, the TopologySource runs on every node too — the same map, built once per node.
 
 ---
 
@@ -267,6 +298,7 @@ the resource gains:
 | `pve.version` | the Proxmox version, e.g. `8.2.2` |
 | `pve.release` | the release, e.g. `8.2` |
 | `pve.clustered` | `true` on a cluster member, `false` on a standalone host |
+| `pve.cluster.name` | the cluster's name, on a cluster member only — what §3.3's `pve.topology.cluster` copies |
 
 As soon as `ProxmoxVE` appears in `system.categories`, the rest of the suite applies itself. Active
 Discovery then populates instances, and collection starts on each module's own interval.

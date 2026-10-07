@@ -181,6 +181,32 @@ def pveTopoKey = { String cluster, String node ->
 }
 
 /*
+ * Which cluster and node a resource stands for, read from its properties alone -- for a
+ * node resource that carries no API token, and so cannot ask /cluster/status. Giving
+ * every node the token would make every DataSource collect the whole cluster once per
+ * node, which is the duplication docs/INSTALL.md 4.1 warns against.
+ *
+ * The cluster name has no source but pve.topology.cluster, set once on the group that
+ * holds the nodes. The node name is pve.topology.node when set, and otherwise the short
+ * form of system.sysname or system.hostname: Proxmox requires a node's name to be its
+ * hostname, so the short hostname is the node name. An IP address says nothing about the
+ * name and is skipped. Returns null rather than guessing: a wrong key matches no vertex,
+ * which is indistinguishable on the map from no key at all, but costs a stray ERI.
+ */
+def pveTopoNodeIdentity = { ->
+    def cluster = pveHostProp('pve.topology.cluster')
+    if (!cluster) { return null }
+    def node = pveHostProp('pve.topology.node')
+    if (!node) {
+        def hostname = ['system.sysname', 'system.hostname']
+            .collect { pveHostProp(it) }
+            .find { it && !(it ==~ /\d{1,3}(\.\d{1,3}){3}/) && !it.contains(':') }
+        node = hostname?.tokenize('.')?.getAt(0)
+    }
+    return node ? [cluster: cluster, node: node] : null
+}
+
+/*
  * The MAC of a guest's first virtual NIC, out of a guest config.
  *
  * QEMU writes it as "virtio=BC:24:11:F8:1E:58,bridge=vmbr0" and LXC as
