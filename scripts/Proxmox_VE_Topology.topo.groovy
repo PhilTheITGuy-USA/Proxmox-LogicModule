@@ -20,10 +20,10 @@
  *   node   -- Proxmox exposes no hardware UUID or MAC for a node anywhere in its API
  *             (/cluster/status gives name, ip, nodeid; /nodes/{node}/status gives none;
  *             /nodes/{node}/network has no hwaddr). So the node key is synthesised, and
- *             addERI_Proxmox_VE stamps the identical key on each node's own resource.
- *             A node whose resource has not run that PropertySource still appears on the
- *             map, as a vertex matching no resource -- the picture is right, but that
- *             node's alerts will not suppress its guests'.
+ *             addERI_Proxmox_VE stamps the identical key on each node's own resource,
+ *             from the API where the resource has a token and from pve.topology.cluster
+ *             where it does not. A node whose resource carries no such key is not drawn:
+ *             the portal renders only vertices that match a resource (DESIGN section 7).
  *   cluster - synthesised, and matches nothing on purpose. VMware does the same for its
  *             cluster vertex: it exists only on the map.
  */

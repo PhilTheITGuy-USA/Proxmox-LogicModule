@@ -17,6 +17,17 @@
  * from drifting apart. They must produce byte-identical keys or every node vertex silently
  * stops matching its resource.
  *
+ * Where the cluster and node names come from. The map needs this key on EVERY node's
+ * resource, but only one resource per cluster normally carries the API token: give every
+ * node the token and every DataSource collects the whole cluster once per node. So:
+ *
+ *   token set     -- ask /cluster/status, as before. Exact, and all a standalone host needs.
+ *   no token      -- pveTopoNodeIdentity: pve.topology.cluster from the resource or its
+ *                    group, and the node name from pve.topology.node or the hostname.
+ *
+ * The API path falls back to the property path when the API cannot answer, so a node that
+ * is briefly unreachable keeps its key rather than losing it until the next run.
+ *
  * LIKE THE TOPOLOGYSOURCE, THIS CANNOT BE COMPILED OR RUN OUTSIDE A COLLECTOR. The ERI
  * output format is not hand-written JSON: LogicMonitor's own addERI_* modules build it
  * through lm.topo's emitEri and printEriArray, which also apply the topo.namespace and
@@ -32,10 +43,6 @@ import org.json.JSONArray
 import com.santaba.agent.groovy.utils.GroovyScriptHelper as GSH
 import com.logicmonitor.mod.Snippets
 
-if (pveConfigError) {
-    return 0
-}
-
 modLoader = GSH.getInstance(GroovySystem.version)
     .getScript('Snippets', Snippets.getLoader()).withBinding(getBinding())
 lmtopo = modLoader.load('lm.topo', '0')
@@ -48,21 +55,30 @@ def keyBlacklist = (pveHostProp('topo.blacklist') ?: '').tokenize(',')
 def ert = 'PhysicalServer'
 
 try {
-    def status = pveGet('/cluster/status') ?: []
+    def identity = null
+    if (!pveConfigError) {
+        try {
+            def status = pveGet('/cluster/status') ?: []
 
-    /*
-     * The node this resource is, not some node in the cluster: /cluster/status marks the
-     * responding node with local=true. Without that, every node in a cluster would be
-     * stamped with the same key and every vertex would collide.
-     */
-    def localRow = status.find { it.local }
-    def nodeName = localRow?.name?.toString()
-    if (!nodeName) {
+            /*
+             * The node this resource is, not some node in the cluster: /cluster/status
+             * marks the responding node with local=true. Without that, every node in a
+             * cluster would be stamped with the same key and every vertex would collide.
+             */
+            def localRow = status.find { it.local }
+            def nodeName = localRow?.name?.toString()
+            if (nodeName) {
+                def clusterRow = status.find { it.type?.toString() == 'cluster' }
+                identity = [cluster: clusterRow?.name?.toString() ?: nodeName, node: nodeName]
+            }
+        } catch (Exception apiException) {
+            // Fall through to the properties. Still silent: see the header.
+        }
+    }
+    identity = identity ?: pveTopoNodeIdentity()
+    if (!identity) {
         return 0
     }
-
-    def clusterRow = status.find { it.type?.toString() == 'cluster' }
-    def clusterName = clusterRow?.name?.toString() ?: nodeName
 
     /*
      * Its own category, so this combines with the MAC-based ERIs the resource already has
@@ -70,7 +86,7 @@ try {
      * category and merges across categories. Stamping into net.l2 would fight the MACs.
      */
     def keys = []
-    keys << pveTopoKey(clusterName, nodeName)
+    keys << pveTopoKey(identity.cluster, identity.node)
 
     def eriArray = new JSONArray()
     lmtopo.emitEri('proxmoxve', 1, keys, ert, eriArray)
