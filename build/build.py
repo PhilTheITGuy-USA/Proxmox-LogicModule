@@ -203,32 +203,6 @@ def module_type(defn: dict) -> str:
     return defn.get("moduleType", DATASOURCE)
 
 
-# An optional module must not apply by default. "optional": true in a definition marks one,
-# and its AppliesTo must then also require an opt-in property, pve.<feature>.enabled set to
-# "true" on the resource. The check runs both ways: an unmarked module may not carry an
-# opt-in clause either, so the mark and the AppliesTo cannot drift apart. technicalNotes
-# must name the property, because the portal is where someone will look for how to turn
-# the module on.
-OPTIONAL_KEY = "optional"
-OPT_IN_RE = re.compile(r"""\b(pve\.[a-z0-9_.]+\.enabled)\s*==\s*"true\"""")
-
-
-def check_optional(path: Path, defn: dict) -> list[str]:
-    opt_in = OPT_IN_RE.search(defn["appliesTo"])
-    if not defn.get(OPTIONAL_KEY):
-        if opt_in:
-            return [f"{path.name}: AppliesTo requires {opt_in.group(1)} but the module "
-                    f"is not marked \"{OPTIONAL_KEY}\": true"]
-        return []
-    if not opt_in:
-        return [f"{path.name}: an optional module must not apply by default -- AppliesTo "
-                f"needs '&& pve.<feature>.enabled == \"true\"'"]
-    if opt_in.group(1) not in defn.get("technicalNotes", ""):
-        return [f"{path.name}: technicalNotes must name the opt-in property "
-                f"{opt_in.group(1)}"]
-    return []
-
-
 def check_definition(path: Path, defn: dict) -> list[str]:
     kind = module_type(defn)
     if kind not in (DATASOURCE, TOPOLOGYSOURCE, PROPERTYSOURCE):
@@ -242,7 +216,7 @@ def check_definition(path: Path, defn: dict) -> list[str]:
         return [f"{path.name}: module definition is missing {', '.join(missing)}"]
     if kind != DATASOURCE and defn.get("datapoints"):
         return [f"{path.name}: a {kind} declares no datapoints"]
-    return check_optional(path, defn)
+    return []
 
 
 def build_propertysource(defn: dict) -> tuple[dict, dict[str, str]]:

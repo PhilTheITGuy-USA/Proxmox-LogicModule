@@ -214,8 +214,27 @@ populated on the target version before designing around it.
   Proxmox exposes no MAC or hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE`
   stamps a synthesised key on the node's resource and `pveTopoKey` is the single definition of its
   shape. Modelled on `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
-  **Optional, so off by default:** both add `&& pve.topology.enabled == "true"` to their AppliesTo.
-  The build enforces the rule for any module marked `"optional": true` (see CLAUDE.md).
+  Both apply by default, on `hasCategory("ProxmoxVE")` like the rest of the suite. Follow-ups, none
+  built:
+  - **Make both opt-in.** They are documented as optional, yet apply to every Proxmox resource,
+    and the TopologySource is the suite's one O(guests) module. Gate both on a property such as
+    `pve.topology.enabled == "true"`, and have the build refuse an optional module whose AppliesTo
+    lacks the clause. Left on by default deliberately, 2026-10-07.
+  - **Draw every node of a multi-node cluster.** `addERI_Proxmox_VE` needs the API token, so only
+    a node carrying it gets its key, and only such a node is drawn — while the token belongs on one
+    node per cluster (INSTALL §4.1), and putting it on every node duplicates every DataSource and
+    runs the TopologySource once per node. The fix designed: without a token, build the node key
+    from a `pve.topology.cluster` property and the resource's short hostname (a node's name is its
+    hostname), with `addCategory_Proxmox_VE` publishing the exact cluster name to copy.
+  - **Guests without SNMP.** A monitored guest that does not answer SNMP has no MAC in its ERI and
+    stays off the map. The TopologySource could emit the guest's synthesised
+    `pveTopoKey(cluster, kind-vmid)` alongside its MAC, and an ERI module stamp that key on a guest
+    resource carrying its VMID as a property. Costs a property per guest, and needs a portal to
+    confirm that a two-key vertex matches a one-key resource.
+  - **The TopologySource header is stale.** It says a node without the ERI "still appears on the
+    map"; §7 found the portal draws only vertices that match a resource. By the same finding the
+    cluster vertex, which matches nothing on purpose, may not be drawn at all — unseen until a
+    multi-node map is.
 
 ---
 
@@ -301,7 +320,6 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
 | TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
-| Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an

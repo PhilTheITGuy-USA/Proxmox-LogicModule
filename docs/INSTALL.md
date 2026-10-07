@@ -161,7 +161,6 @@ secret is readable by anyone who can view the resource. Do not shorten it to `pv
 | `pve.api.port` | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | `false` | `true` accepts self-signed certificates. **Lab use only** |
-| `pve.topology.enabled` | unset | `true` (lowercase) turns on the optional topology modules — see §3.3 |
 
 Proxmox ships a self-signed certificate by default. If your Collector does not trust it, either
 install a trusted certificate on the node or set `pve.api.insecure=true` — the latter only where the
@@ -190,20 +189,13 @@ no longer any module to create by hand.
 `addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
 completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Every
 other module applies on `hasCategory("ProxmoxVE")`, so nothing applies to anything until Part 4
-sets the token. The two optional modules in §3.3 additionally need their own property, so importing
-them changes nothing until you opt in.
+sets the token.
 
 ### 3.3 The topology modules, if you want a map
 
 `Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional and only earn their place if the guests
 are **also monitored as their own LogicMonitor resources**. They draw cluster → node → guest edges
 so that a node's alerts can explain its guests'. Import `addERI_Proxmox_VE` first.
-
-**Both are off by default.** They apply only to a resource that also carries
-`pve.topology.enabled=true` — lowercase, since AppliesTo compares the string exactly. One property
-turns on both, because neither is useful alone. The TopologySource is also the one module whose
-cost grows with guest count (one config read per guest, hourly), which is a second reason it is
-not applied unasked.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —

@@ -97,19 +97,13 @@ Fourteen DataSources, two PropertySources and one TopologySource. `python build/
 | `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
 | `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
-| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, **optional** | 30m | — | 1, O(1) |
-| `Proxmox_VE_Topology` | TopologySource, Collector-only, **optional** | 60m | — | 3 + 1 per guest on an online node |
+| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only | 30m | — | 1, O(1) |
+| `Proxmox_VE_Topology` | TopologySource, Collector-only | 60m | — | 3 + 1 per guest on an online node |
 
 The TopologySource is the one O(guests) module: it reads each guest's `config` for its MAC, which
-is why it runs hourly and is opt-in.
-
-**An optional module must not apply by default.** Mark it `"optional": true` in
-`modules/<Module>.json` and add `&& pve.<feature>.enabled == "true"` to its AppliesTo; its
-`technicalNotes` must name that property, since the portal is where someone will look for how to
-turn it on. `check_optional` in `build.py` enforces all three, and the reverse — an opt-in clause on
-an unmarked module — so the mark and the AppliesTo cannot drift apart. The two topology modules
-share `pve.topology.enabled` because neither works without the other. AppliesTo compares the
-string exactly, so the value is lowercase `true`.
+is why it runs hourly. The docs call it and `addERI_Proxmox_VE` optional, but both apply by default
+on every Proxmox resource — a deliberate choice for now; making them opt-in is a follow-up in
+DESIGN §4.
 
 **There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
 the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
@@ -193,11 +187,11 @@ widgets — better, export it and count them there. Tier 1 was missing four widg
 an export showed it.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones; `addCategory_Proxmox_VE` is
-what sets that category, by calling `/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
-has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that
-is safe *only* because of the silence. Break it and the whole suite starts applying itself to
-unrelated Linux hosts.
+`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE` is what sets that category, by calling
+`/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
+has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that is
+safe *only* because of the silence. Break it and the whole suite starts applying itself to unrelated
+Linux hosts.
 
 The PropertySource export schema comes from real exports: `type` 5 for every PropertySource, with
 `script` as `{type, content}`; an **ERI** one additionally carries `propertySourceType: 1` and a
@@ -210,12 +204,13 @@ probe — dropping it breaks the harness and any future cluster-only module.
 
 ## Build and verification
 
-The commands are at the top of this file. The build refuses to emit if a collection script prints an undeclared datapoint, if a declared
-datapoint is never printed (unless marked `"conditional": true` in the module definition), if a
-`batchscript` module is not `multiInstance` or a `multiInstance` module has no discovery script, or
-if brackets are unbalanced in an assembled script, or if a datapoint uses a name LogicMonitor
-reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a portal, so the CephOSD datapoint is
-`OSDIn`). The Docker image, `groovy:4-jdk17`, matches the Collector's runtime.
+The commands are at the top of this file. The build refuses to emit if a collection script prints an
+undeclared datapoint, if a declared datapoint is never printed (unless marked `"conditional": true`
+in the module definition), if a `batchscript` module is not `multiInstance` or a `multiInstance`
+module has no discovery script, or if brackets are unbalanced in an assembled script, or if a
+datapoint uses a name LogicMonitor reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a
+portal, so the CephOSD datapoint is `OSDIn`). The Docker image, `groovy:4-jdk17`, matches the
+Collector's runtime.
 
 **`modules/<Module>.json` is the build's input, not the export format.** `build.py` supplies the
 defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: namevalue`,
@@ -418,12 +413,11 @@ matching the reference exports.
 
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
-the same — a row in the README table, and a fixture for every endpoint it calls. Anything
-O(guests), or otherwise not wanted on every Proxmox host, is `"optional": true`. If the module
+the same — a row in the README table, and a fixture for every endpoint it calls. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness
-on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
-someone runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
+its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness on a
+hand-written fixture proves the parsing, not the shape, so a new module keeps the note until someone
+runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
