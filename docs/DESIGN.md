@@ -214,6 +214,8 @@ populated on the target version before designing around it.
   Proxmox exposes no MAC or hardware UUID for a node anywhere in its API, so `addERI_Proxmox_VE`
   stamps a synthesised key on the node's resource and `pveTopoKey` is the single definition of its
   shape. Modelled on `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
+  **Optional, so off by default:** both add `&& pve.topology.enabled == "true"` to their AppliesTo.
+  The build enforces the rule for any module marked `"optional": true` (see CLAUDE.md).
 
 ---
 
@@ -299,6 +301,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
 | TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
+| Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an
@@ -345,6 +348,21 @@ wrong would have produced a dashboard that imported cleanly and rendered empty t
 the same shape of defect as the `##WILDVALUE##` post-processor bug below and equally invisible to
 every local check. All twenty widgets carry real data, so both conventions hold. The Tier 2
 dashboard (`dashboards/Proxmox_VE_Tier2.py`) is built on them.
+
+**The dashboards lost widgets at import, silently, twice over.** On 2026-09-22 a portal discarded
+nine of Tier 2's fifteen widgets and four of Tier 1's twenty, reporting only `Some widgets could
+not be created due to incompatible version or configuration errors` — once, on first load, naming
+no widget. Both dashboards imported, the survivors rendered correctly, and the grid floated the
+rest upward to close the gaps, so Tier 1 had looked complete since 2026-09-15. A portal export is
+what showed it. Every casualty carried a value found nowhere in the reference exports:
+`displayType: "number"` on a column, `topX: 20` on a cgraph, `topX` of `50`/`100` on a table,
+`colorThresholds: null`, and column bounds other than `0..100`. `build/dashboards.py` now pins
+each of those, mutation-tested one field at a time. Tier 2's description was also 266 characters
+and the portal had truncated its last sentence, hence the 256-character check.
+
+The same day, Tier 2 was imported one module rebuild too early and lost exactly one widget — the
+one naming `SizeGB`, a datapoint the portal's copy of the module did not yet have. Re-importing the
+module first brought it to 15 of 15. A dashboard's modules must be imported before the dashboard.
 
 The harness is mutation-tested: reintroducing the template-discovery bug and the QEMU
 used-disk bug both make it fail, so a green run means something.
