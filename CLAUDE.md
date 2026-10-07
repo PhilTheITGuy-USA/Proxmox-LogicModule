@@ -10,6 +10,18 @@ executed by a LogicMonitor Collector. The target is a suite publishable to the L
 works unchanged from a single node to a large enterprise cluster; see `docs/DESIGN.md` for the
 parity analysis against LogicMonitor's VMware/Hyper-V/Nutanix suites and the backlog.
 
+```sh
+python build/build.py           # assemble dist/
+python build/build.py --check   # validate only; prints the module and dashboard count
+
+docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 4
+docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
+```
+
+Always in that order: both Docker jobs read `dist/scripts/`, so an un-rebuilt edit is silently
+tested in its previous form. Groovy is not installed locally; Docker is the only way to compile or
+run anything. There is no single-test mode — see Build and verification.
+
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
 implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
@@ -62,12 +74,11 @@ an instance to alert on. `Proxmox_VE_OnlineNodes.ad.groovy` filters to `status =
 exists for modules that reach into a node's own API: an offline node cannot answer, and an instance
 that can never collect is worse than no instance. A module reading node rows out of
 `/cluster/resources` wants Nodes; a module calling `/nodes/{node}/...` wants OnlineNodes.
-NodeDetail discovered through Nodes until 2026-09-23 and was moved; both bodies emit the same
-wildvalue, the node's Proxmox `id`, which is what made the move safe for existing instances.
+Both bodies emit the same wildvalue, the node's Proxmox `id`, so a module can move from one to
+the other without orphaning its existing instances.
 
 Fourteen DataSources, two PropertySources and one TopologySource. `python build/build.py
---check` prints the count, and
-is the fastest way to confirm this table has not drifted.
+--check` prints the count, and is the fastest way to confirm this table has not drifted.
 
 | Module | Method | Interval | Discovery | Calls per interval |
 |---|---|---|---|---|
@@ -85,6 +96,20 @@ is the fastest way to confirm this table has not drifted.
 | `Proxmox_VE_Certificates` | batchscript | 240m | `Certificates.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
+| `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
+| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, **optional** | 30m | — | 1, O(1) |
+| `Proxmox_VE_Topology` | TopologySource, Collector-only, **optional** | 60m | — | 3 + 1 per guest on an online node |
+
+The TopologySource is the one O(guests) module: it reads each guest's `config` for its MAC, which
+is why it runs hourly and is opt-in.
+
+**An optional module must not apply by default.** Mark it `"optional": true` in
+`modules/<Module>.json` and add `&& pve.<feature>.enabled == "true"` to its AppliesTo; its
+`technicalNotes` must name that property, since the portal is where someone will look for how to
+turn it on. `check_optional` in `build.py` enforces all three, and the reverse — an opt-in clause on
+an unmarked module — so the mark and the AppliesTo cannot drift apart. The two topology modules
+share `pve.topology.enabled` because neither works without the other. AppliesTo compares the
+string exactly, so the value is lowercase `true`.
 
 **There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
 the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
@@ -126,22 +151,15 @@ names were. `REFERENCE_KEYS` and the enum tuples record what those files actuall
 `check_dashboard` refuses anything this project invented on its own — an unexpected key breaks an
 import as readily as a missing one, and neither reports an error in the portal.
 
-**"Invented" means the values too, not just the keys, and that lesson cost a portal round trip.**
-On 2026-09-22 a portal silently discarded nine of the Tier 2 dashboard's fifteen widgets and four
-of Tier 1's twenty, reporting only `Some widgets could not be created due to incompatible version
-or configuration errors` — once, on first load, naming no widget. The dashboard imported, the
-survivors looked perfect, and the gaps closed up because the grid floats widgets upward. Every
-casualty carried a value that appears nowhere in the reference exports: `displayType: "number"` on
-a column (the real vocabulary is `percent` and `raw`), `topX: 20` on a cgraph (only `10` and `25`
-exist), `topX` of `50`/`100` on a table (only `25` and `-1`), `colorThresholds: null` where the
-references always carry a list, and per-column `minValue`/`maxValue` other than `0`/`100` — the
-references use `0..100` on *every* column, including `raw` ones like Nutanix's `IOPs` whose values
-run far past 100, so the bounds are read for the percent bar and ignored otherwise. `COLUMN_*`,
-`CGRAPH_TOP_X` and `TABLE_TOP_X` in `build/dashboards.py` now pin all of it and `_check_column`
-enforces it, mutation-tested one field at a time. The `column()` helper no longer accepts bounds
-at all, which is the only way to keep them from drifting back. A dashboard `description` is
-capped at **256 characters** — the portal truncates past it and says nothing — so
-`check_dashboard` measures it; Tier 2's was 266 and lost its last sentence.
+**"Invented" means the values too, not just the keys.** A widget carrying a value absent from the
+reference exports is silently dropped at import — the portal shows one unspecific warning on first
+load, and the grid closes the gap, so the dashboard looks whole (DESIGN §7 has the incident). The
+allowed vocabularies: column `displayType` is `percent` or `raw`; cgraph `topX` is `10` or `25`;
+table `topX` is `25` or `-1`; `colorThresholds` is always a list, never `null`; column
+`minValue`/`maxValue` are always `0`/`100`, even on `raw` columns. `COLUMN_*`, `CGRAPH_TOP_X` and
+`TABLE_TOP_X` in `build/dashboards.py` pin these and `_check_column` enforces them; the `column()`
+helper deliberately takes no bounds. A dashboard `description` is capped at **256 characters** —
+the portal truncates past it silently — and `check_dashboard` measures it.
 
 **Do not migrate the tables to the portal's newer `table` widget.** A current portal builds tables
 as `type: "table"` with `displaySettings.columnsV4` and serialises its rows as resolved integers —
@@ -152,49 +170,38 @@ only form that expresses "every instance, wherever this resource lives" as globs
 **The check that earns its keep is the module reference.** A widget addresses a module as
 `"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — a plain string with
 nothing in LogicMonitor enforcing it. Rename a module, its `displayedAs`, or a datapoint, and
-every widget pointing at it is **discarded at import** — confirmed on 2026-09-22, when the Tier 2
-dashboard was imported one module-rebuild too early and lost exactly the one widget naming a
-datapoint (`SizeGB`) the portal's copy of that module did not yet have. It fails the same silent
-way as the invented values above, which also means **a module the dashboard depends on must be
-imported before the dashboard**, not after. So the build resolves
+every widget pointing at it is **discarded at import**, as silently as the invented values above.
+The portal resolves the reference against *its* copy of the module, so **a module the dashboard
+depends on must be imported before the dashboard**, not after. The build resolves
 every widget reference against `modules/*.json` and fails if one does not exist. It also refuses
 overlapping widgets, which render on top of each other rather than erroring. Both checks are
 mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each
 make `build.py --check` exit 1.
 
-Two things it cannot check, **both confirmed in a portal on 2026-09-15** rather than inferred.
-Widgets legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
+Two things it cannot check, **both portal-confirmed** rather than inferred (DESIGN §7). Widgets
+legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
 Hyper-V dashboards use — those suites give each hypervisor its own resource, while this one puts
 every node, guest and storage object on a single resource as instances, so legending on hostname
 gives every series the same label. And a widget aimed at a *conditional* datapoint renders blank
 rather than erroring, which is why the cluster tile shows `ClusterConfigured` (always emitted)
-rather than `Quorate` (withheld on a standalone host).
+rather than `Quorate` (withheld on a standalone host). A new dashboard should copy the
+`"<displayedAs> (<name>)"` reference form and the `##INSTANCE##` legend rather than re-deriving
+them: either being wrong yields a dashboard that imports cleanly and renders nothing.
 
-`Proxmox_VE_Tier1` imported and populated with live data, which is the only proof available that
-the `"<displayedAs> (<name>)"` reference form and the `##INSTANCE##` legend are right — both are
-plain strings LogicMonitor does not validate, and either being wrong yields a dashboard that
-imports cleanly and renders nothing. A new dashboard should copy those two conventions rather
-than re-deriving them.
-
-It populated **sixteen of its twenty widgets**, not all twenty as this file claimed until
-2026-09-22; the four missing were `dynamicTable`s dropped at import for the invented values
-above, and a portal export is what revealed it. The lesson is that *a dashboard looking right in
-the portal is not evidence that it imported whole* — count the widgets, or better, export it and
-count them there. `Proxmox_VE_Tier2` reached 15 of 15 on 2026-09-22, once the module it depends
-on was re-imported first.
+**A dashboard looking right in the portal is not evidence that it imported whole.** Count the
+widgets — better, export it and count them there. Tier 1 was missing four widgets for a week before
+an export showed it.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`; `addCategory_Proxmox_VE` is what sets that category, by calling
-`/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
+`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones; `addCategory_Proxmox_VE` is
+what sets that category, by calling `/version` and staying completely silent — exit 0, no output — on any host that is not Proxmox or
 has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that
 is safe *only* because of the silence. Break it and the whole suite starts applying itself to
 unrelated Linux hosts.
 
-It used to ship as a script to paste into the UI, because no published sample was available to
-verify the PropertySource export schema against. Two exports settled that on 2026-09-22: `type` 5
-for every PropertySource, with `script` as `{type, content}`, and an **ERI** one additionally
-carrying `propertySourceType: 1` and a `collectionInterval` that a plain one omits entirely. Both
-kinds are now ordinary importable modules.
+The PropertySource export schema comes from real exports: `type` 5 for every PropertySource, with
+`script` as `{type, content}`; an **ERI** one additionally carries `propertySourceType: 1` and a
+`collectionInterval` that a plain one omits entirely.
 
 On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
 (when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
@@ -203,25 +210,12 @@ probe — dropping it breaks the harness and any future cluster-only module.
 
 ## Build and verification
 
-```sh
-python build/build.py           # assemble dist/
-python build/build.py --check   # validate only
-
-docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 4
-docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
-```
-
-**Rebuild before you verify.** Both Docker jobs read `dist/scripts/`, never `scripts/`, so an
-un-rebuilt edit is silently tested in its previous form. The loop is always
-`python build/build.py` → `compile` → `tests`.
-
-The build refuses to emit if a collection script prints an undeclared datapoint, if a declared
+The commands are at the top of this file. The build refuses to emit if a collection script prints an undeclared datapoint, if a declared
 datapoint is never printed (unless marked `"conditional": true` in the module definition), if a
 `batchscript` module is not `multiInstance` or a `multiInstance` module has no discovery script, or
 if brackets are unbalanced in an assembled script, or if a datapoint uses a name LogicMonitor
 reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a portal, so the CephOSD datapoint is
-`OSDIn`). Groovy is not installed on this machine — Docker is how these get compiled and run, and
-`groovy:4-jdk17` matches the Collector's runtime.
+`OSDIn`). The Docker image, `groovy:4-jdk17`, matches the Collector's runtime.
 
 **`modules/<Module>.json` is the build's input, not the export format.** `build.py` supplies the
 defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: namevalue`,
@@ -408,9 +402,9 @@ enforces the first two agreeing; nothing enforces the third.
 `README.md`, `docs/INSTALL.md` and `docs/DESIGN.md` §4 and §7. Nothing checks any of them. Grep
 the docs for the previous count before claiming a module is done.
 
-**Verification status belongs in exactly one place: `docs/DESIGN.md` §7.** It used to be restated
-in README, INSTALL and a whole `docs/VALIDATION.md`, which is how "Tier 1 imports all twenty
-widgets" stayed written down for a week after it stopped being true. Record it in §7 and link.
+**Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
+which says *what* to verify but not *when* it was. Copies elsewhere go stale unnoticed; record it
+in §7 and link.
 
 **The drift check is a regex, not an interpreter.** `build.py` finds emitted names with
 `pveEmit(<anything>, '<Literal>'`. A datapoint name held in a variable or built by concatenation is
@@ -424,13 +418,12 @@ matching the reference exports.
 
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
-the same — a row in the README table, and a fixture for every endpoint it calls. If the module
+the same — a row in the README table, and a fixture for every endpoint it calls. Anything
+O(guests), or otherwise not wanted on every Proxmox host, is `"optional": true`. If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. No module is in
-that state today; the last two, `Proxmox_VE_Topology` and `addERI_Proxmox_VE`, were confirmed in a
-portal on 2026-09-23. A green
-harness on a hand-written fixture proves the parsing, not the shape, so a new module keeps the
-note until someone runs it.
+its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness
+on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
+someone runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
 that is both `script` and `multiInstance`: it executes once per node and reads its instance
