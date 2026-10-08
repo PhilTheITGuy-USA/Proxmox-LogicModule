@@ -22,6 +22,12 @@ Always in that order: both Docker jobs read `dist/scripts/`, so an un-rebuilt ed
 tested in its previous form. Groovy is not installed locally; Docker is the only way to compile or
 run anything. There is no single-test mode — see Build and verification.
 
+**Use the `logicmonitor-modules` skill for any module, dashboard or LogicMonitor API work here.** It
+carries the platform rules this file assumes, and its `scripts/lm_lint_module.py` and
+`scripts/lm_dashboards.py check` run against `dist/` as a second check after the build. The skill
+lives in its own repo (`PhilTheITGuy-USA/logicmonitor-modules-skill`), not this one; a lesson this
+repo learns from a portal belongs there too.
+
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
 implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
@@ -42,7 +48,7 @@ scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output 
 scripts/<Subject>.ad.groovy      Active Discovery bodies, named per subject and often shared
 scripts/<Module>.collect.groovy  collection bodies, one per module
 scripts/<Module>.topo.groovy     TopologySource body; Collector-only, see below
-scripts/addCategory_*.groovy     PropertySource bodies, likewise one per module
+scripts/add*_Proxmox_VE.groovy   PropertySource bodies (addCategory, addERI), one per module
 modules/<Module>.json            build-time module definition: metadata + datapoint declarations
 build/build.py                   assembles preamble + body into importable module JSON,
                                  and renders dashboards/*.py into dist/dashboards/
