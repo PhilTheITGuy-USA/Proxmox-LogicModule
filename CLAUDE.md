@@ -22,11 +22,9 @@ Always in that order: both Docker jobs read `dist/scripts/`, so an un-rebuilt ed
 tested in its previous form. Groovy is not installed locally; Docker is the only way to compile or
 run anything. There is no single-test mode — see Build and verification.
 
-**Use the `logicmonitor-modules` skill for any module, dashboard or LogicMonitor API work here.** It
-carries the platform rules this file assumes, and its `scripts/lm_lint_module.py` and
-`scripts/lm_dashboards.py check` run against `dist/` as a second check after the build. The skill
-lives in its own repo (`PhilTheITGuy-USA/logicmonitor-modules-skill`), not this one; a lesson this
-repo learns from a portal belongs there too.
+**Use the `logicmonitor-modules` skill** (`PhilTheITGuy-USA/logicmonitor-modules-skill`, its own
+repo) for module, dashboard and API work; the workspace `..\CLAUDE.md` says how to run its checks
+over `dist/`.
 
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
