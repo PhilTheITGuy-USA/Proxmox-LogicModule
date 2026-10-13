@@ -16,15 +16,17 @@ python build/build.py --check   # validate only; prints the module and dashboard
 
 docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 4
 docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
+
+python ..\logicmonitor-modules-skill\skill\scripts\lm_lint_module.py dist\*.json
+python ..\logicmonitor-modules-skill\skill\scripts\lm_dashboards.py check dist\dashboards\*.json --modules modules
 ```
 
-Always in that order: both Docker jobs read `dist/scripts/`, so an un-rebuilt edit is silently
-tested in its previous form. Groovy is not installed locally; Docker is the only way to compile or
-run anything. There is no single-test mode — see Build and verification.
+Always in that order: both Docker jobs and both skill checks read `dist/`, so an un-rebuilt edit
+is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
+compile or run anything. There is no single-test mode — see Build and verification.
 
 **Use the `logicmonitor-modules` skill** (`PhilTheITGuy-USA/logicmonitor-modules-skill`, its own
-repo) for module, dashboard and API work; the workspace `..\CLAUDE.md` says how to run its checks
-over `dist/`.
+repo) for module, dashboard and API work; the last two commands above are its checks.
 
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
 change from the current implementation", reads like a to-do list but every one of its ten items is
@@ -137,54 +139,30 @@ Ceph it prints nothing and returns 0: a fourth exit shape, meaning *nothing to r
 
 **Dashboards are a second artifact with its own source-of-truth split.** `dashboards/<Name>.py`
 is the definition — a `build()` returning a `Dashboard` — and `build.py` renders it to
-`dist/dashboards/<Name>.json`. The rendered JSON is generated output like everything else under
-`dist/`: never edit it, never commit it. `build/dashboards.py` holds the widget builders and the
-validation. A dashboard is a different LogicMonitor resource from a LogicModule and imports
-through **Dashboards → Add → From File**, not My Module Toolbox.
+`dist/dashboards/<Name>.json`, generated output like the rest of `dist/`. It imports through
+**Dashboards → Add → From File**, not My Module Toolbox, and only after the modules it references.
 
-The schema in `build/dashboards.py` was taken from LogicMonitor's own published exports
-(`logicmonitor/dashboards`, Apache-2.0 — `Virtualization/Hyper-V.json` for cgraph, dynamicTable,
-noc and alert; `Virtualization/Nutanix.json` for bigNumber), the same way the module export field
-names were. `REFERENCE_KEYS` and the enum tuples record what those files actually contain, and
-`check_dashboard` refuses anything this project invented on its own — an unexpected key breaks an
-import as readily as a missing one, and neither reports an error in the portal.
+`build/dashboards.py` holds the widget builders and the validation. Its schema was copied from
+LogicMonitor's published exports (`logicmonitor/dashboards`: `Virtualization/Hyper-V.json` for
+cgraph, dynamicTable, noc and alert; `Virtualization/Nutanix.json` for bigNumber). `REFERENCE_KEYS`
+and the enum tuples record what those files contain, and `check_dashboard` refuses any key *or
+value* this project invented — the portal drops either silently. `COLUMN_*`, `CGRAPH_TOP_X` and
+`TABLE_TOP_X` pin the allowed values and `_check_column` enforces them; the `column()` helper
+deliberately takes no bounds. The skill's `references/dashboards.md` lists those vocabularies, the
+256-character description cap and why the tables stay legacy `dynamicTable` — do not migrate them
+to the newer `table` widget.
 
-**"Invented" means the values too, not just the keys.** A widget carrying a value absent from the
-reference exports is silently dropped at import — the portal shows one unspecific warning on first
-load, and the grid closes the gap, so the dashboard looks whole (DESIGN §7 has the incident). The
-allowed vocabularies: column `displayType` is `percent` or `raw`; cgraph `topX` is `10` or `25`;
-table `topX` is `25` or `-1`; `colorThresholds` is always a list, never `null`; column
-`minValue`/`maxValue` are always `0`/`100`, even on `raw` columns. `COLUMN_*`, `CGRAPH_TOP_X` and
-`TABLE_TOP_X` in `build/dashboards.py` pin these and `_check_column` enforces them; the `column()`
-helper deliberately takes no bounds. A dashboard `description` is capped at **256 characters** —
-the portal truncates past it silently — and `check_dashboard` measures it.
+**The check that earns its keep is the module reference.** A widget addresses a module as the plain
+string `"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"`. The build resolves
+every widget reference against `modules/*.json`, and refuses overlapping widgets. Both checks are
+mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each make
+`build.py --check` exit 1.
 
-**Do not migrate the tables to the portal's newer `table` widget.** A current portal builds tables
-as `type: "table"` with `displaySettings.columnsV4` and serialises its rows as resolved integers —
-`deviceId`, `instanceId`, `dataPointId`, `dataSourceId`. Those are account-specific, so such a
-dashboard cannot ship to anyone else's portal. The legacy `dynamicTable` still imports and is the
-only form that expresses "every instance, wherever this resource lives" as globs.
-
-**The check that earns its keep is the module reference.** A widget addresses a module as
-`"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"` — a plain string with
-nothing in LogicMonitor enforcing it. Rename a module, its `displayedAs`, or a datapoint, and
-every widget pointing at it is **discarded at import**, as silently as the invented values above.
-The portal resolves the reference against *its* copy of the module, so **a module the dashboard
-depends on must be imported before the dashboard**, not after. The build resolves
-every widget reference against `modules/*.json` and fails if one does not exist. It also refuses
-overlapping widgets, which render on top of each other rather than erroring. Both checks are
-mutation-tested: renaming a datapoint, renaming a module and moving a widget onto another each
-make `build.py --check` exit 1.
-
-Two things it cannot check, **both portal-confirmed** rather than inferred (DESIGN §7). Widgets
-legend on `##INSTANCE##`, not the `##HOSTNAME##` that LogicMonitor's own VMware and
-Hyper-V dashboards use — those suites give each hypervisor its own resource, while this one puts
-every node, guest and storage object on a single resource as instances, so legending on hostname
-gives every series the same label. And a widget aimed at a *conditional* datapoint renders blank
-rather than erroring, which is why the cluster tile shows `ClusterConfigured` (always emitted)
-rather than `Quorate` (withheld on a standalone host). A new dashboard should copy the
-`"<displayedAs> (<name>)"` reference form and the `##INSTANCE##` legend rather than re-deriving
-them: either being wrong yields a dashboard that imports cleanly and renders nothing.
+Two things it cannot check, **both portal-confirmed** (DESIGN §7). Widgets legend on
+`##INSTANCE##`, not the `##HOSTNAME##` LogicMonitor's VMware and Hyper-V dashboards use, because
+this suite puts every node, guest and storage object on one resource as instances. And a widget
+aimed at a *conditional* datapoint renders blank, which is why the cluster tile shows
+`ClusterConfigured` (always emitted) rather than `Quorate` (withheld on a standalone host).
 
 **A dashboard looking right in the portal is not evidence that it imported whole.** Count the
 widgets — better, export it and count them there. Tier 1 was missing four widgets for a week before
@@ -196,10 +174,6 @@ an export showed it.
 has no token. Its own AppliesTo is `true()`, so it runs on every resource in the portal, and that is
 safe *only* because of the silence. Break it and the whole suite starts applying itself to unrelated
 Linux hosts.
-
-The PropertySource export schema comes from real exports: `type` 5 for every PropertySource, with
-`script` as `{type, content}`; an **ERI** one additionally carries `propertySourceType: 1` and a
-`collectionInterval` that a plain one omits entirely.
 
 On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
 (when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
@@ -213,7 +187,8 @@ undeclared datapoint, if a declared datapoint is never printed (unless marked `"
 in the module definition), if a `batchscript` module is not `multiInstance` or a `multiInstance`
 module has no discovery script, or if brackets are unbalanced in an assembled script, or if a
 datapoint uses a name LogicMonitor reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a
-portal, so the CephOSD datapoint is `OSDIn`). The Docker image, `groovy:4-jdk17`, matches the
+portal, so the CephOSD datapoint is `OSDIn`), or if a module count in the docs disagrees with
+`modules/` (`check_doc_counts`). The Docker image, `groovy:4-jdk17`, matches the
 Collector's runtime.
 
 **`modules/<Module>.json` is the build's input, not the export format.** `build.py` supplies the
@@ -263,97 +238,49 @@ Do not replace this with a per-guest production test loop. For live HA testing, 
 loss/recovery, node changes, guest migration or failover, HA error/fence states, and temporary
 HA endpoint failure; confirm existing instances remain intact on non-zero collection exits.
 
-## The Collector contract (get these wrong and the DataSource silently breaks)
+## How this repo meets the Collector contract
 
-**Property lookup.** Resource-level properties (`pve.api.url`, `pve.api.token.credential`, ...) come from
-`hostProps`. Instance-level properties set by Active Discovery come from `taskProps` /
-`instanceProps`, and may be prefixed `auto.`. `pveInstanceProp` in the preamble is the only correct
-way to read them: it tries `taskProps[key]`, `taskProps['auto.'+key]`, `instanceProps[key]`,
-`instanceProps['auto.'+key]` in order, guarded by `binding.hasVariable` because neither binding
-exists during Active Discovery. Reading an instance property out of `hostProps` returns null and the
-script fails at runtime, not at edit time.
+The contract itself — bindings, Active Discovery line format, Script vs BatchScript output,
+`##WILDVALUE##.` keys, numeric values, `derive` vs `gauge`, exit codes, `.credential` masking — is in
+the `logicmonitor-modules` skill (`SKILL.md` and `references/collector-scripting.md`). This section
+is only where this repo implements it, and what it has cost here.
 
-**Secrets are named by suffix.** LogicMonitor treats a property whose name ends in `.credential` as
-sensitive and masks its value in the UI. That is the whole reason the token property is
-`pve.api.token.credential` rather than `pve.api.token`: renaming it to anything without the suffix
-silently exposes the secret in the portal. Any future secret this suite consumes takes the same
-suffix.
+**Property lookup.** Resource properties (`pve.api.url`, `pve.api.token.credential`, ...) come from
+`hostProps`. Instance properties set by Active Discovery go through `pveInstanceProp` in the
+preamble and nothing else — it handles the `taskProps`/`instanceProps` and `auto.` variants, and
+the bindings' absence during AD.
 
-**That rename has no compatibility read, and it fails quietly.** `pveHostProp('pve.api.token.credential')`
-is the only lookup — nothing falls back to the old name. A resource still carrying `pve.api.token`
-therefore sets `pveConfigError`, which sends the PropertySource down its silent path (exit 0, no
-output), so the category is never set and every module stops applying. The resource goes *quiet*
-rather than erroring, which looks nothing like a credentials problem. On an existing deployment,
-rename the property first, then re-run the PropertySource.
+**The token rename has no compatibility read, and it fails quietly.** The property is
+`pve.api.token.credential` so the portal masks it, and `pveHostProp('pve.api.token.credential')` is
+the only lookup. A resource still carrying the old `pve.api.token` sets `pveConfigError`, which
+sends the PropertySource down its silent path, so the category is never set and every module stops
+applying. The resource goes *quiet* rather than erroring. On an existing deployment, rename the
+property first, then re-run the PropertySource.
 
-**Active Discovery output.** One instance per line, exactly:
+**Active Discovery** goes through `pveDiscover`, which drops blank property values; `pvePropValue`
+URL-encodes values, so names, pools and tags stay readable; `pveWildValue` folds only the wildvalue
+to `[A-Za-z0-9_-]`.
 
-```
-instanceId##displayName##description####auto.key=value&auto.key2=value2
-```
+**BatchScript keys.** `build.py` applies the `##WILDVALUE##.` prefix to `interpretExpr` for
+`batchscript` modules, withholds it for `script` modules, and refuses to emit if they do not match.
+This suite shipped once without it: build, compile, harness and the portal's Test Collection Script
+all looked correct while every datapoint read No Data. If a batchscript module collects nothing,
+check `interpretExpr` in `dist/<Module>.json` before touching anything else.
 
-Four `#` before the property list, two elsewhere. The minimal form is just `wildvalue##wildalias`.
+**Numeric values.** The harness asserts every emitted value against `isNumeric` in
+`tests/harness.groovy`. Proxmox's string-typed fields — `loadavg` items, `status`, HA state — are
+converted or mapped before `pveEmit`: NodeDetail does `toString().toDouble()`, GuestStatus maps
+`running` to 1.
 
-Only the **instance ID (wildvalue)** is character-restricted — no spaces, colons, equals signs,
-backslashes or hashes. The display name and description may contain spaces and punctuation, and
-LogicMonitor's own reference discovery script URL-encodes *property values* (`URLEncoder.encode`),
-which is what `pvePropValue` does — names, pools and tags stay readable and reversible. Only the
-wildvalue is character-folded, by `pveWildValue`. Never emit a property with a blank value — it logs
-an error on the discovery task, which is why `pveDiscover` drops empty ones. All instance properties on a resource share a
-49,000-character budget.
-
-**Collection output.** Depends on the collection method:
-
-- **Script** (one execution *per instance*, per interval): `key=value` lines for that one instance.
-- **BatchScript** (one execution *per resource*, per interval): `instanceId.key=value` lines, where
-  `instanceId` is the wildvalue the AD script emitted.
-
-Datapoints are configured with Raw Metric `output` and Post Processor `namevalue(<key>)` — in the
-export JSON, `"useValue": "output"` with `"interpretMethod": "namevalue"` and `"interpretExpr"` set
-to the key. On a Script module the key is the bare datapoint name. On a BatchScript it is not: one
-execution prints every instance into a single stream, so a bare `CPUUsagePercent` matches no line,
-and the key must be `##WILDVALUE##.CPUUsagePercent`, which LogicMonitor substitutes per instance at
-poll time. `build.py` applies the prefix for `batchscript` modules, withholds it for `script`
-modules, and refuses to emit if a module's keys do not match its collection method. Either way, a
-datapoint declared in `modules/<Module>.json` must be printed on every successful run unless it is
-marked `"conditional": true`.
-
-This is the highest-consequence mistake in the repo, because every other signal stays green: the
-build passes, the scripts compile, the harness goes green, Active Discovery populates instances, and
-**Test Collection Script in the portal shows perfectly correct output** — while every datapoint on
-every instance reads No Data. It shipped that way once. If a batchscript module collects nothing,
-check `interpretExpr` in `dist/<Module>.json` before you touch anything else.
-
-**Every emitted value must be a number.** The harness asserts each one matches
-`^-?\d+(\.\d+)?([eE][-+]?\d+)?$` (`isNumeric` in `tests/harness.groovy`). Proxmox fields that
-are typed as strings — `loadavg` items, `status`, HA state — must be converted or mapped before
-`pveEmit`: NodeDetail does `toString().toDouble()`, GuestStatus maps `running` to 1. A string reaches
-LogicMonitor as no-data and fails the harness.
-
-**Datapoint metric type is not always Gauge.** The API enum (`type` on the datapoint object) is
-`0 unknown, 1 counter, 2 gauge, 3 derive, 5 status, 6 compute, 7 counter32, 8 counter64`; `dataType`
-is separately `1 boolean, 2 byte, 3 short, 4 int, 5 long, 6 float, 7 double, 8 ulong`. Proxmox
-`netin` / `netout` / `diskread` / `diskwrite` are **cumulative counters since guest start**, so they
-belong as `derive` (resets to 0 on guest restart are handled by a min of 0), not `gauge`. Anything
-that is a point-in-time reading — `cpu`, `mem`, `uptime`, storage `used` — is genuinely `gauge`.
-
-**Exit codes.** `return 0` on success, `return 2` on any API/config failure — and always write the
-reason to `System.err`. This is deliberate: a non-zero exit makes LogicMonitor keep existing
-instances through a transient Proxmox outage instead of deleting them. Never "handle" an API error
-by returning 0 with zeroed datapoints.
-
-**Auth header.** Proxmox expects `Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET` — the
-separator after `PVEAPIToken` is `=`, not `-`. The `pve.api.token.credential` property already contains the
-whole `user@realm!tokenid=secret` string, so the header is built as `'PVEAPIToken=' + apiToken`.
+**Metric types.** Proxmox `netin` / `netout` / `diskread` / `diskwrite` are cumulative since guest
+start, so they are `derive` with a min of 0; `cpu`, `mem`, `uptime`, storage `used` are `gauge`.
 
 **Instance IDs must round-trip, and must not encode location.** Wildvalues come from Proxmox's own
-resource id (`qemu/101`, `node/pve1`, `storage/pve1/local`) with `/` and `.` folded to `-`. Two
-reasons, both load-bearing: a guest id built from the node name changes on every live migration or
-HA failover, which makes LogicMonitor delete the instance and lose its history; and `.` separates
-instance from datapoint in BatchScript output, so a storage name containing one would be ambiguous.
-Never reintroduce the node name into a guest wildvalue. Changing an ID scheme orphans every
-already-discovered instance in a customer's portal, so change discovery and collection together and
-say so explicitly.
+resource id (`qemu/101`, `node/pve1`, `storage/pve1/local`) folded by `pveWildValue`. A guest id
+built from the node name would change on every live migration or HA failover and lose the
+instance's history, so never reintroduce the node name into a guest wildvalue. Changing an ID
+scheme orphans every already-discovered instance in a customer's portal: change discovery and
+collection together and say so explicitly.
 
 **The rule is about things that move.** The fan-out modules deliberately *do* put the node in the
 wildvalue — `pve1-sda`, `pve1-pveproxy-ssl` — because a physical disk, a certificate and a systemd
@@ -364,13 +291,17 @@ Replication is the case worth copying when it is not obvious: its wildvalue is t
 ## Style
 
 Conventionally formatted Groovy, four-space indent, single quotes, explicit `return 0` / `return 2`.
+The scripts are Groovy 4 clean (the Collector's runtime) — no `List.push`/`pop`, `XmlSlurper` or
+`LazyMap` — keep them that way.
 Datapoint names are PascalCase to match LogicMonitor's published suites (`CPUUsagePercent`,
 `DataRateRxMB`, `UsedPercent`) — camelCase would be flagged in Exchange review.
 
 `HttpURLConnection` is used rather than LogicMonitor's `com.santaba.agent.groovyapi.http.HTTP`. That
 is a deliberate departure from house style: the santaba class is Collector-only, and depending on it
 would make every script impossible to compile or run outside a Collector, costing us the compile
-check and the whole test harness. See `docs/DESIGN.md` §6.
+check and the whole test harness. See `docs/DESIGN.md` §6. `docs/INSTALL.md`'s appendix covers the
+REST API and the `Logic.Monitor` PowerShell module, whose `Invoke-LMCollectorDebugCommand` runs
+`!groovy` on a real Collector — the closest thing to a live test harness this project has.
 
 **Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and
 `addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets`, because LogicMonitor's own topology and
@@ -398,8 +329,10 @@ the `datapoints` array in `modules/<Module>.json`, and the coverage table in `RE
 enforces the first two agreeing; nothing enforces the third.
 
 **Adding a module drifts more than that table.** Module counts are written out in prose in
-`README.md`, `docs/INSTALL.md` and `docs/DESIGN.md` §4 and §7. Nothing checks any of them. Grep
-the docs for the previous count before claiming a module is done.
+`README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
+`build.py` fails the build when a numbered phrase disagrees with `modules/` — `fourteen
+DataSources`, `2 PropertySources`, `all 17 modules`, `all seventeen:` — but only those shapes; a
+count phrased any other way (`the eleven modules that discover`) is still unchecked.
 
 **Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
 which says *what* to verify but not *when* it was. Copies elsewhere go stale unnoticed; record it
@@ -438,7 +371,9 @@ zero to keep the build quiet; a confident wrong number is worse than an absent o
 ## Proxmox API facts (verified against the published API schema, 454 endpoints)
 
 Base `https://host:8006/api2/json`. Auth header is exactly
-`Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET`. Every endpoint this module uses has
+`Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET` — `=` after `PVEAPIToken`, not `-`; the
+credential property holds the whole `user@realm!tokenid=secret`, so the header is
+`'PVEAPIToken=' + apiToken`. Every endpoint this module uses has
 `allowtoken: 1`, so API tokens work throughout — but a token with **privilege separation enabled**
 gets its own ACL and will 401/403 until permissions are granted to the token itself, not just the
 user. Responses are always enveloped as `{"data": ...}`.
@@ -472,23 +407,3 @@ Other schema details that bite:
   before emitting — an unconverted string reaches LogicMonitor as no-data and fails the harness.
 - Storage list entries carry `active`, `enabled` and `used_fraction`; storage `status` omits
   `used_fraction`. A disabled or inactive storage still discovers, so `up` should reflect `active`.
-
-## LogicMonitor platform facts
-
-**Collectors run Groovy 4.** A script may pin the runtime with a first line of `//!/lib-groovy/v4`.
-Migration from Groovy 2 removed `List.push`/`pop` (use `add` / `remove(size-1)`) and moved
-`XmlSlurper`/`XmlParser` to `groovy.xml.*` and `LazyMap` to `org.apache.groovy.json.internal.*`.
-Nothing in this repo uses those, so the scripts are Groovy 4 clean — keep it that way.
-LogicMonitor publishes `logicmonitor/GroovyRemix` to automate that migration.
-
-**There is a supported HTTP client — which this repo deliberately does not use (see Style).**
-`com.santaba.agent.groovyapi.http.HTTP` (`HTTP.open(host, port)`, `.get(url)`, `.getStatusCode()`,
-`.getResponseBody()`, `.close()`) is what LogicMonitor's own reference DataSources use, instead of
-raw `URL.openConnection()`. Reference examples live in `logicmonitor/monitoring-recipes` (see
-`DataSources/Groovy/HTTP/`).
-
-**Modules are distributed as JSON**, exported and imported through **My Module Toolbox** as a single
-`.json`. `build/build.py` emits that format into `dist/`; the field names were taken from real
-exported modules, not guessed. The import API, REST API v3 / LMv1 signing, and the `Logic.Monitor`
-PowerShell module are in `docs/INSTALL.md`'s appendix — its `Invoke-LMCollectorDebugCommand` runs
-`!groovy` on a real Collector, the closest thing to a live test harness this project has.
