@@ -33,7 +33,8 @@
       "name": "UsedPercent",
       "description": "OSD fill level. Ceph blocks writes at its full ratio and degrades well before it, and rebalancing needs free space to work with.",
       "threshold": "> 75 85 90",
-      "conditional": true
+      "conditional": true,
+      "alertBody": "Ceph OSD ##INSTANCE## is ##VALUE##% full. When any one OSD reaches Ceph's full ratio the cluster stops accepting writes, so a single unbalanced OSD can halt writes for every guest on Ceph.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "Capacity",

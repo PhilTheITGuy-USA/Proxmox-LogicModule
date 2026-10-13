@@ -24,7 +24,8 @@
       "name": "CPUUsagePercent",
       "description": "Node CPU utilisation, percent.",
       "threshold": "> 85 92 97",
-      "triggerInterval": 3
+      "triggerInterval": 3,
+      "alertBody": "Proxmox node ##INSTANCE## is at ##VALUE##% CPU. Its guests are competing for CPU time; consider migrating some to a less busy node.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "CPUCount",
@@ -42,7 +43,8 @@
       "name": "MemoryUsagePercent",
       "description": "Memory utilisation, percent.",
       "threshold": "> 85 92 97",
-      "triggerInterval": 3
+      "triggerInterval": 3,
+      "alertBody": "Proxmox node ##INSTANCE## is using ##VALUE##% of its memory. Close to the limit the host starts swapping or killing processes, guests included.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "UpTimeSeconds",

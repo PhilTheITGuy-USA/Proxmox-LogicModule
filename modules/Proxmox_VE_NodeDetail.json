@@ -61,7 +61,8 @@
       "name": "SwapUsagePercent",
       "description": "Swap utilisation, percent. Sustained swap use on a hypervisor indicates memory overcommit.",
       "threshold": "> 25 50 80",
-      "triggerInterval": 5
+      "triggerInterval": 5,
+      "alertBody": "Proxmox node ##INSTANCE## is using ##VALUE##% of its swap. Sustained swap on a hypervisor means memory is overcommitted, and every guest on the node slows down.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "RootFSUsedBytes",
@@ -97,7 +98,8 @@
       "name": "IOWaitPercent",
       "description": "Percent of CPU time spent waiting on IO. Sustained IO wait means storage, not CPU, is the constraint.",
       "threshold": "> 20 35 50",
-      "triggerInterval": 5
+      "triggerInterval": 5,
+      "alertBody": "Proxmox node ##INSTANCE## is spending ##VALUE##% of its CPU time waiting on disk IO. Storage, not CPU, is the bottleneck, and guests on this node will be slow to read and write.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "KSMSharedBytes",
