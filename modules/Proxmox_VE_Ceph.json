@@ -25,7 +25,8 @@
       "description": "1 when Ceph reports HEALTH_WARN.",
       "conditional": true,
       "threshold": "> 0 0 0",
-      "triggerInterval": 5
+      "triggerInterval": 5,
+      "alertBody": "Ceph on the Proxmox cluster containing ##HOST## reports HEALTH_WARN. Data is still being served, but a condition needs attention before it becomes HEALTH_ERR; `ceph health detail` on any node names it.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "HealthError",
@@ -58,7 +59,8 @@
       "name": "OSDsDown",
       "description": "OSDs known but not up.",
       "conditional": true,
-      "threshold": "> 0 0 1"
+      "threshold": "> 0 0 1",
+      "alertBody": "##VALUE## Ceph OSD(s) on the Proxmox cluster containing ##HOST## are down. Their data is being served from the remaining replicas, so redundancy is reduced until they return. The Ceph OSD module shows which ones.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "OSDsOut",
@@ -80,7 +82,8 @@
       "description": "Placement groups in any other state: degraded, undersized, recovering, backfilling. Non-zero during normal recovery, so the threshold allows time to settle.",
       "conditional": true,
       "threshold": "> 0 0 0",
-      "triggerInterval": 15
+      "triggerInterval": 15,
+      "alertBody": "##VALUE## Ceph placement group(s) on the Proxmox cluster containing ##HOST## are not active+clean (degraded, undersized, recovering or backfilling). This is normal briefly after an OSD restarts; if it persists, data has fewer copies than configured.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "Capacity",
@@ -101,7 +104,8 @@
       "name": "UsedPercent",
       "description": "Raw cluster utilisation. Ceph degrades badly when full, and rebalancing needs free space to work with.",
       "conditional": true,
-      "threshold": "> 75 85 90"
+      "threshold": "> 75 85 90",
+      "alertBody": "Ceph on the Proxmox cluster containing ##HOST## is ##VALUE##% full. Ceph slows and then blocks writes as it nears its full ratio, and recovering from an OSD failure needs free space to rebalance into.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "MonitorsTotal",

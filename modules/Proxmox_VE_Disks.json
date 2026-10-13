@@ -45,7 +45,8 @@
       "name": "LifeRemainingPercent",
       "description": "SSD life remaining, percent, from Proxmox's wearout value. Reported only for disks that expose a wear attribute; absent elsewhere rather than zero. Check LifeRemainingKnown to tell a spinning disk apart from a collection failure.",
       "threshold": "< 20 10 5",
-      "conditional": true
+      "conditional": true,
+      "alertBody": "SSD ##INSTANCE## has ##VALUE##% of its rated write endurance left. Plan to replace it: a worn-out SSD can go read-only or fail without further warning."
     }
   ]
 }
