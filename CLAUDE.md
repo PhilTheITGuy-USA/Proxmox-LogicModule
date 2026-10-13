@@ -17,9 +17,15 @@ python build/build.py --check   # validate only; prints the module and dashboard
 docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 4
 docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
 
-python ..\logicmonitor-modules-skill\skill\scripts\lm_lint_module.py dist\*.json
-python ..\logicmonitor-modules-skill\skill\scripts\lm_dashboards.py check dist\dashboards\*.json --modules modules
+python ../logicmonitor-modules-skill/skill/scripts/lm_lint_module.py dist
+python ../logicmonitor-modules-skill/skill/scripts/lm_dashboards.py check dist/dashboards/*.json --modules modules
 ```
+
+The skill checks above are Bash (Git Bash) syntax. PowerShell does not expand `*` for python, so
+pass the dashboard files explicitly there:
+`python ..\logicmonitor-modules-skill\skill\scripts\lm_dashboards.py check (Get-ChildItem dist\dashboards\*.json) --modules modules`.
+`lm_lint_module.py` takes the `dist` directory and recurses; a literal `dist\*.json` crashes both
+scripts with `Invalid argument` rather than producing a lint result.
 
 Always in that order: both Docker jobs and both skill checks read `dist/`, so an un-rebuilt edit
 is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
