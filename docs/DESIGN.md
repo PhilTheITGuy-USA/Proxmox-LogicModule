@@ -320,6 +320,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
 | TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
+| PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with

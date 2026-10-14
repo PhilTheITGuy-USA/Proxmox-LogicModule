@@ -182,9 +182,13 @@ safe *only* because of the silence. Break it and the whole suite starts applying
 Linux hosts.
 
 On a host that *is* Proxmox it prints `system.categories=ProxmoxVE`, `pve.version`, `pve.release`
-(when present) and `pve.clustered`; the harness pins all but `pve.release`. `pve.clustered` exists
-so a cluster-only module can target standalone-versus-cluster in its AppliesTo without a second
-probe — dropping it breaks the harness and any future cluster-only module.
+(when present) and `pve.clustered`; the harness pins all but `pve.release`. **The portal stores the
+last three as `auto.pve.version`, `auto.pve.release` and `auto.pve.clustered`** — LogicMonitor
+prefixes every property a PropertySource sets, except `system.categories`, with `auto.`. The script
+and harness deal in the bare printed keys; anything that *reads* the property (an AppliesTo, a doc)
+must use the `auto.` name, or it silently matches nothing. `auto.pve.clustered` exists so a
+cluster-only module can target standalone-versus-cluster in its AppliesTo without a second probe —
+dropping it breaks the harness and any future cluster-only module.
 
 ## Build and verification
 

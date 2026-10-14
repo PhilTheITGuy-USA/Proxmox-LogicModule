@@ -264,9 +264,12 @@ the resource gains:
 | Property | Meaning |
 |---|---|
 | `system.categories` | includes `ProxmoxVE` — this is what every module's AppliesTo matches |
-| `pve.version` | the Proxmox version, e.g. `8.2.2` |
-| `pve.release` | the release, e.g. `8.2` |
-| `pve.clustered` | `true` on a cluster member, `false` on a standalone host |
+| `auto.pve.version` | the Proxmox version, e.g. `8.2.2` |
+| `auto.pve.release` | the release, e.g. `8.2` |
+| `auto.pve.clustered` | `true` on a cluster member, `false` on a standalone host |
+
+LogicMonitor prefixes every property a PropertySource sets with `auto.`, except
+`system.categories`. Use the full `auto.pve.*` names in any AppliesTo, filter or report of your own.
 
 As soon as `ProxmoxVE` appears in `system.categories`, the rest of the suite applies itself. Active
 Discovery then populates instances, and collection starts on each module's own interval.
