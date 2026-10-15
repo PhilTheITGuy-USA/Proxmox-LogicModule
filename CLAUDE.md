@@ -21,11 +21,7 @@ python ../logicmonitor-modules-skill/skill/scripts/lm_lint_module.py dist
 python ../logicmonitor-modules-skill/skill/scripts/lm_dashboards.py check dist/dashboards/*.json --modules modules
 ```
 
-The skill checks above are Bash (Git Bash) syntax. PowerShell does not expand `*` for python, so
-pass the dashboard files explicitly there:
-`python ..\logicmonitor-modules-skill\skill\scripts\lm_dashboards.py check (Get-ChildItem dist\dashboards\*.json) --modules modules`.
-`lm_lint_module.py` takes the `dist` directory and recurses; a literal `dist\*.json` crashes both
-scripts with `Invalid argument` rather than producing a lint result.
+The skill checks are Bash syntax; the PowerShell form is in the workspace `..\CLAUDE.md`.
 
 Always in that order: both Docker jobs and both skill checks read `dist/`, so an un-rebuilt edit
 is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
@@ -34,20 +30,12 @@ compile or run anything. There is no single-test mode — see Build and verifica
 **Use the `logicmonitor-modules` skill** (`PhilTheITGuy-USA/logicmonitor-modules-skill`, its own
 repo) for module, dashboard and API work; the last two commands above are its checks.
 
-**`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** Its §6, "Things that must
-change from the current implementation", reads like a to-do list but every one of its ten items is
-implemented, and its §3 instruction to use the Proxmox `id` *verbatim* as the wildvalue is
-superseded by `pveWildValue`'s fold to `[A-Za-z0-9_-]`. In §4, Tier 1, Tier 1a and all eight Tier 2
-modules are built, and so is the TopologySource; Tier 2a (BackupStatus, Migrations, NodeNetwork)
-and Tier 3 are not. §4's own status column is the authority on what exists.
-
-**§4 sorts the backlog on two axes, and they are independent.** *Scope* (Tier 1 core parity, Tier 2
-infrastructure, Tier 2a workload, Tier 3 per-guest detail) says whether something is worth
-monitoring; *cost* (O(1) per cluster, O(nodes), O(guests)) says what collecting it does to the
-architecture. Cost is the one that constrains design: an O(1) field can join a module that already
-makes the call — Tier 1a is a list of fields already fetched and discarded — while anything
-O(guests) has to be its own opt-in module on a long interval, because one call per guest per
-interval is precisely what §2 was written to avoid.
+**`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** §6 reads like a to-do list,
+but all ten of its items are implemented, and §3's *verbatim* wildvalue is superseded by
+`pveWildValue`'s fold. §4's status column is the authority on what is built (Tier 2a and Tier 3
+are not). §4 sorts the backlog by scope *and* by call cost, and cost is the one that constrains
+design: an O(1) field can join a module that already makes the call, while anything O(guests) must
+be its own opt-in module on a long interval.
 
 ```
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
@@ -71,7 +59,14 @@ dist/                            GENERATED, gitignored — never edit, never com
 
 **The bodies are not standalone scripts.** They assume the helpers the preamble defines, and
 `build.py` concatenates the two. Edit shared behaviour in `pve_common.groovy` once; edit
-`dist/` never.
+`dist/` never. The preamble's helpers, by job:
+
+- config: `pveHostProp`, `pveInstanceProp`, `pveConfigError` (set, never thrown)
+- HTTP: `pveGet(path)`, which returns the unwrapped `data` and throws on any non-2xx
+- discovery: `pveDiscover`, `pveWildValue`, `pveDisplayName`, `pvePropValue`
+- output: `pveEmit`, `pveRound`, `pvePercent` (0 when the total is 0), `pveGB` / `pveMB` —
+  decimal units, because the portal renders raw bytes as `5.001E11`
+- topology: `pveTopoKey` (must match what `addERI_Proxmox_VE` stamps), `pveGuestMac`
 
 **Discovery scripts are shared; collection scripts are not.** Nine AD bodies back eleven
 multiInstance modules. `Proxmox_VE_Guests.ad.groovy` backs both GuestPerformance and GuestStatus;
@@ -148,15 +143,11 @@ is the definition — a `build()` returning a `Dashboard` — and `build.py` ren
 `dist/dashboards/<Name>.json`, generated output like the rest of `dist/`. It imports through
 **Dashboards → Add → From File**, not My Module Toolbox, and only after the modules it references.
 
-`build/dashboards.py` holds the widget builders and the validation. Its schema was copied from
-LogicMonitor's published exports (`logicmonitor/dashboards`: `Virtualization/Hyper-V.json` for
-cgraph, dynamicTable, noc and alert; `Virtualization/Nutanix.json` for bigNumber). `REFERENCE_KEYS`
-and the enum tuples record what those files contain, and `check_dashboard` refuses any key *or
-value* this project invented — the portal drops either silently. `COLUMN_*`, `CGRAPH_TOP_X` and
-`TABLE_TOP_X` pin the allowed values and `_check_column` enforces them; the `column()` helper
-deliberately takes no bounds. The skill's `references/dashboards.md` lists those vocabularies, the
-256-character description cap and why the tables stay legacy `dynamicTable` — do not migrate them
-to the newer `table` widget.
+`build/dashboards.py` holds the widget builders and the validation. Its schema (`REFERENCE_KEYS`,
+the enum tuples, `COLUMN_*`, `*_TOP_X`) is copied from LogicMonitor's published Hyper-V and Nutanix
+dashboard exports, and `check_dashboard` refuses any key *or value* not in them — the portal drops
+either silently. Keep the tables as legacy `dynamicTable`, not the newer `table` widget; the skill's
+`references/dashboards.md` has the vocabularies and the reason.
 
 **The check that earns its keep is the module reference.** A widget addresses a module as the plain
 string `"<displayedAs> (<name>)"` — `"Proxmox VE Nodes (Proxmox_VE_Nodes)"`. The build resolves
@@ -207,6 +198,12 @@ defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: 
 carries only its name, description and what deviates — `threshold`, `type: derive`, `min`,
 `alertBody`, `conditional`. The Active Discovery block, `deleteInactiveInstances: false` included,
 is hardcoded in `build_module` rather than set per module.
+
+**The interval field differs by module type**, so don't copy it across types. DataSources take
+`collectionInterval` as a string (`"5m"`). The TopologySource takes `collectionIntervalSec` as an
+integer (`3600`). An ERI PropertySource needs `"eri": true` plus `collectionInterval` as integer
+seconds (`1800`). A plain PropertySource such as `addCategory_Proxmox_VE` carries neither, and
+runs on the portal's PropertySource schedule. The build follows LogicMonitor's own exports here.
 
 Several fields there are load-bearing and validated by nothing. `useWildValueAsUniqueIdentifier:
 true` is set on every multiInstance module and checked by neither the build nor the harness — it is
@@ -306,23 +303,19 @@ The scripts are Groovy 4 clean (the Collector's runtime) — no `List.push`/`pop
 Datapoint names are PascalCase to match LogicMonitor's published suites (`CPUUsagePercent`,
 `DataRateRxMB`, `UsedPercent`) — camelCase would be flagged in Exchange review.
 
-`HttpURLConnection` is used rather than LogicMonitor's `com.santaba.agent.groovyapi.http.HTTP`. That
-is a deliberate departure from house style: the santaba class is Collector-only, and depending on it
-would make every script impossible to compile or run outside a Collector, costing us the compile
-check and the whole test harness. See `docs/DESIGN.md` §6. `docs/INSTALL.md`'s appendix covers the
-REST API and the `Logic.Monitor` PowerShell module, whose `Invoke-LMCollectorDebugCommand` runs
-`!groovy` on a real Collector — the closest thing to a live test harness this project has.
+**Use `HttpURLConnection`, never `com.santaba.agent.groovyapi.http.HTTP`.** The santaba class is
+Collector-only and would cost us the compile check and the harness (DESIGN §6, item 9).
+`docs/INSTALL.md`'s appendix covers the `Logic.Monitor` PowerShell module, whose
+`Invoke-LMCollectorDebugCommand` runs `!groovy` on a real Collector — the closest thing to a live
+test harness this project has.
 
 **Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and
-`addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets`, because LogicMonitor's own topology and
-ERI modules produce their output through the `lm.topo` snippet — `eriPreProcessor`, `isMac`,
-`emitEri`, `printEriArray`, `generateTopology` — and those formats are not documented well enough
-to reimplement. Hand-writing them would mean inventing a format, which is the failure this suite
-has actually suffered. `build.py` emits both to `dist/scripts/collector-only/`, a directory the
-compile job's `dist/scripts/*.groovy` glob does not reach, and the harness skips modules whose
-`moduleType` is `topologysource` or `propertysource`. Their Proxmox-side logic lives in preamble
-helpers — `pveTopoKey`, `pveGuestMac` — precisely so the harness can still reach it. Do not add a
-third without the same treatment, and do not move these two back.
+`addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets` (`lm.topo`), because the ERI and
+topology output formats are too poorly documented to reimplement (DESIGN §6). `build.py` emits both
+to `dist/scripts/collector-only/`, which the compile glob does not reach, and the harness skips
+`topologysource` and `propertysource` modules. That is why their Proxmox-side logic lives in
+preamble helpers (`pveTopoKey`, `pveGuestMac`) that the harness *can* reach. Do not add a third
+script without the same treatment, and do not move these two back.
 
 The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and default-off.
 
@@ -394,17 +387,14 @@ node status and rrddata, `VM.Audit` on `/vms/{vmid}` for guest status, and `Data
 `/nodes`, `/nodes/{node}/qemu` and `/cluster/resources` are `user: all` — they silently return only
 what the token may see, so an under-privileged token produces *empty discovery*, not an error.
 
-**`/cluster/resources` returns everything in one call.** For every node, guest and storage it
-carries `type`, `id`, `node`, `vmid`, `storage`, `name`, `status`, `cpu`, `maxcpu`, `mem`, `maxmem`,
-`disk`, `maxdisk`, `netin`, `netout`, `diskread`, `diskwrite`, `uptime`, `template`, `tags`, `pool`.
-It works on a standalone host, not just a cluster. This is the single most important fact for this
-module: it makes per-instance polling unnecessary.
+**`/cluster/resources` returns every node, guest and storage object in one call**, on a standalone
+host too. That makes per-instance polling unnecessary. DESIGN §2 has its full field list and what
+it lacks.
 
 Other schema details that bite:
 
-- `status/current` for a guest already returns `netin`/`netout`/`diskread`/`diskwrite`, so the extra
-  `rrddata` call per guest is redundant — and `rrddata` returns an averaged historical series, not
-  a current reading, which is the wrong thing to graph as a current value anyway.
+- Don't use `rrddata` for current values. It returns an averaged historical series, and guest
+  `status/current` already carries the network and disk counters.
 - **QEMU guests have no used-disk figure.** `/nodes/{node}/qemu` and qemu `status/current` expose
   `maxdisk` but no `disk`; only LXC reports `disk`. `GuestPerformance` therefore emits
   `DiskUsedGB` / `DiskUsagePercent` for LXC only (both `conditional`), leaving VMs at no-data.
