@@ -22,6 +22,8 @@ python ../logicmonitor-modules-skill/skill/scripts/lm_dashboards.py check dist/d
 ```
 
 The skill checks are Bash syntax; the PowerShell form is in the workspace `..\CLAUDE.md`.
+`lm_lint_module.py` prints 4 expected warnings, all on `addCategory_Proxmox_VE` (the three
+`auto.pve.*` names and the `true()` AppliesTo, both explained below). Anything beyond those four is new.
 
 Always in that order: both Docker jobs and both skill checks read `dist/`, so an un-rebuilt edit
 is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
