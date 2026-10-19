@@ -20,6 +20,9 @@ try {
         return 0
     }
 
+    // LogicMonitor stores every property a PropertySource sets, except system.categories, with
+    // auto. prepended: these land as auto.pve.version, auto.pve.release and auto.pve.clustered.
+    // Reference them by those names in AppliesTo and docs. Output stays bare; see DESIGN §7.
     println 'system.categories=ProxmoxVE'
     println 'pve.version=' + version.version
     if (version.release) { println 'pve.release=' + version.release }

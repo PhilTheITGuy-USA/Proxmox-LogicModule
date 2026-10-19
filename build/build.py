@@ -428,6 +428,51 @@ def module_datapoint_index(definitions: list[Path]) -> dict[str, set[str]]:
     return index
 
 
+# The docs state the module count in prose ("fourteen DataSources", "all 17 modules"), and
+# it drifted every time a module was added. Only phrases carrying a number are checked --
+# "the TopologySource" or "every DataSource" are not counts.
+COUNTED_DOCS = ["README.md", "CLAUDE.md", "docs/INSTALL.md", "docs/DESIGN.md"]
+NUMBER_WORDS = {
+    word: n for n, word in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+        "fourteen fifteen sixteen seventeen eighteen nineteen twenty".split()
+    )
+}
+_NUMBER = r"(\d+|" + "|".join(NUMBER_WORDS) + r")"
+COUNT_PATTERNS = {
+    DATASOURCE: re.compile(rf"\b{_NUMBER} DataSources?\b", re.IGNORECASE),
+    PROPERTYSOURCE: re.compile(rf"\b{_NUMBER} PropertySources?\b", re.IGNORECASE),
+    TOPOLOGYSOURCE: re.compile(rf"\b{_NUMBER} TopologySources?\b", re.IGNORECASE),
+    "total": re.compile(rf"\ball {_NUMBER}(?= modules\b|:)", re.IGNORECASE),
+}
+
+
+def check_doc_counts(definitions: list[Path]) -> list[str]:
+    actual = {DATASOURCE: 0, PROPERTYSOURCE: 0, TOPOLOGYSOURCE: 0}
+    for path in definitions:
+        kind = module_type(json.loads(read(path)))
+        if kind in actual:
+            actual[kind] += 1
+    actual["total"] = len(definitions)
+
+    problems = []
+    for name in COUNTED_DOCS:
+        doc = ROOT / name
+        if not doc.exists():
+            continue
+        for lineno, line in enumerate(read(doc).splitlines(), 1):
+            for kind, pattern in COUNT_PATTERNS.items():
+                for match in pattern.finditer(line):
+                    token = match.group(1).lower()
+                    stated = int(token) if token.isdigit() else NUMBER_WORDS[token]
+                    if stated != actual[kind]:
+                        problems.append(
+                            f"{name}:{lineno}: says {match.group(0)!r}, "
+                            f"but modules/ has {actual[kind]} ({kind})"
+                        )
+    return problems
+
+
 def build_dashboards(
     definitions: list[Path],
 ) -> tuple[list[tuple[str, dict]], list[str]]:
@@ -481,6 +526,8 @@ def main() -> int:
         for filename, content in scripts.items():
             problems.extend(balance_check(filename, content))
         built.append((module, scripts))
+
+    problems.extend(check_doc_counts(definitions))
 
     dashboards, dashboard_problems = build_dashboards(definitions)
     problems.extend(dashboard_problems)

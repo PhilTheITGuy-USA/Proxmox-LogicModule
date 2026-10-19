@@ -17,13 +17,15 @@
     {
       "name": "FailCount",
       "description": "Consecutive failures of this replication job.",
-      "threshold": "> 0 2 5"
+      "threshold": "> 0 2 5",
+      "alertBody": "Replication job ##INSTANCE## has failed ##VALUE## time(s) in a row. Its copy on the target node is falling behind, so a failover now would lose the changes made since the last good run. The error text is in this module's collection task log.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "Failed",
       "description": "1 when the job's last run recorded an error. The error text is written to the collection task log.",
       "threshold": "> 0 0 0",
-      "triggerInterval": 2
+      "triggerInterval": 2,
+      "alertBody": "The last run of replication job ##INSTANCE## failed, so its copy on the target node is out of date until a run succeeds. The error text is in this module's collection task log.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "Disabled",

@@ -17,7 +17,8 @@
     {
       "name": "DaysUntilExpiry",
       "description": "Days until the certificate's notAfter timestamp. Negative once expired.",
-      "threshold": "< 30 14 7"
+      "threshold": "< 30 14 7",
+      "alertBody": "The TLS certificate ##INSTANCE## on this Proxmox node expires in ##VALUE## days. Once it expires, API clients and the web UI will refuse to connect. Renew it, or check that ACME renewal is working."
     },
     {
       "name": "Expired",

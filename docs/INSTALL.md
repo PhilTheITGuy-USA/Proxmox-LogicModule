@@ -213,7 +213,7 @@ group that holds the cluster's nodes and nothing else:
 | Property | Value |
 |---|---|
 | `pve.topology.enabled` | `true` |
-| `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `pve.cluster.name` |
+| `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `auto.pve.cluster.name` |
 | `pve.topology.node` | only on a node whose resource was added by IP address — its Proxmox node name |
 
 That is all. The API token stays on one node, as §4.1 recommends:
@@ -295,10 +295,13 @@ the resource gains:
 | Property | Meaning |
 |---|---|
 | `system.categories` | includes `ProxmoxVE` — this is what every module's AppliesTo matches |
-| `pve.version` | the Proxmox version, e.g. `8.2.2` |
-| `pve.release` | the release, e.g. `8.2` |
-| `pve.clustered` | `true` on a cluster member, `false` on a standalone host |
-| `pve.cluster.name` | the cluster's name, on a cluster member only — what §3.3's `pve.topology.cluster` copies |
+| `auto.pve.version` | the Proxmox version, e.g. `8.2.2` |
+| `auto.pve.release` | the release, e.g. `8.2` |
+| `auto.pve.clustered` | `true` on a cluster member, `false` on a standalone host |
+| `auto.pve.cluster.name` | the cluster's name, on a cluster member only — what §3.3's `pve.topology.cluster` copies |
+
+LogicMonitor prefixes every property a PropertySource sets with `auto.`, except
+`system.categories`. Use the full `auto.pve.*` names in any AppliesTo, filter or report of your own.
 
 As soon as `ProxmoxVE` appears in `system.categories`, the rest of the suite applies itself. Active
 Discovery then populates instances, and collection starts on each module's own interval.

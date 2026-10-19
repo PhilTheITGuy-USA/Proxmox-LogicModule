@@ -309,8 +309,10 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
 | Tier 2 dashboard | **verified** — 15 of 15 widgets, populating with live data, 2026-09-22 |
-| TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23 |
+| TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23; QEMU guests (Windows and Linux) join by MAC too, 2026-10-19 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
+| PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
+| Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. Unproven: a multi-node map with every node drawn while one node holds the token, and whether a portal accepts an AppliesTo with no `hasCategory` |
 
@@ -325,9 +327,26 @@ on a standalone host (`Node-A`): the node resource carries `proxmoxve--node-a--n
 `addERI_Proxmox_VE` and its map vertex opens that resource, and the vertex for the LXC guest `Media01`
 opens the separately monitored `Media01 Media Server` resource, whose ERI is the guest's MAC
 `bc:24:11:0e:00:02` — no naming convention involved. Not yet seen: a multi-node cluster's map, where
-the cluster vertex takes its name from `/cluster/status` rather than falling back to the node's, and
-a QEMU guest, whose MAC is read from the `virtio=` form rather than LXC's `hwaddr=` (the harness
-covers both).
+the cluster vertex takes its name from `/cluster/status` rather than falling back to the node's (the
+harness covers it).
+
+**QEMU guests join the same way, 2026-10-19.** A QEMU guest's MAC is read from the `virtio=` form
+rather than LXC's `hwaddr=`, and two QEMU guests on `Node-B`, each monitored as its own resource,
+now draw as that node's children: VMID 200 (Windows 11 Pro over WMI, then rebuilt as Windows Server,
+ERI `bc:24:11:0e:00:04`) and a Debian 13 VM over SNMP (ERI `bc:24:11:0e:00:01`). Windows'
+built-in ERI PropertySource reports the MAC lowercase, the form `pveGuestMac` emits, so the two keys
+compare equal.
+
+**Every guest is drawn as `PhysicalServer`, and that is LogicMonitor's labelling, not this suite's.**
+Both QEMU guests, both editions of Windows and the LXC guest `Nvr01` (CT 100) all carry
+`predef.externalResourceType = PhysicalServer`, whatever their `system.sysinfo` says. LogicMonitor
+labels a resource `VirtualMachineResource` only when its MAC's prefix is on the VM prefix list in
+its own topology code (`00:50:56`, `00:0c:29`, `00:15:5d`, `52:54:00`, `50:6b:8d`, read from a
+Collector), and Proxmox's default `bc:24:11` is not on it. A physical Raspberry Pi on the same
+portal is `PhysicalServer` too, correctly, and is the case any fix must leave alone. Fixing the
+label is open design work; the evidence for it is the properties of these guests: Windows over WMI
+reports `auto.endpoint.manufacturer = QEMU`, a Linux VM over SNMP reports nothing comparable, and
+an LXC guest's `sysinfo` shows the host's `-pve` kernel.
 
 **The portal draws only vertices that match a resource.** Test Script on `Node-A` emitted all
 seven guests' edges, but the map drew four. The unmonitored LXC guest `Webapp01` was not drawn

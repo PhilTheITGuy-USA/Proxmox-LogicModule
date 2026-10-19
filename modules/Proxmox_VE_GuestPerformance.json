@@ -18,7 +18,8 @@
       "name": "CPUUsagePercent",
       "description": "Guest CPU utilisation, percent of its allocated cores.",
       "threshold": "> 90 95 98",
-      "triggerInterval": 5
+      "triggerInterval": 5,
+      "alertBody": "Proxmox guest ##INSTANCE## is using ##VALUE##% of its allocated CPU. Applications in the guest will be slow; it needs more cores, or its workload needs investigating.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "CPUCount",
@@ -36,7 +37,8 @@
       "name": "MemoryUsagePercent",
       "description": "Memory utilisation, percent of allocation.",
       "threshold": "> 90 95 98",
-      "triggerInterval": 5
+      "triggerInterval": 5,
+      "alertBody": "Proxmox guest ##INSTANCE## is using ##VALUE##% of its allocated memory. Inside the guest this leads to swapping or processes being killed for lack of memory.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "DiskCapacityGB",
@@ -51,7 +53,8 @@
       "name": "DiskUsagePercent",
       "description": "Root disk utilisation, percent. LXC containers only.",
       "threshold": "> 85 92 97",
-      "conditional": true
+      "conditional": true,
+      "alertBody": "The root disk of container ##INSTANCE## is ##VALUE##% full. When it fills, services in the container can no longer write files or logs.\n\nThis started at ##START##, ##DURATION## ago."
     },
     {
       "name": "DataRateRxMB",
