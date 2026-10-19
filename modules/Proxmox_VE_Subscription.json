@@ -26,7 +26,8 @@
       "name": "DaysUntilDue",
       "description": "Days until the subscription's next due date. Withheld on a node with no subscription rather than reported as zero.",
       "conditional": true,
-      "threshold": "< 30 14 7"
+      "threshold": "< 30 14 7",
+      "alertBody": "The Proxmox subscription on node ##INSTANCE## is due in ##VALUE## days. If it lapses, the node loses access to the enterprise repository and its updates."
     },
     {
       "name": "DaysSinceLastCheck",
