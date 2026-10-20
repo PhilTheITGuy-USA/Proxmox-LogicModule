@@ -609,6 +609,36 @@ note('addERI', eriScript.contains('pveTopoNodeIdentity()') &&
                !eriScript.contains('if (pveConfigError) {'),
      'the ERI PropertySource requires the API token again')
 
+// The guest-labelling ERI PropertySource is Collector-only for the same reason, so its
+// matching logic lives in pveGuestMacMatch (asserted above) and what is asserted here is
+// the wiring. Priority 3 is the finding of spec spike 1: the resource type comes from
+// the highest-priority ERI across categories, and the built-in net.l2 entry is 2, so
+// anything lower leaves a guest drawn as PhysicalServer with nothing failing anywhere.
+def guestEriScript = new File(ROOT, 'scripts/addERI_Proxmox_VE_Guest.groovy').text
+def guestEriDefn = new JsonSlurper().parse(new File(ROOT, 'modules/addERI_Proxmox_VE_Guest.json'))
+
+note('addERI-guest', guestEriScript.contains('pveGuestMacMatch('),
+     'the guest ERI PropertySource matches the MAC without pveGuestMacMatch')
+note('addERI-guest', guestEriScript.contains("lmtopo.emitEri('virt.proxmoxve', 3,") &&
+                     guestEriScript.contains("'VirtualMachineResource'") &&
+                     guestEriScript.contains('lmtopo.printEriArray('),
+     'the guest ERI PropertySource does not emit virt.proxmoxve at priority 3 as VirtualMachineResource')
+note('addERI-guest', !guestEriScript.contains('rawERIs'),
+     'the guest ERI PropertySource hand-writes the rawERIs JSON instead of using emitEri')
+// A guest has no token, so the preamble always sets pveConfigError: returning on it would
+// make the module a no-op on every resource it applies to.
+note('addERI-guest', !guestEriScript.contains('if (pveConfigError) {'),
+     'the guest ERI PropertySource returns on pveConfigError, which every guest sets')
+note('addERI-guest', guestEriScript.contains("pveHostProp('auto.network.mac_address')") &&
+                     guestEriScript.contains("pveHostProp('pve.guest.mac_prefix')"),
+     'the guest ERI PropertySource does not read the MAC and the prefix override')
+note('addERI-guest', guestEriDefn.appliesTo ==
+         'auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix',
+     "the guest ERI PropertySource AppliesTo is ${guestEriDefn.appliesTo}")
+// Always on: labelling a guest correctly is not something a customer should opt into.
+note('addERI-guest', !guestEriDefn.containsKey('optional'),
+     'the guest ERI PropertySource is marked optional')
+
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),
      'guest collection did not use the bulk endpoint')

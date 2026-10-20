@@ -186,25 +186,28 @@ before installing.
 ### 3.2 Import every module
 
 **Settings → LogicModules → My Module Toolbox → Add → Import from file**, once per `dist/*.json`.
-That is all seventeen: fourteen DataSources, two PropertySources and the TopologySource. There is
+That is all eighteen: fourteen DataSources, three PropertySources and the TopologySource. There is
 no longer any module to create by hand.
 
 `addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
 completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Every
 other module applies on `hasCategory("ProxmoxVE")`, so nothing applies to anything until Part 4
 sets the token. The two optional modules in §3.3 additionally need their own property, so importing
-them changes nothing until you opt in.
+them changes nothing until you opt in. `addERI_Proxmox_VE_Guest` is the other exception: it
+applies to guest resources by their MAC address, needs no token, and works as soon as it is
+imported (§3.3).
 
 ### 3.3 The topology modules, if you want a map
 
-`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional and only earn their place if the guests
-are **also monitored as their own LogicMonitor resources**. They draw cluster → node → guest edges
-so that a node's alerts can explain its guests'. Import `addERI_Proxmox_VE` first.
+`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw cluster → node → guest edges
+so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
+monitored as its own LogicMonitor resource. Import `addERI_Proxmox_VE` first.
 
-**Both are off by default.** One property, `pve.topology.enabled=true`, turns on both — lowercase,
-since AppliesTo compares the string exactly. The TopologySource is also the one module whose cost
-grows with guest count (one config read per guest, hourly), which is a second reason it is not
-applied unasked.
+**Both are off by default.** One property, `pve.topology.enabled=true`, turns on both, and the
+guest keys in Guest Status's discovery — lowercase, since AppliesTo compares the string exactly.
+The TopologySource and, with the flag on, Guest Status's discovery are the only costs in the suite
+that grow with guest count (one config read per guest each, hourly), which is a second reason they
+are not applied unasked.
 
 **Where to set it.** Every node of the cluster needs to be a LogicMonitor resource, because a node
 is drawn only through its own resource. Then, on those node resources — most simply on a resource
@@ -215,6 +218,10 @@ group that holds the cluster's nodes and nothing else:
 | `pve.topology.enabled` | `true` |
 | `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `auto.pve.cluster.name` |
 | `pve.topology.node` | only on a node whose resource was added by IP address — its Proxmox node name |
+
+**Set `pve.topology.enabled` and `pve.topology.cluster` on a group holding only that cluster's
+nodes, never on a broad or dynamic group such as "Linux Servers", or `addERI_Proxmox_VE` stamps a
+node key on every server in it.**
 
 That is all. The API token stays on one node, as §4.1 recommends:
 
@@ -233,13 +240,32 @@ sides already know, so no naming convention is required. A node cannot be matche
 Proxmox exposes no MAC or hardware UUID for a node anywhere in its API — so `addERI_Proxmox_VE`
 stamps a synthesised key on the node's resource for the map to attach to.
 
-**The map draws only what matches a resource.** A guest appears only when its own resource carries
-the guest's MAC in `predef.externalResourceID`, and LogicMonitor fills that in from SNMP — so a
-guest that is not monitored, or is monitored but does not answer SNMP, is left off the map. The
-TopologySource still reports it; the portal has nothing to draw it as. Check a missing guest's
-resource for `auto.snmp.operational` and `predef.externalResourceID` before suspecting the module.
-**Test Script** on `Proxmox_VE_Topology` lists every edge it emits, one `Compute` edge per guest,
-which separates "not emitted" from "not drawn".
+**Every guest is drawn, with no SNMP and no per-guest setup.** The map draws a vertex only when it
+matches something in the portal: a resource, or a DataSource instance. With the flag on, Guest
+Status's discovery gives each guest on an online node an instance carrying the guest's MAC — or,
+for a guest with no NIC, the same synthesised key the TopologySource emits — in
+`predef.externalResourceID`, so an unmonitored or ping-only guest is drawn through that instance.
+A guest that is also its own resource, holding the same MAC, is drawn once. Discovery runs hourly,
+so a new guest appears within the hour, or at once after **Run Active Discovery** on Guest Status.
+A guest on an offline node, or whose config cannot be read, keeps its instance without the key
+until a later discovery finds it. **Test Script** on `Proxmox_VE_Topology` lists every edge it
+emits, one `Compute` edge per guest, which separates "not emitted" from "not drawn"; for a guest
+that is emitted and not drawn, check its Guest Status instance for `predef.externalResourceID`.
+
+**Not supported with `topo.namespace` or `topo.blacklist`.** Those properties rewrite the keys
+LogicMonitor's topology code emits, and Guest Status writes its keys without them, so they would
+silently fail to match. On a resource carrying either, Guest Status's discovery adds no keys and
+says so on stderr, and a guest with no resource of its own is not drawn.
+
+**Guests are labelled as virtual machines, always.** `addERI_Proxmox_VE_Guest` is not optional and
+needs neither the token nor the flag. LogicMonitor labels a monitored guest `PhysicalServer`,
+because Proxmox's guest MAC prefix is not on its list of virtual-machine prefixes; this module
+applies to any resource whose `auto.network.mac_address` starts with Proxmox's default prefix
+`bc:24:11` and relabels it `VirtualMachineResource`. If your cluster hands out a different prefix
+(**Datacenter → Options → MAC address prefix**), set `pve.guest.mac_prefix` on the group holding
+the guests: a comma-separated list such as `bc:24:11,02:00:00`, which replaces the default, so
+list `bc:24:11` too if it is still in use. A resource the property reaches whose MAC matches no
+prefix is left alone, and a guest with a hand-set MAC outside every prefix stays `PhysicalServer`.
 
 **A node missing from the map** carries no matching key. Check its resource for
 `pve.topology.cluster` and, if it was added by IP, `pve.topology.node`; a name that differs from
@@ -286,6 +312,11 @@ On the resource (or on a group containing it): **Manage → Properties → Add**
 
 Setting it on a **resource group** is the cleaner option if you have several clusters: create a
 group per cluster, set the property once on the group, and add the node to it.
+
+The topology properties of §3.3 follow the same per-cluster grouping, more strictly: put
+`pve.topology.enabled` and `pve.topology.cluster` on a group holding only that cluster's nodes,
+never on a broad or dynamic group such as "Linux Servers", or `addERI_Proxmox_VE` stamps a node
+key on every server in it.
 
 ### 4.3 Run the PropertySource
 
