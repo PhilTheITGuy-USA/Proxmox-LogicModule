@@ -309,7 +309,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Modules built | 14 DataSources, 3 PropertySources, 1 TopologySource |
 | Scripts assembled | 26 compiled on Groovy 4, plus 3 Collector-only that cannot be |
 | Harness checks | 1053, against a mock Proxmox API |
-| Portal import | **verified** for all 17 previously; 1 new pending (`addERI_Proxmox_VE_Guest`) |
+| Portal import | **verified** for all 18 — the 14 changed since `fb8aa9b`, `addERI_Proxmox_VE_Guest` among them, re-imported 2026-10-20 |
 | Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
@@ -318,10 +318,10 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
-| Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
-| `addERI_Proxmox_VE_Guest` | **not verified** — built 2026-10-19; the harness covers `pveGuestMacMatch` and the script's wiring but cannot run it. Unproven (guest topology labels spec §6 item 3): that the imported module labels Debian-test, the Windows Server guest and Frigate `VirtualMachineResource` while the Pi and a Proxmox node resource stay `PhysicalServer`; and that the AppliesTo's `isLinux()` / `isWindows()` clause, added 2026-10-20, matches all three guests |
-| GuestStatus instance ERIs | **not verified** — built 2026-10-19 behind `pve.topology.enabled`, harness-tested against the mock API. Unproven (spec §6 items 4-7): every guest on `Proxmox A` and `Proxmox-B` drawn under its node, including ones with no resource of their own; `predef.externalResourceID` reading as a MAC with colons rather than URL-encoded; whether the two instance properties are removed when the flag is turned off; the token on several nodes of one cluster |
-| Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. Unproven: a multi-node map with every node drawn while one node holds the token, and whether a portal accepts an AppliesTo with no `hasCategory` |
+| Topology modules opt-in via `pve.topology.enabled` | **partly verified** — AppliesTo changed 2026-10-07; re-imported 2026-10-20, and the portal accepts the clause: with `pve.topology.enabled=true` on a dynamic group of the two standalone hosts, both modules apply and draw the map. Unproven: that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
+| `addERI_Proxmox_VE_Guest` | **verified** 2026-10-20 (guest topology labels spec §6 item 3) — Debian-test (Linux VM, SNMP), the Windows Server guest (VMID 200, WMI) and the LXC containers Frigate, Music-Assistant and KTV-PiKaraoke (SNMP) read `VirtualMachineResource`, so the `isLinux()` / `isWindows()` clause matches all three kinds; the Pi and a Proxmox node resource stay `PhysicalServer`. Three of the LXC labels were still `PhysicalServer` at first look and landed on their own — the module runs every 30 minutes and the map redraws hourly, so allow both before calling a label missing |
+| GuestStatus instance ERIs | **verified** 2026-10-20 (spec §6 items 4-6) on `Proxmox A` and `Proxmox-B`, both standalone: every guest is drawn under its node, including ones with no resource of their own; the portal decodes discovery values (`auto.pve_id` reads `qemu/201`), so `predef.externalResourceID` stores `bc:24:11:65:d4:40` with its colons; and turning the flag off and re-running discovery removes both instance properties. Unproven (item 7, not reachable in this lab): the token on several nodes of one cluster, which puts the same key on several instances |
+| Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. `addERI_Proxmox_VE`'s AppliesTo with no `hasCategory` imported and applies (2026-10-20), but both lab hosts are standalone and hold their own token, so the token-less path has not run. Unproven: a multi-node map with every node drawn while one node holds the token |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an
@@ -356,7 +356,7 @@ reports `auto.endpoint.manufacturer = QEMU`, a Linux VM over SNMP reports nothin
 an LXC guest's `sysinfo` shows the host's `-pve` kernel.
 
 That design work has since been done: spike 1 below found which ERI sets the type, and
-`addERI_Proxmox_VE_Guest` (built 2026-10-19, its portal check pending in the table above) labels
+`addERI_Proxmox_VE_Guest` (built 2026-10-19, portal-verified 2026-10-20 in the table above) labels
 Linux and Windows guests `VirtualMachineResource` by their Proxmox MAC prefix.
 
 **Spike 1, 2026-10-19 — which ERI sets the resource type.** A throwaway ERI PropertySource on
