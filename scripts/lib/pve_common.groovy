@@ -136,10 +136,18 @@ def pvePropValue = { value ->
 }
 
 // instanceId##displayName##description####auto.key=value&auto.key2=value2
-def pveDiscover = { String id, String name, String description, Map properties ->
+//
+// rawProperties are emitted after the auto. pairs with their keys untouched. That is the
+// only way to set a predef.* property such as predef.externalResourceID, which the
+// portal reads under exactly that name and would never find as auto.predef.*.
+def pveDiscover = { String id, String name, String description, Map properties,
+                    Map rawProperties = [:] ->
     def pairs = properties
         .findAll { key, value -> value != null && !value.toString().trim().isEmpty() }
         .collect { key, value -> 'auto.' + key + '=' + pvePropValue(value) }
+    pairs += rawProperties
+        .findAll { key, value -> value != null && !value.toString().trim().isEmpty() }
+        .collect { key, value -> key + '=' + pvePropValue(value) }
     println(pveWildValue(id) + '##' + pveDisplayName(name ?: id) + '##' +
             pveDisplayName(description) + '####' + pairs.join('&'))
 }
@@ -181,6 +189,32 @@ def pveTopoKey = { String cluster, String node ->
 }
 
 /*
+ * Which cluster and node a resource stands for, read from its properties alone -- for a
+ * node resource that carries no API token, and so cannot ask /cluster/status. Giving
+ * every node the token would make every DataSource collect the whole cluster once per
+ * node, which is the duplication docs/INSTALL.md 4.1 warns against.
+ *
+ * The cluster name has no source but pve.topology.cluster, set once on the group that
+ * holds the nodes. The node name is pve.topology.node when set, and otherwise the short
+ * form of system.sysname or system.hostname: Proxmox requires a node's name to be its
+ * hostname, so the short hostname is the node name. An IP address says nothing about the
+ * name and is skipped. Returns null rather than guessing: a wrong key matches no vertex,
+ * which is indistinguishable on the map from no key at all, but costs a stray ERI.
+ */
+def pveTopoNodeIdentity = { ->
+    def cluster = pveHostProp('pve.topology.cluster')
+    if (!cluster) { return null }
+    def node = pveHostProp('pve.topology.node')
+    if (!node) {
+        def hostname = ['system.sysname', 'system.hostname']
+            .collect { pveHostProp(it) }
+            .find { it && !(it ==~ /\d{1,3}(\.\d{1,3}){3}/) && !it.contains(':') }
+        node = hostname?.tokenize('.')?.getAt(0)
+    }
+    return node ? [cluster: cluster, node: node] : null
+}
+
+/*
  * The MAC of a guest's first virtual NIC, out of a guest config.
  *
  * QEMU writes it as "virtio=BC:24:11:F8:1E:58,bridge=vmbr0" and LXC as
@@ -196,6 +230,83 @@ def pveGuestMac = { config ->
         if (matcher.find()) { return matcher.group(1).toLowerCase() }
     }
     return null
+}
+
+/*
+ * Whether a resource's MAC is one Proxmox itself assigned to a guest. This is what the
+ * label PropertySource, addERI_Proxmox_VE_Guest, matches with; the topology edges and
+ * GuestStatus's instance ERIs read the MAC from the guest config and do not use it.
+ * Proxmox generates guest MACs under BC:24:11 by default. A guest with a hand-set MAC (a
+ * passed-through or migrated NIC) is somebody else's hardware identity and must not be
+ * claimed, and a physical host such as the 88:a2:9e Raspberry Pi on the test portal is
+ * the control case that must never match. A site that changed Proxmox's MAC prefix lists
+ * its own in prefixProperty (comma separated), and that list REPLACES the default rather
+ * than adding to it. The match is a plain string prefix, so give whole octets
+ * (02:00:00, not 02:0). Returns the lowercased MAC on a match, else null.
+ */
+def pveGuestMacMatch = { String mac, String prefixProperty ->
+    if (mac == null || mac.trim().isEmpty()) { return null }
+    def prefixes = (prefixProperty ?: '').tokenize(',')
+        .collect { it.trim().toLowerCase() }
+        .findAll { !it.isEmpty() }
+    if (prefixes.isEmpty()) { prefixes = ['bc:24:11'] }
+    def normalised = mac.trim().toLowerCase()
+    return prefixes.any { normalised.startsWith(it) } ? normalised : null
+}
+
+/*
+ * The cluster's own name, which /cluster/status reports as the single row of type
+ * "cluster". A standalone host has no such row, so it falls back to the local node's
+ * name -- the vertex still has to be unique across a portal that monitors several of
+ * them. One definition, because the TopologySource and the guest fallback key must name
+ * the same cluster or the two stop matching.
+ */
+def pveTopoClusterName = { List status ->
+    def clusterRow = status.find { it.type?.toString() == 'cluster' }
+    def localRow = status.find { it.local }
+    return clusterRow?.name?.toString() ?: localRow?.name?.toString() ?: 'standalone'
+}
+
+/*
+ * The guests discovery and topology both work on: every QEMU VM and LXC container, never
+ * a template. Templates are never running, so discovering them creates instances that
+ * alert as permanently down.
+ *
+ * /cluster/resources is filtered by token ACL rather than erroring, so an
+ * under-privileged token looks identical to an empty cluster; say so on stderr.
+ */
+def pveGuestList = { ->
+    def resources = pveGet('/cluster/resources?type=vm') ?: []
+    if (resources.isEmpty()) {
+        System.err.println('/cluster/resources returned no guests. This endpoint is filtered by ' +
+            'token ACL rather than erroring, so an under-privileged token looks identical to an ' +
+            'empty cluster. Verify the token has VM.Audit on /vms.')
+    }
+    return resources.findAll { it.type in ['qemu', 'lxc'] && !it.template }
+}
+
+/*
+ * One guest's Active Discovery line. The wildvalue comes from Proxmox's own id (qemu/101)
+ * and never from the node, so a live migration does not orphan the instance.
+ * rawProperties passes straight through to pveDiscover.
+ */
+def pveGuestDiscover = { Map guest, Map rawProperties = [:] ->
+    def vmid = guest.vmid?.toString()
+    def kind = guest.type == 'qemu' ? 'virtual machine' : 'container'
+    pveDiscover(
+        guest.id,
+        guest.name ?: (guest.type + '-' + vmid),
+        'Proxmox ' + kind + ' ' + vmid,
+        [
+            pve_id  : guest.id,
+            pve_node: guest.node,
+            pve_type: guest.type,
+            pve_vmid: vmid,
+            pve_pool: guest.pool,
+            pve_tags: guest.tags
+        ],
+        rawProperties
+    )
 }
 
 def pvePercent = { used, total ->
