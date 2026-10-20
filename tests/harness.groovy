@@ -22,11 +22,14 @@ def fixtures = new JsonSlurper().parse(new File(ROOT, 'tests/fixtures/pve_api.js
 // ------------------------------------------------------------------ mock API
 
 def requested = [] as Set
+// Every request in order, duplicates kept, so a case can look at only what it caused.
+def requestLog = Collections.synchronizedList([])
 def server = HttpServer.create(new InetSocketAddress('127.0.0.1', 0), 0)
 server.createContext('/api2/json') { exchange ->
     def uri = exchange.requestURI
     def key = uri.path.replaceFirst('^/api2/json', '') + (uri.query ? '?' + uri.query : '')
     requested << key
+    requestLog << key
 
     String body
     int status
@@ -48,6 +51,26 @@ server.createContext('/api2/json') { exchange ->
     exchange.responseBody.withStream { it.write(bytes) }
 }
 server.executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+/*
+ * Run body with some fixtures replaced. A null value removes that key, so the mock
+ * answers it with 501. Everything is put back afterwards, keys that did not exist
+ * included, so one case cannot leak its fixtures into the next.
+ */
+def withFixtures = { Map overrides, Closure body ->
+    def saved = [:]
+    def absent = []
+    overrides.each { key, value ->
+        if (fixtures.containsKey(key)) { saved[key] = fixtures[key] } else { absent << key }
+        if (value == null) { fixtures.remove(key) } else { fixtures[key] = value }
+    }
+    try {
+        return body()
+    } finally {
+        saved.each { key, value -> fixtures[key] = value }
+        absent.each { fixtures.remove(it) }
+    }
+}
 server.start()
 def baseUrl = 'http://127.0.0.1:' + server.address.port
 
@@ -282,6 +305,127 @@ note('propertysource', notProxmox.exit == 0,
      "exit was ${notProxmox.exit} on a non-Proxmox host, expected 0")
 note('propertysource', notProxmox.stdout.trim().isEmpty(),
      "set properties on a host with no Proxmox credentials: ${notProxmox.stdout}")
+
+// ------------------------------------------------- GuestStatus instance ERIs
+//
+// GuestStatus has its own discovery so that, behind the topology opt-in, each guest's
+// instance can carry the key the TopologySource draws it under. Flag off, it must be
+// exactly the shared guest discovery: same lines, and no per-guest config reads.
+
+def statusAd = new File(scriptsDir, 'Proxmox_VE_GuestStatus.ad.groovy')
+def perfAd = new File(scriptsDir, 'Proxmox_VE_GuestPerformance.ad.groovy')
+def on = hostProps + ['pve.topology.enabled': 'true']
+
+// Run a discovery script and return the run plus only the requests it made.
+def discoverWith = { File file, Map props ->
+    int before = requestLog.size()
+    def run = runScript(file, [hostProps: props])
+    def log = new ArrayList(requestLog)
+    run.requests = log.subList(before, log.size())
+    run
+}
+
+// id -> [auto: [...], predef: [...]], values URL-decoded: pveDiscover encodes them, and
+// the portal reads the decoded form.
+def parseAd = { String stdout ->
+    def instances = [:]
+    stdout.readLines().findAll { it.trim() }.each { line ->
+        def matcher = AD_LINE.matcher(line)
+        if (!matcher.matches()) { return }
+        def props = [auto: [:], predef: [:]]
+        matcher.group(4).tokenize('&').each { pair ->
+            def parts = pair.split('=', 2)
+            def value = URLDecoder.decode(parts.length > 1 ? parts[1] : '', 'UTF-8')
+            if (parts[0].startsWith('auto.')) { props.auto[parts[0]] = value }
+            else if (parts[0].startsWith('predef.')) { props.predef[parts[0]] = value }
+        }
+        instances[matcher.group(1)] = props
+    }
+    instances
+}
+
+def extendedFixtures = [
+    '/cluster/resources?type=vm': fixtures['/cluster/resources?type=vm'] + [
+        [id: 'lxc/103', type: 'lxc', vmid: 103, name: 'relay', node: 'pve1', template: false],
+        [id: 'qemu/104', type: 'qemu', vmid: 104, name: 'no-config', node: 'pve1', template: false],
+        [id: 'qemu/105', type: 'qemu', vmid: 105, name: 'no-nic', node: 'pve1', template: false],
+    ],
+    '/nodes/pve1/lxc/103/config': [hostname: 'relay',
+        net0: 'name=eth0,bridge=vmbr0,hwaddr=BC:24:11:55:CC:E5,type=veth'],
+    '/nodes/pve1/qemu/105/config': [name: 'no-nic', cores: 1],
+]
+
+def eriOff = discoverWith(statusAd, hostProps)
+def perfOff = discoverWith(perfAd, hostProps)
+note('guest-eri-off', eriOff.thrown == null && eriOff.exit == 0,
+     "exit was ${eriOff.exit} / ${eriOff.thrown}")
+note('guest-eri-off', eriOff.stdout == perfOff.stdout && !eriOff.stdout.trim().isEmpty(),
+     "flag-off discovery differs from the shared guest discovery:\n${eriOff.stdout}")
+note('guest-eri-off', !eriOff.requests.any { it.contains('/config') },
+     "flag-off discovery read guest configs: ${eriOff.requests}")
+def offIds = parseAd(eriOff.stdout).keySet()
+
+def eriOn = withFixtures(extendedFixtures) { discoverWith(statusAd, on) }
+def onAd = parseAd(eriOn.stdout)
+note('guest-eri-on', eriOn.thrown == null && eriOn.exit == 0,
+     "exit was ${eriOn.exit} / ${eriOn.thrown}: ${eriOn.stderr}")
+[
+    'qemu-101': 'bc:24:11:f8:1e:58',
+    'lxc-103' : 'bc:24:11:55:cc:e5',
+    // No NIC: the TopologySource's fallback key, which must match it byte for byte.
+    'qemu-105': 'proxmoxve--pve-cluster--qemu-105',
+].each { id, key ->
+    note('guest-eri-on', onAd[id]?.predef?.get('predef.externalResourceID') == key,
+         "${id} externalResourceID was ${onAd[id]?.predef}, expected ${key}")
+    note('guest-eri-on', onAd[id]?.predef?.get('predef.externalResourceType') == 'VirtualMachine',
+         "${id} externalResourceType was ${onAd[id]?.predef}")
+}
+// A config that cannot be read, and a guest on an offline node, are still instances.
+['qemu-104', 'lxc-200', 'qemu-102'].each { id ->
+    note('guest-eri-on', onAd.containsKey(id) && onAd[id].predef.isEmpty(),
+         "${id} should be discovered without keys: ${onAd[id]}")
+}
+note('guest-eri-on', !eriOn.requests.any { it.startsWith('/nodes/pve2/') },
+     "asked an offline node for guest configs: ${eriOn.requests}")
+note('guest-eri-on', !onAd.containsKey('qemu-999'), 'a template was discovered')
+note('guest-eri-on', onAd.keySet().containsAll(offIds),
+     "the flag lost instances: ${offIds - onAd.keySet()}")
+
+// A standalone host keys its NIC-less guests under the local node, as the TopologySource does.
+def eriStandalone = withFixtures(extendedFixtures +
+        ['/cluster/status': [[type: 'node', name: 'pve-a', local: 1, online: 1]]]) {
+    discoverWith(statusAd, on)
+}
+def standaloneKey = parseAd(eriStandalone.stdout)['qemu-105']?.predef?.get('predef.externalResourceID')
+note('guest-eri-standalone', standaloneKey == 'proxmoxve--pve-a--qemu-105',
+     "standalone fallback key was ${standaloneKey}")
+
+// lm.topo's namespace and blacklist rewrite the TopologySource's keys; the discovery
+// keys would no longer match, so the feature steps aside and says why.
+['topo.namespace', 'topo.blacklist'].each { prop ->
+    def run = withFixtures(extendedFixtures) { discoverWith(statusAd, on + [(prop): 'x']) }
+    note('guest-eri-namespace', run.thrown == null && run.exit == 0,
+         "${prop}: exit was ${run.exit} / ${run.thrown}")
+    note('guest-eri-namespace', parseAd(run.stdout).values().every { it.predef.isEmpty() },
+         "${prop} set but keys were still emitted:\n${run.stdout}")
+    note('guest-eri-namespace', run.stderr.contains(prop),
+         "${prop} set but stderr did not say so: ${run.stderr}")
+    note('guest-eri-namespace', !run.requests.any { it.contains('/config') },
+         "${prop} set but guest configs were still read: ${run.requests}")
+}
+
+// The gating calls are the optional extra; when they fail, discovery is today's.
+def gateFails = withFixtures(['/cluster/status': null]) { discoverWith(statusAd, on) }
+note('guest-eri-gate-fails', gateFails.thrown == null && gateFails.exit == 0,
+     "exit was ${gateFails.exit} / ${gateFails.thrown}")
+note('guest-eri-gate-fails', gateFails.stdout == eriOff.stdout,
+     "output differs from flag-off discovery:\n${gateFails.stdout}")
+
+// Only GuestStatus carries the keys, so each guest's key sits on one instance.
+def perfOn = withFixtures(extendedFixtures) { discoverWith(perfAd, on) }
+note('guest-eri-perf', perfOn.exit == 0 &&
+                       parseAd(perfOn.stdout).values().every { it.predef.isEmpty() },
+     "GuestPerformance discovery carried instance ERIs:\n${perfOn.stdout}")
 
 // --------------------------------------------------------------- topology
 //
