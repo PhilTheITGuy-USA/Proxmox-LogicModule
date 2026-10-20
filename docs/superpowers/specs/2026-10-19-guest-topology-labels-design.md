@@ -187,7 +187,8 @@ count in CLAUDE.md is updated if the new module adds any), and `lm_dashboards.py
 
 1. Import the changed and new modules (`addERI_Proxmox_VE_Guest`, GuestStatus, and the branch's
    existing changes), then delete the two spike modules.
-2. Set `pve.topology.enabled=true` and `pve.topology.cluster` on a group holding only the nodes.
+2. Set `pve.topology.enabled=true` on a group holding only the nodes. Both lab hosts are
+   standalone and each holds its own token, so neither needs `pve.topology.cluster` (INSTALL §3.3).
 3. Debian-test, the Windows Server guest and Frigate read `VirtualMachineResource`; the Pi reads
    `PhysicalServer`. Added 2026-10-20: this also proves the narrowed AppliesTo's
    `isLinux() || isWindows()` matches all three guests (SNMP Linux VM, LXC, Windows over WMI); and

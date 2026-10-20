@@ -103,7 +103,8 @@ Import every `dist/*.json` through **My Module Toolbox → Add → Import from f
 **`pve.api.token.credential`** on one Proxmox resource to the whole token string,
 `monitor@pve!logicmonitor=<secret>`. The PropertySource adds the `ProxmoxVE` category and every
 module applies itself from there — except the two optional topology modules, which need
-`pve.topology.enabled=true` and `pve.topology.cluster` on every node's resource, token or not
+`pve.topology.enabled=true` on every node's resource, plus `pve.topology.cluster` on the nodes of a
+cluster that do not hold the token; a standalone host needs only the first
 (`docs/INSTALL.md` §3.3).
 
 Two things account for most failed installs:
