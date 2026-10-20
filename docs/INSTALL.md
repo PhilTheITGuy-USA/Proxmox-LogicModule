@@ -330,8 +330,9 @@ key on every server in it.
 
 ### 4.3 Run the PropertySource
 
-On the resource: the PropertySource runs on its own schedule, but you can force it. Once it has run,
-the resource gains:
+The PropertySource runs on its own schedule, and the portal offers no way to force it: there is a
+manual rematch for a DataSource, but none for a PropertySource. Expect a delay after setting or
+removing the token, and wait rather than re-importing. Once it has run, the resource gains:
 
 | Property | Meaning |
 |---|---|

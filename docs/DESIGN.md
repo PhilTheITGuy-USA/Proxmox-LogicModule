@@ -333,9 +333,16 @@ the reference's types, not just its key names. It also settled that an import do
 on a standalone host (`ProxMox A`): the node resource carries `proxmoxve--proxmox-a--proxmox-a` from
 `addERI_Proxmox_VE` and its map vertex opens that resource, and the vertex for the LXC guest `Plex`
 opens the separately monitored `Plex Media Server` resource, whose ERI is the guest's MAC
-`bc:24:11:f8:1e:58` — no naming convention involved. Not yet seen: a multi-node cluster's map, where
-the cluster vertex takes its name from `/cluster/status` rather than falling back to the node's (the
-harness covers it).
+`bc:24:11:f8:1e:58` — no naming convention involved.
+
+**A two-node cluster, 2026-10-20.** `Proxmox A` and `Proxmox-B` were joined into one cluster, with
+`pve.topology.cluster` set on their group. `Proxmox_VE_Cluster` reads `ClusterConfigured` 1 with two
+nodes, and the map draws both nodes, each with its own guests under it. **The cluster vertex is not
+drawn**, and so neither are its Cluster edges: `pveTopoKey(cluster, null)` matches no resource and no
+instance, and the portal drops a vertex that matches nothing, just as it drops a guest with no MAC.
+The VMware comparison in the TopologySource's header ("matches nothing on purpose") does not hold
+here. Which node held the token during this check was not recorded, so the token-less path is still
+unproven (row above).
 
 **QEMU guests join the same way, 2026-10-19.** A QEMU guest's MAC is read from the `virtio=` form
 rather than LXC's `hwaddr=`, and two QEMU guests on `Proxmox-B`, each monitored as its own resource,
@@ -388,10 +395,9 @@ own resource, not in this suite.
 
 Four things are unproven, and each needs something no healthy lab produces on demand:
 
-- **A multi-node cluster's topology map** — see above; the one host that has run it is standalone.
-  Two questions ride on it: whether token-less nodes are drawn through `pve.topology.cluster`, and
-  whether the cluster vertex is drawn at all, since it deliberately matches no resource and the
-  portal has so far drawn only vertices that do.
+- **A token-less node on a multi-node map** — the two-node map above draws both nodes, but it is
+  not recorded whether one of them lacked the token, so drawing a node through
+  `pve.topology.cluster` alone is unproven. The cluster vertex is settled: it is not drawn.
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an

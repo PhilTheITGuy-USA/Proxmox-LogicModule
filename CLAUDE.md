@@ -309,7 +309,7 @@ the bindings' absence during AD.
 the only lookup. A resource still carrying the old `pve.api.token` sets `pveConfigError`, which
 sends the PropertySource down its silent path, so the category is never set and every module stops
 applying. The resource goes *quiet* rather than erroring. On an existing deployment, rename the
-property first, then re-run the PropertySource.
+property first, then wait for the PropertySource's next scheduled run (the portal cannot force one).
 
 **Active Discovery** goes through `pveDiscover`, which drops blank property values; `pvePropValue`
 URL-encodes values, so names, pools and tags stay readable; `pveWildValue` folds only the wildvalue
