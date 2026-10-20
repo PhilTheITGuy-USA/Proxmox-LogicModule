@@ -155,9 +155,11 @@ These are Proxmox API limits, not implementation shortcuts:
   `pve.topology.enabled=true`, Guest Status's discovery gives each guest on an online node an
   instance ERI, so every guest is drawn under its node whether or not it is its own resource and
   whether or not it answers SNMP. A guest that is its own resource is labelled a virtual machine by
-  `addERI_Proxmox_VE_Guest` only when its `auto.network.mac_address` carries a Proxmox prefix
-  (`bc:24:11`, or those in `pve.guest.mac_prefix`); a hand-set MAC outside them keeps
-  LogicMonitor's default, `PhysicalServer`. The instance ERIs are not supported where
+  `addERI_Proxmox_VE_Guest` only when it is a Linux or Windows resource and its
+  `auto.network.mac_address` carries a Proxmox prefix (`bc:24:11`, or those in
+  `pve.guest.mac_prefix`); a hand-set MAC outside them keeps LogicMonitor's default,
+  `PhysicalServer`, and a virtual appliance (a firewall or router VM) is left to its own ERI
+  modules. The instance ERIs are not supported where
   `topo.namespace` or `topo.blacklist` is set.
 - **Templates are excluded from discovery.** They are never running and would otherwise appear as
   permanently down instances.

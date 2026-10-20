@@ -56,11 +56,20 @@ to a DataSource instance, not only a resource.
 
 New ERI PropertySource, group `ERI`, `collectionInterval` 1800, **always on** (not `optional`).
 
-AppliesTo:
+AppliesTo, as shipped:
 
 ```
-auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix
+(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())
 ```
+
+> **Amended 2026-10-20 (final review).** The approved AppliesTo was the MAC clause alone,
+> `auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix` -- superseded. An
+> always-on priority-3 `VirtualMachineResource` ERI keyed only on MAC prefix would relabel virtual
+> appliances running as Proxmox guests (FortiGate-VM, pfSense/OPNsense, virtual routers), which
+> LogicMonitor's own modules label; and LogicMonitor's own VM labelling lives only in
+> `addERI_Linux` / `addERI_Windows`. So the module is limited to Linux and Windows resources. The
+> cost if `isLinux()` / `isWindows()` misses a real guest is that guest staying `PhysicalServer`,
+> which the §6 check shows; reverting is one string.
 
 The character classes cover both cases without relying on an inline `(?i)` flag.
 `pve.guest.mac_prefix` lets a customer whose cluster uses a different prefix (Datacenter >
@@ -180,7 +189,9 @@ count in CLAUDE.md is updated if the new module adds any), and `lm_dashboards.py
    existing changes), then delete the two spike modules.
 2. Set `pve.topology.enabled=true` and `pve.topology.cluster` on a group holding only the nodes.
 3. Debian-test, the Windows Server guest and Nvr01 read `VirtualMachineResource`; the Pi reads
-   `PhysicalServer`.
+   `PhysicalServer`. Added 2026-10-20: this also proves the narrowed AppliesTo's
+   `isLinux() || isWindows()` matches all three guests (SNMP Linux VM, LXC, Windows over WMI); and
+   a Proxmox node resource, as a second control, must stay `PhysicalServer`.
 4. Every guest on `Node-A` and `Node-B` is drawn under its node, including ones with no
    resource of their own.
 5. An instance's `predef.externalResourceID` reads as a MAC with colons, not `bc%3A24%3A11...`:

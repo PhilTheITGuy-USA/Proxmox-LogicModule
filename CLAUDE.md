@@ -144,8 +144,11 @@ the TopologySource's byte for byte, which is why both go through `pveTopoKey` an
 `pveConfigError` return back at the top of the script; the harness checks for it.
 
 **`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
-`auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix`, reaches every resource
-carrying Proxmox's default guest MAC prefix, in either case, or the override property; the script
+`(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`,
+reaches every Linux or Windows resource carrying Proxmox's default guest MAC prefix, in either
+case, or the override property. The OS clause is deliberate: a virtual appliance (FortiGate-VM,
+pfSense, a virtual router) running as a guest has its own ERI modules, and a priority-3 VM label
+keyed on MAC prefix alone would override them. The script
 matches through `pveGuestMacMatch`, makes no API call, and prints nothing on no match. It stamps
 `proxmoxve--vm--<mac>` in category `virt.proxmoxve` at priority **3** with type
 `VirtualMachineResource`: the resource type comes from the highest-priority ERI *across*
@@ -367,8 +370,11 @@ The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and de
 
 Every body opens with the same guard, because the preamble reports missing configuration through
 `pveConfigError` rather than throwing: DataSource bodies print it to `System.err` and `return 2`,
-the PropertySource returns 0 silently. Everything after it sits in a `try` whose `catch` writes the
-reason to `System.err` and returns 2. An optional surface that may legitimately be absent — HA
+and `addCategory_Proxmox_VE` returns 0 silently. The two ERI PropertySources are the deliberate
+exceptions: `addERI_Proxmox_VE` and `addERI_Proxmox_VE_Guest` never return on `pveConfigError`,
+because they must run without the token (see their paragraphs above). Everything after the guard
+sits in a `try` whose `catch` writes the reason to `System.err` and returns 2 (the
+PropertySources return 0 silently instead). An optional surface that may legitimately be absent — HA
 status on a cluster without HA — gets its own inner `try` and simply omits its datapoints.
 
 ## Editing checklist

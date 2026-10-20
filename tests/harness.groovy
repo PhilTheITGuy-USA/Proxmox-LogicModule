@@ -347,8 +347,10 @@ def parseAd = { String stdout ->
 def extendedFixtures = [
     '/cluster/resources?type=vm': fixtures['/cluster/resources?type=vm'] + [
         [id: 'lxc/103', type: 'lxc', vmid: 103, name: 'relay', node: 'pve1', template: false],
-        [id: 'qemu/104', type: 'qemu', vmid: 104, name: 'no-config', node: 'pve1', template: false],
         [id: 'qemu/105', type: 'qemu', vmid: 105, name: 'no-nic', node: 'pve1', template: false],
+        // Last on pve1 on purpose: its config read fails, and the per-node breaker skips
+        // every later config read on the same node.
+        [id: 'qemu/104', type: 'qemu', vmid: 104, name: 'no-config', node: 'pve1', template: false],
     ],
     '/nodes/pve1/lxc/103/config': [hostname: 'relay',
         net0: 'name=eth0,bridge=vmbr0,hwaddr=BC:24:11:0E:00:03,type=veth'],
@@ -390,6 +392,39 @@ note('guest-eri-on', !eriOn.requests.any { it.startsWith('/nodes/pve2/') },
 note('guest-eri-on', !onAd.containsKey('qemu-999'), 'a template was discovered')
 note('guest-eri-on', onAd.keySet().containsAll(offIds),
      "the flag lost instances: ${offIds - onAd.keySet()}")
+
+// Per-node circuit breaker. A node whose first config read fails is assumed sick for the
+// rest of the run: every later guest on it is discovered without keys rather than spending
+// a pve.api.timeout each. qemu-106 follows qemu-104 on pve1 and also has no config, so only
+// qemu-104's read may happen; the guests read before it keep their keys.
+def breakerFixtures = extendedFixtures + [
+    '/cluster/resources?type=vm': extendedFixtures['/cluster/resources?type=vm'] + [
+        [id: 'qemu/106', type: 'qemu', vmid: 106, name: 'after-failure', node: 'pve1', template: false],
+    ],
+]
+def breaker = withFixtures(breakerFixtures) { discoverWith(statusAd, on) }
+def breakerAd = parseAd(breaker.stdout)
+def configReads = breaker.requests.findAll { it.endsWith('/config') }
+note('guest-eri-breaker', breaker.thrown == null && breaker.exit == 0,
+     "exit was ${breaker.exit} / ${breaker.thrown}: ${breaker.stderr}")
+note('guest-eri-breaker', configReads.contains('/nodes/pve1/qemu/104/config') &&
+                          !configReads.contains('/nodes/pve1/qemu/106/config'),
+     "config reads continued on pve1 after its first failure: ${configReads}")
+note('guest-eri-breaker', configReads == ['/nodes/pve1/qemu/101/config',
+                                          '/nodes/pve1/lxc/103/config',
+                                          '/nodes/pve1/qemu/105/config',
+                                          '/nodes/pve1/qemu/104/config'],
+     "unexpected config reads: ${configReads}")
+['qemu-104', 'qemu-106'].each { id ->
+    note('guest-eri-breaker', breakerAd.containsKey(id) && breakerAd[id].predef.isEmpty(),
+         "${id} should be discovered without keys: ${breakerAd[id]}")
+}
+['qemu-101', 'lxc-103', 'qemu-105'].each { id ->
+    note('guest-eri-breaker', breakerAd[id]?.predef?.get('predef.externalResourceID') as boolean,
+         "${id}, read before the failure, lost its key: ${breakerAd[id]}")
+}
+note('guest-eri-breaker', breaker.stderr.readLines().count { it.contains('pve1') } == 1,
+     "expected one stderr line for pve1, got: ${breaker.stderr}")
 
 // A standalone host keys its NIC-less guests under the local node, as the TopologySource does.
 def eriStandalone = withFixtures(extendedFixtures +
@@ -633,7 +668,8 @@ note('addERI-guest', guestEriScript.contains("pveHostProp('auto.network.mac_addr
                      guestEriScript.contains("pveHostProp('pve.guest.mac_prefix')"),
      'the guest ERI PropertySource does not read the MAC and the prefix override')
 note('addERI-guest', guestEriDefn.appliesTo ==
-         'auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix',
+         '(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && ' +
+         '(isLinux() || isWindows())',
      "the guest ERI PropertySource AppliesTo is ${guestEriDefn.appliesTo}")
 // Always on: labelling a guest correctly is not something a customer should opt into.
 note('addERI-guest', !guestEriDefn.containsKey('optional'),

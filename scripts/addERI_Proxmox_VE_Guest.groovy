@@ -9,6 +9,11 @@
  * reports a generic QEMU model. The MAC prefix is the one thing a Windows VM over WMI, a
  * Linux VM over SNMP and an LXC container over SNMP all have in common.
  *
+ * Why only Linux and Windows. The AppliesTo ends in && (isLinux() || isWindows()), so a
+ * virtual appliance running as a guest -- FortiGate-VM, pfSense/OPNsense, a virtual router
+ * -- keeps the type its own ERI modules give it rather than a priority-3 VM label keyed on
+ * nothing but its MAC prefix.
+ *
  * Why priority 3. A portal spike (2026-10-19, DESIGN 7) emitted this same key at priority 1
  * and the type stayed PhysicalServer; at priority 3 it became VirtualMachineResource. The
  * resource type comes from the highest-priority ERI entry ACROSS categories, and the

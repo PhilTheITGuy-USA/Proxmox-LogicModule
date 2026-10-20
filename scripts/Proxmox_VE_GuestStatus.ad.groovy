@@ -12,7 +12,9 @@
  *
  * The map is the optional extra; the instance is not. Every failure on the way to a key
  * -- gating calls, a config read, a guest on an offline node -- leaves the guest
- * discovered without one. Only /cluster/resources?type=vm failing exits 2, as before.
+ * discovered without one. After a node's first failed config read, that node's later
+ * guests are not read at all this run. Only /cluster/resources?type=vm failing exits 2,
+ * as before.
  */
 if (pveConfigError) {
     System.err.println(pveConfigError)
@@ -54,11 +56,19 @@ try {
         }
     }
 
+    /*
+     * Per-node circuit breaker. A node that fails one config read is treated as sick for the
+     * rest of this run: its later guests are discovered without keys instead of each
+     * spending a pve.api.timeout, and stderr gets one line per node rather than per guest.
+     * The trade-off is accepted: a guest after the failure loses its key until the next run.
+     */
+    def failedNodes = [] as Set
+
     guests.each { guest ->
         def raw = [:]
         def nodeName = guest.node?.toString()
         // An offline node cannot answer for its guests; asking would spend a timeout each.
-        if (wanted && guest.vmid && onlineNodes.contains(nodeName)) {
+        if (wanted && guest.vmid && onlineNodes.contains(nodeName) && !failedNodes.contains(nodeName)) {
             /*
              * Per-guest try. A config that cannot be read is transient, so the guest gets no
              * key this run rather than the NIC-less fallback, which would change its identity
@@ -68,8 +78,10 @@ try {
             try {
                 config = pveGet('/nodes/' + nodeName + '/' + guest.type + '/' + guest.vmid + '/config')
             } catch (Exception guestException) {
-                System.err.println('Config read skipped for ' + guest.type + '/' + guest.vmid +
-                    ': ' + guestException.message)
+                failedNodes << nodeName
+                System.err.println('Config reads stopped for node ' + nodeName + ' after ' +
+                    guest.type + '/' + guest.vmid + ' failed (' + guestException.message +
+                    '); its remaining guests are discovered without keys this run.')
             }
             if (config instanceof Map) {
                 raw['predef.externalResourceID'] = pveGuestMac(config) ?:

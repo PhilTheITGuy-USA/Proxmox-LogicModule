@@ -260,8 +260,10 @@ says so on stderr, and a guest with no resource of its own is not drawn.
 **Guests are labelled as virtual machines, always.** `addERI_Proxmox_VE_Guest` is not optional and
 needs neither the token nor the flag. LogicMonitor labels a monitored guest `PhysicalServer`,
 because Proxmox's guest MAC prefix is not on its list of virtual-machine prefixes; this module
-applies to any resource whose `auto.network.mac_address` starts with Proxmox's default prefix
-`bc:24:11` and relabels it `VirtualMachineResource`. If your cluster hands out a different prefix
+applies to any Linux or Windows resource whose `auto.network.mac_address` starts with Proxmox's
+default prefix `bc:24:11` and relabels it `VirtualMachineResource`. Its AppliesTo is
+`(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`;
+the OS clause leaves virtual appliances such as FortiGate-VM or pfSense to their own ERI modules. If your cluster hands out a different prefix
 (**Datacenter → Options → MAC address prefix**), set `pve.guest.mac_prefix` on the group holding
 the guests: a comma-separated list such as `bc:24:11,02:00:00`, which replaces the default, so
 list `bc:24:11` too if it is still in use. A resource the property reaches whose MAC matches no
