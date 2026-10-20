@@ -216,7 +216,7 @@ group that holds the cluster's nodes and nothing else:
 | Property | Value |
 |---|---|
 | `pve.topology.enabled` | `true` |
-| `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `auto.pve.cluster.name` |
+| `pve.topology.cluster` | the cluster's name, exactly as the token-holding node reports it in `auto.pve.cluster.name`. Read only on a node **without** the token, so a standalone host leaves it unset — see below |
 | `pve.topology.node` | only on a node whose resource was added by IP address — its Proxmox node name |
 
 **Set `pve.topology.enabled` and `pve.topology.cluster` on a group holding only that cluster's
@@ -232,8 +232,16 @@ That is all. The API token stays on one node, as §4.1 recommends:
   its hostname, so `pve2.example.com` is node `pve2` — but an IP address names nothing, hence
   `pve.topology.node`.
 
-A **standalone host** needs only `pve.topology.enabled=true` on that host. Keep the property off
-guest resources: on a guest the ERI module would stamp a node key the map never asks for.
+A **standalone host** needs only `pve.topology.enabled=true`, and **no `pve.topology.cluster`**. It
+holds its own token, so `addERI_Proxmox_VE` asks the API, and the API names a host that has no
+cluster after the node itself: a standalone `node-a` is keyed `proxmoxve--node-a--node-a`.
+A value set anyway is ignored while the token is present, but becomes the key if the token is ever
+removed, so leave it unset rather than guess. Several standalone hosts can share one group that
+carries only the flag. `auto.pve.clustered` reads `false` on a standalone host, which is how to
+tell which case you have.
+
+Keep both properties off guest resources: on a guest the ERI module would stamp a node key the map
+never asks for.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —
