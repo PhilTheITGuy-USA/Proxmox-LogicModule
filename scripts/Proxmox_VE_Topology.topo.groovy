@@ -64,10 +64,7 @@ try {
      * the vertex still has to be unique across a portal that monitors several of them.
      */
     def status = pveGet('/cluster/status') ?: []
-    def clusterRow = status.find { it.type?.toString() == 'cluster' }
-    def localRow = status.find { it.local }
-    def clusterName = clusterRow?.name?.toString() ?:
-        localRow?.name?.toString() ?: 'standalone'
+    def clusterName = pveTopoClusterName(status)
 
     def clusterEri = eri([pveTopoKey(clusterName, null)])
 

@@ -392,6 +392,44 @@ note('topo-identity', identityOf(clusterProp + ['system.hostname': 'fd00::12']) 
 note('topo-identity', identityOf(['system.hostname': 'pve2']) == null,
      'produced an identity with no pve.topology.cluster')
 
+// The guest MAC prefix test and the cluster-name rule are shared by the TopologySource,
+// the guest ERI PropertySource and the guest discovery, none of which can run here.
+def guestMac = runSource(preamble + """
+return [
+    lower   : pveGuestMacMatch('bc:24:11:0e:00:01', null),
+    upper   : pveGuestMacMatch('BC:24:11:0E:00:04', null),
+    pi      : pveGuestMacMatch('88:a2:9e:0e:00:09', null),
+    custom  : pveGuestMacMatch('02:00:00:12:34:56', ' BC:24:11 , 02:00:00'),
+    notDflt : pveGuestMacMatch('bc:24:11:0e:00:01', '02:00:00'),
+    blank   : pveGuestMacMatch('  ', null),
+    none    : pveGuestMacMatch(null, null),
+    cluster : pveTopoClusterName([[type: 'cluster', name: 'pve-cluster'], [type: 'node', name: 'pve1', local: 1]]),
+    single  : pveTopoClusterName([[type: 'node', name: 'pve-a', local: 1]]),
+    empty   : pveTopoClusterName([]),
+]
+""", [hostProps: hostProps])
+note('guest-mac', guestMac.thrown == null, "guest MAC helpers threw ${guestMac.thrown}")
+def gm = guestMac.exit ?: [:]
+note('guest-mac', gm.lower == 'bc:24:11:0e:00:01', "lower MAC was ${gm.lower}")
+note('guest-mac', gm.upper == 'bc:24:11:0e:00:04', "upper MAC was ${gm.upper}")
+note('guest-mac', gm.pi == null, "a non-Proxmox MAC matched: ${gm.pi}")
+note('guest-mac', gm.custom == '02:00:00:12:34:56', "custom prefixes did not match: ${gm.custom}")
+note('guest-mac', gm.notDflt == null, "an override did not replace the default prefix: ${gm.notDflt}")
+note('guest-mac', gm.blank == null, "a blank MAC matched: ${gm.blank}")
+note('guest-mac', gm.none == null, "a null MAC matched: ${gm.none}")
+note('guest-mac', gm.cluster == 'pve-cluster', "cluster name was ${gm.cluster}")
+note('guest-mac', gm.single == 'pve-a', "standalone cluster name was ${gm.single}")
+note('guest-mac', gm.empty == 'standalone', "empty status cluster name was ${gm.empty}")
+// The fallback key must be built from the same cluster name in both places.
+note('guest-mac', new File(ROOT, 'scripts/Proxmox_VE_Topology.topo.groovy').text.contains('pveTopoClusterName('),
+     'the TopologySource derives its cluster name without pveTopoClusterName')
+
+def discoverRaw = runSource(preamble + "pveDiscover('qemu/1', 'n', 'd', [a: 'x'], " +
+    "['predef.externalResourceID': 'bc:24:11:00:00:01'])", [hostProps: hostProps])
+note('discover-raw', discoverRaw.thrown == null && discoverRaw.stdout.trim() ==
+     'qemu-1##n##d####auto.a=x&predef.externalResourceID=bc%3A24%3A11%3A00%3A00%3A01',
+     "raw properties output was ${discoverRaw.stdout.trim()} / ${discoverRaw.thrown}")
+
 // The ERI PropertySource is the other half of the node vertex, and it cannot run here
 // either: LogicMonitor's own addERI_* modules build the ERI output through lm.topo's
 // emitEri and printEriArray rather than printing JSON, so this script imports the same
