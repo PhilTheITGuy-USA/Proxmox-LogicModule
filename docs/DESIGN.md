@@ -216,16 +216,20 @@ populated on the target version before designing around it.
   shape. Modelled on `VMware_vSphere_VirtualMachine_Topology`, which identifies a VM the same way.
   **Optional, so off by default:** both require `pve.topology.enabled == "true"` in their AppliesTo.
   The build enforces the rule for any module marked `"optional": true` (see CLAUDE.md).
-  `addERI_Proxmox_VE` is the one module *not* gated on `hasCategory("ProxmoxVE")`, because every
-  node needs its key while only one node per cluster should carry the token (INSTALL §4.1). Where
-  the resource has a token it asks `/cluster/status`; where it does not, `pveTopoNodeIdentity`
-  reads `pve.topology.cluster` and takes the node name from `pve.topology.node` or the hostname.
+  `addERI_Proxmox_VE` is not gated on `hasCategory("ProxmoxVE")`, because every node needs its
+  key while only one node per cluster should carry the token (INSTALL §4.1). (Nor are
+  `addCategory_Proxmox_VE`, which sets that category, or `addERI_Proxmox_VE_Guest`, which runs on
+  guests.) Where the resource has a token it asks `/cluster/status`; where it does not,
+  `pveTopoNodeIdentity` reads `pve.topology.cluster` and takes the node name from
+  `pve.topology.node` or the hostname.
   - **Guests without SNMP, and guest labels: built 2026-10-19**, replacing the follow-up that was
     here. Behind the same opt-in, `Proxmox_VE_GuestStatus`'s discovery puts each guest's MAC (or
     its `pveTopoKey` fallback) on the guest's instance as `predef.externalResourceID`, so every guest
     is drawn whether or not it is a resource or answers SNMP; and the always-on
-    `addERI_Proxmox_VE_Guest` labels a guest that is its own resource `VirtualMachineResource` by
-    its Proxmox MAC prefix. Design and evidence:
+    `addERI_Proxmox_VE_Guest` labels a Linux or Windows guest that is its own resource
+    `VirtualMachineResource` by its Proxmox MAC prefix (AppliesTo
+    `(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`;
+    the OS clause, added at final review 2026-10-20, keeps virtual appliances on their own ERIs). Design and evidence:
     `docs/superpowers/specs/2026-10-19-guest-topology-labels-design.md`; what is proven is in §7.
 
 ---
@@ -304,7 +308,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 |---|---|
 | Modules built | 14 DataSources, 3 PropertySources, 1 TopologySource |
 | Scripts assembled | 26 compiled on Groovy 4, plus 3 Collector-only that cannot be |
-| Harness checks | 979, against a mock Proxmox API |
+| Harness checks | 1053, against a mock Proxmox API |
 | Portal import | **verified** for all 17 previously; 1 new pending (`addERI_Proxmox_VE_Guest`) |
 | Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
@@ -315,7 +319,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
-| `addERI_Proxmox_VE_Guest` | **not verified** — built 2026-10-19; the harness covers `pveGuestMacMatch` and the script's wiring but cannot run it. Unproven (guest topology labels spec §6 item 3): that the imported module labels Debian-test, the Windows Server guest and Frigate `VirtualMachineResource` while the Pi stays `PhysicalServer` |
+| `addERI_Proxmox_VE_Guest` | **not verified** — built 2026-10-19; the harness covers `pveGuestMacMatch` and the script's wiring but cannot run it. Unproven (guest topology labels spec §6 item 3): that the imported module labels Debian-test, the Windows Server guest and Frigate `VirtualMachineResource` while the Pi and a Proxmox node resource stay `PhysicalServer`; and that the AppliesTo's `isLinux()` / `isWindows()` clause, added 2026-10-20, matches all three guests |
 | GuestStatus instance ERIs | **not verified** — built 2026-10-19 behind `pve.topology.enabled`, harness-tested against the mock API. Unproven (spec §6 items 4-7): every guest on `Proxmox A` and `Proxmox-B` drawn under its node, including ones with no resource of their own; `predef.externalResourceID` reading as a MAC with colons rather than URL-encoded; whether the two instance properties are removed when the flag is turned off; the token on several nodes of one cluster |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. Unproven: a multi-node map with every node drawn while one node holds the token, and whether a portal accepts an AppliesTo with no `hasCategory` |
 
@@ -350,6 +354,10 @@ portal is `PhysicalServer` too, correctly, and is the case any fix must leave al
 label is open design work; the evidence for it is the properties of these guests: Windows over WMI
 reports `auto.endpoint.manufacturer = QEMU`, a Linux VM over SNMP reports nothing comparable, and
 an LXC guest's `sysinfo` shows the host's `-pve` kernel.
+
+That design work has since been done: spike 1 below found which ERI sets the type, and
+`addERI_Proxmox_VE_Guest` (built 2026-10-19, its portal check pending in the table above) labels
+Linux and Windows guests `VirtualMachineResource` by their Proxmox MAC prefix.
 
 **Spike 1, 2026-10-19 — which ERI sets the resource type.** A throwaway ERI PropertySource on
 Debian-test (VMID 201) emitted one key in category `virt.proxmoxve` with type

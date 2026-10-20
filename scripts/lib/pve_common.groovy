@@ -233,12 +233,16 @@ def pveGuestMac = { config ->
 }
 
 /*
- * Whether a guest's MAC is one Proxmox itself assigned, and so one worth keying a topology
- * edge or an ERI on. Proxmox generates guest MACs under BC:24:11 by default; a guest with
- * a hand-set MAC (a passed-through or migrated NIC, a 88:a2:9e Raspberry Pi) is somebody
- * else's hardware identity and must not be claimed. A site that changed Proxmox's MAC
- * prefix lists its own in prefixProperty (comma separated), and that list REPLACES the
- * default rather than adding to it. Returns the lowercased MAC on a match, else null.
+ * Whether a resource's MAC is one Proxmox itself assigned to a guest. This is what the
+ * label PropertySource, addERI_Proxmox_VE_Guest, matches with; the topology edges and
+ * GuestStatus's instance ERIs read the MAC from the guest config and do not use it.
+ * Proxmox generates guest MACs under BC:24:11 by default. A guest with a hand-set MAC (a
+ * passed-through or migrated NIC) is somebody else's hardware identity and must not be
+ * claimed, and a physical host such as the 88:a2:9e Raspberry Pi on the test portal is
+ * the control case that must never match. A site that changed Proxmox's MAC prefix lists
+ * its own in prefixProperty (comma separated), and that list REPLACES the default rather
+ * than adding to it. The match is a plain string prefix, so give whole octets
+ * (02:00:00, not 02:0). Returns the lowercased MAC on a match, else null.
  */
 def pveGuestMacMatch = { String mac, String prefixProperty ->
     if (mac == null || mac.trim().isEmpty()) { return null }
