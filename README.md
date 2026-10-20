@@ -15,7 +15,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
 | Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
-| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state |
+| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state; with the topology opt-in, the instance ERIs that draw every guest on the map |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
 | Proxmox VE Backup Coverage | Script, single instance | Guests that no backup job covers |
 | Proxmox VE Certificates | BatchScript | TLS certificate expiry, per certificate per node |
@@ -27,7 +27,8 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Subscription | BatchScript | Subscription status and renewal date, per node |
 | Proxmox VE Topology | TopologySource | Cluster, node and guest vertices and the edges between them |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
-| addERI_Proxmox_VE | PropertySource (ERI) | Gives a node's resource the ERI the topology map attaches to |
+| addERI_Proxmox_VE | PropertySource (ERI) | Gives each node's resource the ERI the topology map attaches to; needs no token |
+| addERI_Proxmox_VE_Guest | PropertySource (ERI) | Labels a guest monitored as its own resource as a virtual machine, from its Proxmox MAC prefix; always on, needs no token |
 
 **Four modules carry the bulk of the suite on one API call each.** Nodes, Guest Performance,
 Guest Status and Storage Capacity each make **one** call per collection interval no matter how
@@ -39,13 +40,14 @@ independently, so there is no dependable cross-DataSource response cache. Combin
 DataSource could reduce the count further, but would couple unrelated alerting and collection
 intervals. This is the practical low-load boundary while preserving separate modules.
 
-**No DataSource scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are also
+**No DataSource's collection scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are also
 fixed-cost. Node Services, Replication, Certificates, Disks and Subscription make one call per
 *online* node, and Node Detail one per node, because that data is only available from the node
 that owns it — and the expensive ones sit on long intervals for exactly that reason (Certificates
 and Disks at 240m, Subscription at 720m). Node counts are small and grow slowly; guest counts are
-neither. The one per-guest cost in the suite is the optional TopologySource, which reads each
-guest's config for its MAC address once an hour.
+neither. The per-guest costs in the suite both sit behind the topology opt-in: the TopologySource
+and Guest Status's discovery each read every guest's config for its MAC address once an hour,
+and only where `pve.topology.enabled=true` is set.
 
 ## Dashboards
 
@@ -100,7 +102,10 @@ python build/build.py       # writes dist/
 Import every `dist/*.json` through **My Module Toolbox → Add → Import from file**, then set
 **`pve.api.token.credential`** on one Proxmox resource to the whole token string,
 `monitor@pve!logicmonitor=<secret>`. The PropertySource adds the `ProxmoxVE` category and every
-module applies itself from there.
+module applies itself from there — except the two optional topology modules, which need
+`pve.topology.enabled=true` on every node's resource, plus `pve.topology.cluster` on the nodes of a
+cluster that do not hold the token; a standalone host needs only the first
+(`docs/INSTALL.md` §3.3).
 
 Two things account for most failed installs:
 
@@ -147,10 +152,16 @@ These are Proxmox API limits, not implementation shortcuts:
   zero.
 - **No node hardware identifier.** Nothing in the API returns a node's MAC or UUID, which is why
   the topology map needs `addERI_Proxmox_VE` to give a node's resource a key it can match on.
-- **A guest reaches the topology map only through its own resource.** The map draws a guest only
-  when that guest is monitored as its own LogicMonitor resource *and* that resource's
-  `predef.externalResourceID` carries the guest's MAC — which LogicMonitor fills in from SNMP. An
-  unmonitored guest, or a monitored one that does not answer SNMP, is left off the map.
+- **Guests reach the topology map through the opt-in, and their label through their MAC.** With
+  `pve.topology.enabled=true`, Guest Status's discovery gives each guest on an online node an
+  instance ERI, so every guest is drawn under its node whether or not it is its own resource and
+  whether or not it answers SNMP. A guest that is its own resource is labelled a virtual machine by
+  `addERI_Proxmox_VE_Guest` only when it is a Linux or Windows resource and its
+  `auto.network.mac_address` carries a Proxmox prefix (`bc:24:11`, or those in
+  `pve.guest.mac_prefix`); a hand-set MAC outside them keeps LogicMonitor's default,
+  `PhysicalServer`, and a virtual appliance (a firewall or router VM) is left to its own ERI
+  modules. The instance ERIs are not supported where
+  `topo.namespace` or `topo.blacklist` is set.
 - **Templates are excluded from discovery.** They are never running and would otherwise appear as
   permanently down instances.
 
@@ -178,9 +189,10 @@ docker compose -f tests/docker-compose.yml run --rm tests    # run against a moc
 The build refuses to emit a module whose script and datapoint declarations disagree, a dashboard
 widget that references something that does not exist or overlaps another, or a widget whose shape
 does not match LogicMonitor's own exported dashboards. The harness runs every script against a
-recorded API and asserts the output formats a Collector actually parses. Two scripts —
-`Proxmox_VE_Topology` and `addERI_Proxmox_VE` — depend on Collector-only classes and so are
-emitted to `dist/scripts/collector-only/`, outside the reach of both.
+recorded API and asserts the output formats a Collector actually parses. Three scripts —
+`Proxmox_VE_Topology`, `addERI_Proxmox_VE` and `addERI_Proxmox_VE_Guest` — depend on
+Collector-only classes and so are emitted to `dist/scripts/collector-only/`, outside the reach of
+both.
 
 **[`CLAUDE.md`](CLAUDE.md) is the contributor detail**: the Collector contract, which conventions
 are load-bearing, and what each check exists to prevent.

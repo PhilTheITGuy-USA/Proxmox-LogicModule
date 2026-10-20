@@ -22,11 +22,14 @@ def fixtures = new JsonSlurper().parse(new File(ROOT, 'tests/fixtures/pve_api.js
 // ------------------------------------------------------------------ mock API
 
 def requested = [] as Set
+// Every request in order, duplicates kept, so a case can look at only what it caused.
+def requestLog = Collections.synchronizedList([])
 def server = HttpServer.create(new InetSocketAddress('127.0.0.1', 0), 0)
 server.createContext('/api2/json') { exchange ->
     def uri = exchange.requestURI
     def key = uri.path.replaceFirst('^/api2/json', '') + (uri.query ? '?' + uri.query : '')
     requested << key
+    requestLog << key
 
     String body
     int status
@@ -48,6 +51,26 @@ server.createContext('/api2/json') { exchange ->
     exchange.responseBody.withStream { it.write(bytes) }
 }
 server.executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+/*
+ * Run body with some fixtures replaced. A null value removes that key, so the mock
+ * answers it with 501. Everything is put back afterwards, keys that did not exist
+ * included, so one case cannot leak its fixtures into the next.
+ */
+def withFixtures = { Map overrides, Closure body ->
+    def saved = [:]
+    def absent = []
+    overrides.each { key, value ->
+        if (fixtures.containsKey(key)) { saved[key] = fixtures[key] } else { absent << key }
+        if (value == null) { fixtures.remove(key) } else { fixtures[key] = value }
+    }
+    try {
+        return body()
+    } finally {
+        saved.each { key, value -> fixtures[key] = value }
+        absent.each { fixtures.remove(it) }
+    }
+}
 server.start()
 def baseUrl = 'http://127.0.0.1:' + server.address.port
 
@@ -270,6 +293,10 @@ note('propertysource', detectedProps['pve.version'] == '8.2.2',
      "did not report the Proxmox version: ${detectedProps}")
 note('propertysource', detectedProps['pve.clustered'] == 'true',
      "did not detect cluster membership: ${detectedProps}")
+// The value a user copies into pve.topology.cluster on the token-less node resources. It
+// has to be the name the TopologySource keys the cluster on, which is this same row.
+note('propertysource', detectedProps['pve.cluster.name'] == 'pve-cluster',
+     "did not publish the cluster name: ${detectedProps}")
 
 // A portal is mostly non-Proxmox resources. The PropertySource must stay silent on them
 // rather than applying the whole suite to unrelated hosts.
@@ -278,6 +305,162 @@ note('propertysource', notProxmox.exit == 0,
      "exit was ${notProxmox.exit} on a non-Proxmox host, expected 0")
 note('propertysource', notProxmox.stdout.trim().isEmpty(),
      "set properties on a host with no Proxmox credentials: ${notProxmox.stdout}")
+
+// ------------------------------------------------- GuestStatus instance ERIs
+//
+// GuestStatus has its own discovery so that, behind the topology opt-in, each guest's
+// instance can carry the key the TopologySource draws it under. Flag off, it must be
+// exactly the shared guest discovery: same lines, and no per-guest config reads.
+
+def statusAd = new File(scriptsDir, 'Proxmox_VE_GuestStatus.ad.groovy')
+def perfAd = new File(scriptsDir, 'Proxmox_VE_GuestPerformance.ad.groovy')
+def on = hostProps + ['pve.topology.enabled': 'true']
+
+// Run a discovery script and return the run plus only the requests it made.
+def discoverWith = { File file, Map props ->
+    int before = requestLog.size()
+    def run = runScript(file, [hostProps: props])
+    def log = new ArrayList(requestLog)
+    run.requests = log.subList(before, log.size())
+    run
+}
+
+// id -> [auto: [...], predef: [...]], values URL-decoded: pveDiscover encodes them, and
+// the portal reads the decoded form.
+def parseAd = { String stdout ->
+    def instances = [:]
+    stdout.readLines().findAll { it.trim() }.each { line ->
+        def matcher = AD_LINE.matcher(line)
+        if (!matcher.matches()) { return }
+        def props = [auto: [:], predef: [:]]
+        matcher.group(4).tokenize('&').each { pair ->
+            def parts = pair.split('=', 2)
+            def value = URLDecoder.decode(parts.length > 1 ? parts[1] : '', 'UTF-8')
+            if (parts[0].startsWith('auto.')) { props.auto[parts[0]] = value }
+            else if (parts[0].startsWith('predef.')) { props.predef[parts[0]] = value }
+        }
+        instances[matcher.group(1)] = props
+    }
+    instances
+}
+
+def extendedFixtures = [
+    '/cluster/resources?type=vm': fixtures['/cluster/resources?type=vm'] + [
+        [id: 'lxc/103', type: 'lxc', vmid: 103, name: 'relay', node: 'pve1', template: false],
+        [id: 'qemu/105', type: 'qemu', vmid: 105, name: 'no-nic', node: 'pve1', template: false],
+        // Last on pve1 on purpose: its config read fails, and the per-node breaker skips
+        // every later config read on the same node.
+        [id: 'qemu/104', type: 'qemu', vmid: 104, name: 'no-config', node: 'pve1', template: false],
+    ],
+    '/nodes/pve1/lxc/103/config': [hostname: 'relay',
+        net0: 'name=eth0,bridge=vmbr0,hwaddr=BC:24:11:0E:00:03,type=veth'],
+    '/nodes/pve1/qemu/105/config': [name: 'no-nic', cores: 1],
+]
+
+def eriOff = discoverWith(statusAd, hostProps)
+def perfOff = discoverWith(perfAd, hostProps)
+note('guest-eri-off', eriOff.thrown == null && eriOff.exit == 0,
+     "exit was ${eriOff.exit} / ${eriOff.thrown}")
+note('guest-eri-off', eriOff.stdout == perfOff.stdout && !eriOff.stdout.trim().isEmpty(),
+     "flag-off discovery differs from the shared guest discovery:\n${eriOff.stdout}")
+note('guest-eri-off', !eriOff.requests.any { it.contains('/config') },
+     "flag-off discovery read guest configs: ${eriOff.requests}")
+def offIds = parseAd(eriOff.stdout).keySet()
+
+def eriOn = withFixtures(extendedFixtures) { discoverWith(statusAd, on) }
+def onAd = parseAd(eriOn.stdout)
+note('guest-eri-on', eriOn.thrown == null && eriOn.exit == 0,
+     "exit was ${eriOn.exit} / ${eriOn.thrown}: ${eriOn.stderr}")
+[
+    'qemu-101': 'bc:24:11:0e:00:02',
+    'lxc-103' : 'bc:24:11:0e:00:03',
+    // No NIC: the TopologySource's fallback key, which must match it byte for byte.
+    'qemu-105': 'proxmoxve--pve-cluster--qemu-105',
+].each { id, key ->
+    note('guest-eri-on', onAd[id]?.predef?.get('predef.externalResourceID') == key,
+         "${id} externalResourceID was ${onAd[id]?.predef}, expected ${key}")
+    note('guest-eri-on', onAd[id]?.predef?.get('predef.externalResourceType') == 'VirtualMachine',
+         "${id} externalResourceType was ${onAd[id]?.predef}")
+}
+// A config that cannot be read, and a guest on an offline node, are still instances.
+['qemu-104', 'lxc-200', 'qemu-102'].each { id ->
+    note('guest-eri-on', onAd.containsKey(id) && onAd[id].predef.isEmpty(),
+         "${id} should be discovered without keys: ${onAd[id]}")
+}
+note('guest-eri-on', !eriOn.requests.any { it.startsWith('/nodes/pve2/') },
+     "asked an offline node for guest configs: ${eriOn.requests}")
+note('guest-eri-on', !onAd.containsKey('qemu-999'), 'a template was discovered')
+note('guest-eri-on', onAd.keySet().containsAll(offIds),
+     "the flag lost instances: ${offIds - onAd.keySet()}")
+
+// Per-node circuit breaker. A node whose first config read fails is assumed sick for the
+// rest of the run: every later guest on it is discovered without keys rather than spending
+// a pve.api.timeout each. qemu-106 follows qemu-104 on pve1 and also has no config, so only
+// qemu-104's read may happen; the guests read before it keep their keys.
+def breakerFixtures = extendedFixtures + [
+    '/cluster/resources?type=vm': extendedFixtures['/cluster/resources?type=vm'] + [
+        [id: 'qemu/106', type: 'qemu', vmid: 106, name: 'after-failure', node: 'pve1', template: false],
+    ],
+]
+def breaker = withFixtures(breakerFixtures) { discoverWith(statusAd, on) }
+def breakerAd = parseAd(breaker.stdout)
+def configReads = breaker.requests.findAll { it.endsWith('/config') }
+note('guest-eri-breaker', breaker.thrown == null && breaker.exit == 0,
+     "exit was ${breaker.exit} / ${breaker.thrown}: ${breaker.stderr}")
+note('guest-eri-breaker', configReads.contains('/nodes/pve1/qemu/104/config') &&
+                          !configReads.contains('/nodes/pve1/qemu/106/config'),
+     "config reads continued on pve1 after its first failure: ${configReads}")
+note('guest-eri-breaker', configReads == ['/nodes/pve1/qemu/101/config',
+                                          '/nodes/pve1/lxc/103/config',
+                                          '/nodes/pve1/qemu/105/config',
+                                          '/nodes/pve1/qemu/104/config'],
+     "unexpected config reads: ${configReads}")
+['qemu-104', 'qemu-106'].each { id ->
+    note('guest-eri-breaker', breakerAd.containsKey(id) && breakerAd[id].predef.isEmpty(),
+         "${id} should be discovered without keys: ${breakerAd[id]}")
+}
+['qemu-101', 'lxc-103', 'qemu-105'].each { id ->
+    note('guest-eri-breaker', breakerAd[id]?.predef?.get('predef.externalResourceID') as boolean,
+         "${id}, read before the failure, lost its key: ${breakerAd[id]}")
+}
+note('guest-eri-breaker', breaker.stderr.readLines().count { it.contains('pve1') } == 1,
+     "expected one stderr line for pve1, got: ${breaker.stderr}")
+
+// A standalone host keys its NIC-less guests under the local node, as the TopologySource does.
+def eriStandalone = withFixtures(extendedFixtures +
+        ['/cluster/status': [[type: 'node', name: 'pve-a', local: 1, online: 1]]]) {
+    discoverWith(statusAd, on)
+}
+def standaloneKey = parseAd(eriStandalone.stdout)['qemu-105']?.predef?.get('predef.externalResourceID')
+note('guest-eri-standalone', standaloneKey == 'proxmoxve--pve-a--qemu-105',
+     "standalone fallback key was ${standaloneKey}")
+
+// lm.topo's namespace and blacklist rewrite the TopologySource's keys; the discovery
+// keys would no longer match, so the feature steps aside and says why.
+['topo.namespace', 'topo.blacklist'].each { prop ->
+    def run = withFixtures(extendedFixtures) { discoverWith(statusAd, on + [(prop): 'x']) }
+    note('guest-eri-namespace', run.thrown == null && run.exit == 0,
+         "${prop}: exit was ${run.exit} / ${run.thrown}")
+    note('guest-eri-namespace', parseAd(run.stdout).values().every { it.predef.isEmpty() },
+         "${prop} set but keys were still emitted:\n${run.stdout}")
+    note('guest-eri-namespace', run.stderr.contains(prop),
+         "${prop} set but stderr did not say so: ${run.stderr}")
+    note('guest-eri-namespace', !run.requests.any { it.contains('/config') },
+         "${prop} set but guest configs were still read: ${run.requests}")
+}
+
+// The gating calls are the optional extra; when they fail, discovery is today's.
+def gateFails = withFixtures(['/cluster/status': null]) { discoverWith(statusAd, on) }
+note('guest-eri-gate-fails', gateFails.thrown == null && gateFails.exit == 0,
+     "exit was ${gateFails.exit} / ${gateFails.thrown}")
+note('guest-eri-gate-fails', gateFails.stdout == eriOff.stdout,
+     "output differs from flag-off discovery:\n${gateFails.stdout}")
+
+// Only GuestStatus carries the keys, so each guest's key sits on one instance.
+def perfOn = withFixtures(extendedFixtures) { discoverWith(perfAd, on) }
+note('guest-eri-perf', perfOn.exit == 0 &&
+                       parseAd(perfOn.stdout).values().every { it.predef.isEmpty() },
+     "GuestPerformance discovery carried instance ERIs:\n${perfOn.stdout}")
 
 // --------------------------------------------------------------- topology
 //
@@ -347,6 +530,85 @@ note('topo-helpers', helper.noNic == null,
 note('topo-helpers', helper.nothing == null,
      "invented a MAC from a null config: ${helper.nothing}")
 
+// A node resource without the API token names itself from its properties. The key it
+// arrives at must be the one the TopologySource builds from /cluster/status for the same
+// node, or that node is not drawn -- and nothing reports the mismatch.
+def identityOf = { Map props ->
+    def run = runSource(preamble + '\nreturn pveTopoNodeIdentity()', [hostProps: props])
+    note('topo-identity', run.thrown == null, "pveTopoNodeIdentity threw ${run.thrown}")
+    run.exit
+}
+def keyOf = { Map props ->
+    def run = runSource(preamble + '''
+def id = pveTopoNodeIdentity()
+return id ? pveTopoKey(id.cluster, id.node) : null''', [hostProps: props])
+    run.exit
+}
+def clusterProp = ['pve.topology.cluster': 'pve-cluster']
+
+note('topo-identity', keyOf(clusterProp + ['system.hostname': 'pve2.example.com']) ==
+                      'proxmoxve--pve-cluster--pve2',
+     'an FQDN hostname did not yield the key the TopologySource builds for that node')
+note('topo-identity', identityOf(clusterProp + ['system.hostname': 'pve2']) ==
+                      [cluster: 'pve-cluster', node: 'pve2'],
+     'a short hostname was not taken as the node name')
+// sysname is what the host calls itself; hostname is whatever the resource was added as.
+note('topo-identity', identityOf(clusterProp + ['system.sysname': 'pve3',
+                                                'system.hostname': 'proxmox-c.lan'])?.node == 'pve3',
+     'system.hostname was preferred over system.sysname')
+note('topo-identity', identityOf(clusterProp + ['system.sysname': 'pve3',
+                                                'system.hostname': '10.0.0.13'])?.node == 'pve3',
+     'an IP hostname displaced a usable sysname')
+note('topo-identity', identityOf(clusterProp + ['pve.topology.node': 'pve4',
+                                                'system.sysname': 'pve3'])?.node == 'pve4',
+     'pve.topology.node did not override the derived name')
+// An address names nothing. Guessing would stamp a key that matches no vertex.
+note('topo-identity', identityOf(clusterProp + ['system.hostname': '10.0.0.12']) == null,
+     'an IPv4 address was taken as a node name')
+note('topo-identity', identityOf(clusterProp + ['system.hostname': 'fd00::12']) == null,
+     'an IPv6 address was taken as a node name')
+// No cluster name, no key: the TopologySource keys every node under the cluster's name.
+note('topo-identity', identityOf(['system.hostname': 'pve2']) == null,
+     'produced an identity with no pve.topology.cluster')
+
+// The guest MAC prefix test and the cluster-name rule are shared by the TopologySource,
+// the guest ERI PropertySource and the guest discovery, none of which can run here.
+def guestMac = runSource(preamble + """
+return [
+    lower   : pveGuestMacMatch('bc:24:11:0e:00:01', null),
+    upper   : pveGuestMacMatch('BC:24:11:0E:00:04', null),
+    pi      : pveGuestMacMatch('88:a2:9e:0e:00:09', null),
+    custom  : pveGuestMacMatch('02:00:00:12:34:56', ' BC:24:11 , 02:00:00'),
+    notDflt : pveGuestMacMatch('bc:24:11:0e:00:01', '02:00:00'),
+    blank   : pveGuestMacMatch('  ', null),
+    none    : pveGuestMacMatch(null, null),
+    cluster : pveTopoClusterName([[type: 'cluster', name: 'pve-cluster'], [type: 'node', name: 'pve1', local: 1]]),
+    single  : pveTopoClusterName([[type: 'node', name: 'pve-a', local: 1]]),
+    empty   : pveTopoClusterName([]),
+]
+""", [hostProps: hostProps])
+note('guest-mac', guestMac.thrown == null, "guest MAC helpers threw ${guestMac.thrown}")
+def gm = guestMac.exit ?: [:]
+note('guest-mac', gm.lower == 'bc:24:11:0e:00:01', "lower MAC was ${gm.lower}")
+note('guest-mac', gm.upper == 'bc:24:11:0e:00:04', "upper MAC was ${gm.upper}")
+note('guest-mac', gm.pi == null, "a non-Proxmox MAC matched: ${gm.pi}")
+note('guest-mac', gm.custom == '02:00:00:12:34:56', "custom prefixes did not match: ${gm.custom}")
+note('guest-mac', gm.notDflt == null, "an override did not replace the default prefix: ${gm.notDflt}")
+note('guest-mac', gm.blank == null, "a blank MAC matched: ${gm.blank}")
+note('guest-mac', gm.none == null, "a null MAC matched: ${gm.none}")
+note('guest-mac', gm.cluster == 'pve-cluster', "cluster name was ${gm.cluster}")
+note('guest-mac', gm.single == 'pve-a', "standalone cluster name was ${gm.single}")
+note('guest-mac', gm.empty == 'standalone', "empty status cluster name was ${gm.empty}")
+// The fallback key must be built from the same cluster name in both places.
+note('guest-mac', new File(ROOT, 'scripts/Proxmox_VE_Topology.topo.groovy').text.contains('pveTopoClusterName('),
+     'the TopologySource derives its cluster name without pveTopoClusterName')
+
+def discoverRaw = runSource(preamble + "pveDiscover('qemu/1', 'n', 'd', [a: 'x'], " +
+    "['predef.externalResourceID': 'bc:24:11:00:00:01'])", [hostProps: hostProps])
+note('discover-raw', discoverRaw.thrown == null && discoverRaw.stdout.trim() ==
+     'qemu-1##n##d####auto.a=x&predef.externalResourceID=bc%3A24%3A11%3A00%3A00%3A01',
+     "raw properties output was ${discoverRaw.stdout.trim()} / ${discoverRaw.thrown}")
+
 // The ERI PropertySource is the other half of the node vertex, and it cannot run here
 // either: LogicMonitor's own addERI_* modules build the ERI output through lm.topo's
 // emitEri and printEriArray rather than printing JSON, so this script imports the same
@@ -373,9 +635,45 @@ note('addERI', eriScript.contains('lmtopo.emitEri(') &&
 // are not Proxmox, and a PropertySource that prints on one it does not understand
 // corrupts that resource's properties. Asserted by reading the guard, since the script
 // cannot be executed here.
-note('addERI', eriScript.contains('if (pveConfigError) {') &&
+note('addERI', eriScript.contains('if (!identity) {') &&
                eriScript.contains('return 0'),
-     'the ERI PropertySource does not return silently when unconfigured')
+     'the ERI PropertySource does not return silently when it cannot name the node')
+// The point of the property path: a node with no token still gets its key. If the script
+// ever returns on pveConfigError again, only the token-holding node can be drawn.
+note('addERI', eriScript.contains('pveTopoNodeIdentity()') &&
+               !eriScript.contains('if (pveConfigError) {'),
+     'the ERI PropertySource requires the API token again')
+
+// The guest-labelling ERI PropertySource is Collector-only for the same reason, so its
+// matching logic lives in pveGuestMacMatch (asserted above) and what is asserted here is
+// the wiring. Priority 3 is the finding of spec spike 1: the resource type comes from
+// the highest-priority ERI across categories, and the built-in net.l2 entry is 2, so
+// anything lower leaves a guest drawn as PhysicalServer with nothing failing anywhere.
+def guestEriScript = new File(ROOT, 'scripts/addERI_Proxmox_VE_Guest.groovy').text
+def guestEriDefn = new JsonSlurper().parse(new File(ROOT, 'modules/addERI_Proxmox_VE_Guest.json'))
+
+note('addERI-guest', guestEriScript.contains('pveGuestMacMatch('),
+     'the guest ERI PropertySource matches the MAC without pveGuestMacMatch')
+note('addERI-guest', guestEriScript.contains("lmtopo.emitEri('virt.proxmoxve', 3,") &&
+                     guestEriScript.contains("'VirtualMachineResource'") &&
+                     guestEriScript.contains('lmtopo.printEriArray('),
+     'the guest ERI PropertySource does not emit virt.proxmoxve at priority 3 as VirtualMachineResource')
+note('addERI-guest', !guestEriScript.contains('rawERIs'),
+     'the guest ERI PropertySource hand-writes the rawERIs JSON instead of using emitEri')
+// A guest has no token, so the preamble always sets pveConfigError: returning on it would
+// make the module a no-op on every resource it applies to.
+note('addERI-guest', !guestEriScript.contains('if (pveConfigError) {'),
+     'the guest ERI PropertySource returns on pveConfigError, which every guest sets')
+note('addERI-guest', guestEriScript.contains("pveHostProp('auto.network.mac_address')") &&
+                     guestEriScript.contains("pveHostProp('pve.guest.mac_prefix')"),
+     'the guest ERI PropertySource does not read the MAC and the prefix override')
+note('addERI-guest', guestEriDefn.appliesTo ==
+         '(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && ' +
+         '(isLinux() || isWindows())',
+     "the guest ERI PropertySource AppliesTo is ${guestEriDefn.appliesTo}")
+// Always on: labelling a guest correctly is not something a customer should opt into.
+note('addERI-guest', !guestEriDefn.containsKey('optional'),
+     'the guest ERI PropertySource is marked optional')
 
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),
