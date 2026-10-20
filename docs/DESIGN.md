@@ -220,12 +220,13 @@ populated on the target version before designing around it.
   node needs its key while only one node per cluster should carry the token (INSTALL §4.1). Where
   the resource has a token it asks `/cluster/status`; where it does not, `pveTopoNodeIdentity`
   reads `pve.topology.cluster` and takes the node name from `pve.topology.node` or the hostname.
-  - **Follow-up, not built: guests without SNMP.** A monitored guest that does not answer SNMP has
-    no MAC in its ERI and stays off the map. The same property approach would reach it: the
-    TopologySource emits the guest's synthesised `pveTopoKey(cluster, kind-vmid)` alongside its MAC,
-    and the ERI module stamps that key on a guest resource carrying its VMID as a property. Costs a
-    property per guest, and needs a portal to confirm that a two-key vertex matches a one-key
-    resource.
+  - **Guests without SNMP, and guest labels: built 2026-10-19**, replacing the follow-up that was
+    here. Behind the same opt-in, `Proxmox_VE_GuestStatus`'s discovery puts each guest's MAC (or
+    its `pveTopoKey` fallback) on the guest's instance as `predef.externalResourceID`, so every guest
+    is drawn whether or not it is a resource or answers SNMP; and the always-on
+    `addERI_Proxmox_VE_Guest` labels a guest that is its own resource `VirtualMachineResource` by
+    its Proxmox MAC prefix. Design and evidence:
+    `docs/superpowers/specs/2026-10-19-guest-topology-labels-design.md`; what is proven is in §7.
 
 ---
 
@@ -301,10 +302,10 @@ The single record of what is proven and what is not. Nothing else in the reposit
 
 | | |
 |---|---|
-| Modules built | 14 DataSources, 2 PropertySources, 1 TopologySource |
-| Scripts assembled | 26 compiled on Groovy 4, plus 2 Collector-only that cannot be |
+| Modules built | 14 DataSources, 3 PropertySources, 1 TopologySource |
+| Scripts assembled | 26 compiled on Groovy 4, plus 3 Collector-only that cannot be |
 | Harness checks | 979, against a mock Proxmox API |
-| Portal import | **verified** for all 17 modules |
+| Portal import | **verified** for all 17 previously; 1 new pending (`addERI_Proxmox_VE_Guest`) |
 | Real Proxmox host | **verified** — Tier 1 collecting since 2026-09-10, Tier 2 on 2026-09-22 against a three-node cluster with Ceph |
 | Tier 1a datapoints | **verified** — 16 added, reporting as expected, 2026-09-10 |
 | Tier 1 dashboard | **verified** — 20 of 20 widgets, 2026-09-22. It had silently imported 16 since 2026-09-15; see below |
@@ -314,6 +315,8 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology modules opt-in via `pve.topology.enabled` | **not verified** — AppliesTo changed 2026-10-07; not yet re-imported. Unproven: that the portal accepts the clause, that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
+| `addERI_Proxmox_VE_Guest` | **not verified** — built 2026-10-19; the harness covers `pveGuestMacMatch` and the script's wiring but cannot run it. Unproven (guest topology labels spec §6 item 3): that the imported module labels Debian-test, the Windows Server guest and Nvr01 `VirtualMachineResource` while the Pi stays `PhysicalServer` |
+| GuestStatus instance ERIs | **not verified** — built 2026-10-19 behind `pve.topology.enabled`, harness-tested against the mock API. Unproven (spec §6 items 4-7): every guest on `Node-A` and `Node-B` drawn under its node, including ones with no resource of their own; `predef.externalResourceID` reading as a MAC with colons rather than URL-encoded; whether the two instance properties are removed when the flag is turned off; the token on several nodes of one cluster |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. Unproven: a multi-node map with every node drawn while one node holds the token, and whether a portal accepts an AppliesTo with no `hasCategory` |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
@@ -348,7 +351,24 @@ label is open design work; the evidence for it is the properties of these guests
 reports `auto.endpoint.manufacturer = QEMU`, a Linux VM over SNMP reports nothing comparable, and
 an LXC guest's `sysinfo` shows the host's `-pve` kernel.
 
-**The portal draws only vertices that match a resource.** Test Script on `Node-A` emitted all
+**Spike 1, 2026-10-19 — which ERI sets the resource type.** A throwaway ERI PropertySource on
+Debian-test (VMID 201) emitted one key in category `virt.proxmoxve` with type
+`VirtualMachineResource`. At priority 1 the key merged into `predef.externalResourceID` and the
+type stayed `PhysicalServer`; at priority 3 the type became `VirtualMachineResource`, and the guest
+stayed a child of `Node-B` on the map, drawn as a VM. So the type comes from the
+highest-priority entry *across* categories — the built-in `net.l2` entry is priority 2 — while keys
+from every category merge into the ID. `addERI_Proxmox_VE_Guest` is built on this.
+
+**Spike 2, 2026-10-19 — a vertex can resolve to a DataSource instance.** LogicMonitor's
+`VMware_vSphere_VirtualMachineStatus` sets the instance properties `predef.externalResourceID`
+(the VM's MACs) and `predef.externalResourceType = VirtualMachine` in Active Discovery. A throwaway
+DataSource did the same for two guests: the ping-only `Relay01` (CT 103 on `Node-A`), which
+had never been drawn, was drawn under its node; `Debian-test`, which has its own resource with the
+same MAC, stayed drawn once and correctly. GuestStatus's instance ERIs are built on this. Both
+spike modules are deleted at the portal check (spec §6 item 1).
+
+**The portal draws only vertices that match a resource or, as spike 2 later showed, a DataSource
+instance.** What follows is the record of 2026-09-23. Test Script on `Node-A` emitted all
 seven guests' edges, but the map drew four. The unmonitored LXC guest `Webapp01` was not drawn
 at all, so a guest reaches the map only when it is its own resource *and* that resource's
 `predef.externalResourceID` carries the guest's MAC — which LogicMonitor's own discovery supplies

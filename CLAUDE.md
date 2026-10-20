@@ -65,18 +65,26 @@ dist/                            GENERATED, gitignored — never edit, never com
 
 - config: `pveHostProp`, `pveInstanceProp`, `pveConfigError` (set, never thrown)
 - HTTP: `pveGet(path)`, which returns the unwrapped `data` and throws on any non-2xx
-- discovery: `pveDiscover`, `pveWildValue`, `pveDisplayName`, `pvePropValue`
+- discovery: `pveDiscover`, `pveWildValue`, `pveDisplayName`, `pvePropValue`, and the guest
+  set both guest bodies share, `pveGuestList` / `pveGuestDiscover`
 - output: `pveEmit`, `pveRound`, `pvePercent` (0 when the total is 0), `pveGB` / `pveMB` —
   decimal units, because the portal renders raw bytes as `5.001E11`
 - topology: `pveTopoKey` (must match what `addERI_Proxmox_VE` stamps), `pveGuestMac`,
-  `pveTopoNodeIdentity`
+  `pveTopoNodeIdentity`, `pveTopoClusterName`, and `pveGuestMacMatch` (what
+  `addERI_Proxmox_VE_Guest` matches a guest's MAC prefix with)
 
-**Discovery scripts are shared; collection scripts are not.** Nine AD bodies back eleven
-multiInstance modules. `Proxmox_VE_Guests.ad.groovy` backs both GuestPerformance and GuestStatus;
-`Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription. The build emits a *copy*
-per consuming module as `dist/scripts/<Module>.ad.groovy`, so those modules discover identical instance sets and a
-single guest carries both a performance and a status instance. Editing a shared AD body changes
-every module naming it in `discoveryScript`.
+**Discovery scripts are shared; collection scripts are not.** Ten AD bodies back eleven
+multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription.
+The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those
+modules discover identical instance sets. Editing a shared AD body changes every module naming it
+in `discoveryScript`.
+
+**The two guest bodies share a helper instead.** `Proxmox_VE_Guests.ad.groovy` backs
+GuestPerformance; GuestStatus has its own `Proxmox_VE_GuestStatus.ad.groovy`, because only it
+carries the guests' instance ERIs (behind `pve.topology.enabled`; see the topology paragraphs).
+Both build their output through `pveGuestList` and `pveGuestDiscover` in the preamble, so they
+still discover the same guests under the same wildvalues and a single guest carries both a
+performance and a status instance. Change the guest set or its properties there, never in one body.
 
 **Two bodies discover nodes, and picking the wrong one is a silent bug.**
 `Proxmox_VE_Nodes.ad.groovy` discovers *every* node, offline ones included, so a down node still has
@@ -87,7 +95,7 @@ that can never collect is worse than no instance. A module reading node rows out
 Both bodies emit the same wildvalue, the node's Proxmox `id`, so a module can move from one to
 the other without orphaning its existing instances.
 
-Fourteen DataSources, two PropertySources and one TopologySource. `python build/build.py
+Fourteen DataSources, three PropertySources and one TopologySource. `python build/build.py
 --check` prints the count, and is the fastest way to confirm this table has not drifted.
 
 | Module | Method | Interval | Discovery | Calls per interval |
@@ -98,7 +106,7 @@ Fourteen DataSources, two PropertySources and one TopologySource. `python build/
 | `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |
 | `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` | 1, O(1) |
 | `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` | 1, O(1) |
-| `Proxmox_VE_GuestStatus` | batchscript | 3m | `Guests.ad` | 1, O(1) |
+| `Proxmox_VE_GuestStatus` | batchscript | 3m | `GuestStatus.ad` | 1, O(1); hourly discovery + 2 + 1 per guest on an online node when `pve.topology.enabled` |
 | `Proxmox_VE_CephOSD` | batchscript | 5m | `CephOSD.ad` | 2, O(1) — see below |
 | `Proxmox_VE_NodeServices` | batchscript | 5m | `NodeServices.ad` | 1 + 1 per online node |
 | `Proxmox_VE_StorageCapacity` | batchscript | 10m | `Storage.ad` | 1, O(1) |
@@ -108,10 +116,12 @@ Fourteen DataSources, two PropertySources and one TopologySource. `python build/
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
 | `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
 | `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, **optional** | 30m | — | 1 with a token, 0 without |
+| `addERI_Proxmox_VE_Guest` | ERI PropertySource, Collector-only, always on | 30m | — | 0 |
 | `Proxmox_VE_Topology` | TopologySource, Collector-only, **optional** | 60m | — | 3 + 1 per guest on an online node |
 
-The TopologySource is the one O(guests) module: it reads each guest's `config` for its MAC, which
-is why it runs hourly and is opt-in.
+The TopologySource and, with the opt-in, GuestStatus's discovery are the two O(guests) costs: each
+reads every guest's `config` for its MAC, which is why both run hourly and only behind
+`pve.topology.enabled`.
 
 **An optional module must not apply by default.** Mark it `"optional": true` in
 `modules/<Module>.json` and add `&& pve.<feature>.enabled == "true"` to its AppliesTo; its
@@ -119,9 +129,11 @@ is why it runs hourly and is opt-in.
 turn it on. `check_optional` in `build.py` enforces all three, and the reverse — an opt-in clause on
 an unmarked module — so the mark and the AppliesTo cannot drift apart. The two topology modules
 share `pve.topology.enabled` because neither works without the other. AppliesTo compares the
-string exactly, so the value is lowercase `true`.
+string exactly, so the value is lowercase `true`. GuestStatus's instance ERIs read the same
+property, but inside its discovery body rather than its AppliesTo, because the module itself is
+not optional.
 
-**`addERI_Proxmox_VE` is the one module that runs without the token**, and so the one not gated
+**`addERI_Proxmox_VE` runs without the token**, and so is not gated
 on `hasCategory("ProxmoxVE")`. The map needs its key on *every* node's resource, while the token
 belongs on one node per cluster — put it on every node and every DataSource collects the whole
 cluster once per node. Where a token is present it asks `/cluster/status`; otherwise
@@ -130,6 +142,17 @@ cluster once per node. Where a token is present it asks `/cluster/status`; other
 the TopologySource's byte for byte, which is why both go through `pveTopoKey` and why
 `addCategory_Proxmox_VE` publishes `auto.pve.cluster.name` for the user to copy. Do not put a
 `pveConfigError` return back at the top of the script; the harness checks for it.
+
+**`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
+`auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix`, reaches every resource
+carrying Proxmox's default guest MAC prefix, in either case, or the override property; the script
+matches through `pveGuestMacMatch`, makes no API call, and prints nothing on no match. It stamps
+`proxmoxve--vm--<mac>` in category `virt.proxmoxve` at priority **3** with type
+`VirtualMachineResource`: the resource type comes from the highest-priority ERI *across*
+categories, and the built-in `net.l2` is priority 2, so anything lower leaves the guest
+`PhysicalServer` with nothing failing (DESIGN §7, spike 1). A guest never carries the token, so the
+preamble always sets `pveConfigError` there — returning on it would make the module a no-op, and
+the harness checks for that too.
 
 **There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
 the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
@@ -185,8 +208,8 @@ widgets — better, export it and count them there. Tier 1 was missing four widg
 an export showed it.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones (`addERI_Proxmox_VE`, above, is
-the exception); `addCategory_Proxmox_VE` is what sets that category, by calling `/version` and
+`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones (`addERI_Proxmox_VE` and
+`addERI_Proxmox_VE_Guest`, above, are the exceptions); `addCategory_Proxmox_VE` is what sets that category, by calling `/version` and
 staying completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Its
 own AppliesTo is `true()`, so it runs on every resource in the portal, and that is safe *only*
 because of the silence. Break it and the whole suite starts applying itself to unrelated Linux
@@ -330,13 +353,15 @@ Collector-only and would cost us the compile check and the harness (DESIGN §6, 
 `Invoke-LMCollectorDebugCommand` runs `!groovy` on a real Collector — the closest thing to a live
 test harness this project has.
 
-**Two scripts break that rule, and only those two.** `Proxmox_VE_Topology` and
-`addERI_Proxmox_VE` import `com.logicmonitor.mod.Snippets` (`lm.topo`), because the ERI and
-topology output formats are too poorly documented to reimplement (DESIGN §6). `build.py` emits both
-to `dist/scripts/collector-only/`, which the compile glob does not reach, and the harness skips
+**Three scripts break that rule, and only those three.** `Proxmox_VE_Topology`,
+`addERI_Proxmox_VE` and `addERI_Proxmox_VE_Guest` import `com.logicmonitor.mod.Snippets`
+(`lm.topo`), because the ERI and topology output formats are too poorly documented to reimplement
+(DESIGN §6). `build.py` emits every ERI PropertySource and the TopologySource to
+`dist/scripts/collector-only/`, which the compile glob does not reach, and the harness skips
 `topologysource` and `propertysource` modules. That is why their Proxmox-side logic lives in
-preamble helpers (`pveTopoKey`, `pveGuestMac`, `pveTopoNodeIdentity`) that the harness *can* reach.
-Do not add a third script without the same treatment, and do not move these two back.
+preamble helpers (`pveTopoKey`, `pveGuestMac`, `pveTopoNodeIdentity`, `pveGuestMacMatch`) that the
+harness *can* reach. Do not add a fourth script without the same treatment, and do not move these
+three back.
 
 The opt-in `pve.api.insecure` TLS bypass is lab-only and must stay opt-in and default-off.
 
@@ -355,7 +380,7 @@ enforces the first two agreeing; nothing enforces the third.
 **Adding a module drifts more than that table.** Module counts are written out in prose in
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
 `build.py` fails the build when a numbered phrase disagrees with `modules/` — `fourteen
-DataSources`, `2 PropertySources`, `all 17 modules`, `all seventeen:` — but only those shapes; a
+DataSources`, `3 PropertySources`, `all 18 modules`, `all eighteen:` — but only those shapes; a
 count phrased any other way (`the eleven modules that discover`) is still unchecked.
 
 **Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
