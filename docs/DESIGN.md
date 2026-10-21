@@ -223,8 +223,9 @@ populated on the target version before designing around it.
   `pveTopoNodeIdentity` reads `pve.topology.cluster` and takes the node name from
   `pve.topology.node` or the hostname.
   - **Name-plus-IP node keys: built 2026-10-20**
-    (`docs/superpowers/specs/2026-10-20-topology-node-ip-keys-design.md`). Each node vertex also
-    carries `proxmoxve--node--<name>--<ip>` from its `/cluster/status` row, and `addERI_Proxmox_VE`
+    (`docs/superpowers/specs/2026-10-20-topology-node-ip-keys-design.md`). Each node vertex
+    carries `proxmoxve--node--<name>--<ip>` from its `/cluster/status` row, and only that key (the
+    cluster-scoped one only where the row has no address; see §7, 2026-10-21), and `addERI_Proxmox_VE`
     stamps the same key from every address in `system.ips`, so a token-less node matches without
     `pve.topology.cluster` and one group can hold every cluster's nodes. The cluster vertex is not
     drawn: an instance carrying its key reaches only its own resource (§7, spike 3), so the spec's
@@ -407,6 +408,16 @@ error text was not recorded. If the rule holds, it reaches guests too, unproven:
 through GuestStatus's instance ERI lives on the token holder, so on a cluster a guest of another node
 may be drawn without its Compute edge. GuestStatus's instance ERIs were verified on two standalone
 hosts, each its own token holder, where the question does not arise.
+
+**A vertex with two keys matches only a resource carrying both, 2026-10-21.** The first import of
+the name-plus-IP keys gave each node vertex both keys, the cluster-scoped and the IP one, on the
+spec's assumption that a vertex matches a resource carrying any one of them. Test Script showed
+lm.topo joining them into a single ID,
+`proxmoxve--labcluster--proxmox-b_proxmoxve--node--node-b--192-0-2-211`. With
+`pve.topology.cluster` removed, `Node-B` carried only the IP key — correctly, with no key from
+its `fe80:` address — and was left unmatched: on the map without an edge, its guests gone.
+`Node-A`, holding the token and so both keys, still matched. A node vertex now carries one key
+(`pveTopoNodeVertexKey`), and the harness refuses a second.
 
 **The portal draws only vertices that match a resource or, as spike 2 later showed, a DataSource
 instance.** What follows is the record of 2026-09-23. Test Script on `Node-A` emitted all

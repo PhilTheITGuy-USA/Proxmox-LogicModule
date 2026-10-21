@@ -279,6 +279,17 @@ def pveTopoNodeKeys = { String node, List ips ->
 }
 
 /*
+ * The one key a node vertex carries. Not both: lm.topo joins a vertex's keys into a single
+ * ID, and the portal then matches only a resource carrying every one of them, so a
+ * token-less node stamped with the IP key alone went unmatched (DESIGN section 7,
+ * 2026-10-21). The IP key whenever /cluster/status gives a usable address, since every
+ * node's resource carries it; the cluster-scoped key otherwise.
+ */
+def pveTopoNodeVertexKey = { String cluster, String node, String ip ->
+    pveTopoNodeKey(node, ip) ?: pveTopoKey(cluster, node)
+}
+
+/*
  * The MAC of a guest's first virtual NIC, out of a guest config.
  *
  * QEMU writes it as "virtio=BC:24:11:0E:00:02,bridge=vmbr0" and LXC as

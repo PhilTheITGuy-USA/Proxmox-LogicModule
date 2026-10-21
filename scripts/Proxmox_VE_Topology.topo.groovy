@@ -21,14 +21,14 @@
  *             (/cluster/status gives name, ip, nodeid; /nodes/{node}/status gives none;
  *             /nodes/{node}/network has no hwaddr). So the node keys are synthesised,
  *             and addERI_Proxmox_VE stamps the identical keys on each node's own
- *             resource. There are two. pveTopoKey(cluster, node) needs the cluster's name,
- *             which a resource without the token has only from pve.topology.cluster.
- *             pveTopoNodeKey(node, ip) needs only the node's name and the address
- *             /cluster/status reports for it, which is among the resource's system.ips --
- *             so a token-less node matches with no property set. A vertex matches a
- *             resource carrying any one of its keys. A node whose resource carries neither
- *             is not drawn: the portal renders only vertices that match a resource or a
- *             DataSource instance (DESIGN section 7).
+ *             resource. The vertex carries one: pveTopoNodeKey(node, ip), which needs only
+ *             the node's name and the address /cluster/status reports for it -- among
+ *             the resource's system.ips, so a token-less node matches with no property
+ *             set. Only a row with no usable address falls back to pveTopoKey(cluster,
+ *             node). Never both: lm.topo joins a vertex's keys into one ID, and the portal
+ *             then matches only a resource carrying all of them (DESIGN section 7,
+ *             2026-10-21). A node whose resource lacks the key is not drawn: the portal
+ *             renders only vertices that match a resource or a DataSource instance.
  *   cluster - synthesised, and not drawn: nothing carries its key, and the portal drops
  *             a vertex that matches nothing, unlike VMware's map-only cluster vertex. A
  *             DataSource instance carrying it is drawn with an edge to its own resource
@@ -88,10 +88,9 @@ try {
     nodes.each { node ->
         def nodeName = node.node?.toString()
         if (!nodeName) { return }
-        // A row with no usable address keeps only the cluster-scoped key; a null must
-        // not reach eriPreProcessor.
-        nodeEris[nodeName] = eri([pveTopoKey(clusterName, nodeName),
-                                  pveTopoNodeKey(nodeName, nodeIps[nodeName])].findAll { it })
+        // One key, never two (see the header); a row with no usable address falls back
+        // to the cluster-scoped key, so no null reaches eriPreProcessor.
+        nodeEris[nodeName] = eri([pveTopoNodeVertexKey(clusterName, nodeName, nodeIps[nodeName])])
         if (node.status?.toString() == 'online') { onlineNodes << nodeName }
         // Every node gets its cluster edge, offline included: a node that is down is
         // still part of the cluster, and dropping it would make the map forget the

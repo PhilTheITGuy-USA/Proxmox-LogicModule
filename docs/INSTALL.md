@@ -241,7 +241,7 @@ Two optional properties remain, for the cases that key cannot cover:
 | Property | When |
 |---|---|
 | `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name. It brings the node into the group above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
-| `pve.topology.cluster` | the older cluster-scoped key, `proxmoxve--<cluster>--<node>`, on a node without the token. Only on a group holding **one** cluster's nodes, exactly as the token holder reports it in `auto.pve.cluster.name`; **never on a group spanning clusters**, where a wrong value can attach a node to a same-named node of another cluster |
+| `pve.topology.cluster` | the older cluster-scoped key, `proxmoxve--<cluster>--<node>`, on a node without the token. The map uses it only for a node `/cluster/status` reports no address for. Only on a group holding **one** cluster's nodes, exactly as the token holder reports it in `auto.pve.cluster.name`; **never on a group spanning clusters**, where a wrong value can attach a node to a same-named node of another cluster |
 
 A **standalone host** needs nothing beyond the flag. It holds its own token, so `addERI_Proxmox_VE`
 asks the API, and it is drawn without a cluster above it. `auto.pve.clustered` reads `false` on a

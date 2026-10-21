@@ -145,9 +145,13 @@ local `/cluster/status` row's `ip` where a token is present, with the name from 
 key from each node's `/cluster/status` row, so one group carrying only `pve.topology.enabled` covers
 every cluster. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
 from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
-`pve.topology.cluster` without — so existing deployments keep matching. Either key must equal the
-TopologySource's byte for byte, which is why both sides go through the same preamble helpers. The
-cluster vertex is never drawn (DESIGN §7, spike 3). Do not put a
+`pve.topology.cluster` without. **A node vertex carries exactly one key**, chosen by
+`pveTopoNodeVertexKey`: the IP key, or the cluster-scoped key only when its row has no usable
+address. lm.topo joins a vertex's keys into one ID and the portal then matches only a resource
+carrying all of them, so a two-key vertex leaves a token-less node unmatched (DESIGN §7,
+2026-10-21); the harness refuses one. The key must equal the TopologySource's byte for byte, which
+is why both sides go through the same preamble helpers. The cluster vertex is never drawn
+(DESIGN §7, spike 3). Do not put a
 `pveConfigError` return back at the top of the script; the harness checks for it.
 
 **`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
