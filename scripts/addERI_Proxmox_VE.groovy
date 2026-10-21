@@ -17,16 +17,22 @@
  * from drifting apart. They must produce byte-identical keys or every node vertex silently
  * stops matching its resource.
  *
- * Where the cluster and node names come from. The map needs this key on EVERY node's
+ * Two keys, and where their parts come from. The map needs a key on EVERY node's
  * resource, but only one resource per cluster normally carries the API token: give every
  * node the token and every DataSource collects the whole cluster once per node. So:
  *
- *   token set     -- ask /cluster/status, as before. Exact, and all a standalone host needs.
- *   no token      -- pveTopoNodeIdentity: pve.topology.cluster from the resource or its
- *                    group, and the node name from pve.topology.node or the hostname.
+ *   pveTopoKey(cluster, node)  -- with a token, both names from /cluster/status; without
+ *                                 one, pve.topology.cluster plus pveTopoNodeName. Without
+ *                                 that property this key is simply not stamped.
+ *   pveTopoNodeKey(node, ip)   -- one per address in system.ips, plus the address
+ *                                 /cluster/status reports on the token path. It needs no
+ *                                 cluster name, which is what lets one group, with no
+ *                                 per-cluster property, hold the nodes of every cluster.
  *
- * The API path falls back to the property path when the API cannot answer, so a node that
- * is briefly unreachable keeps its key rather than losing it until the next run.
+ * The node name is /cluster/status's local row with a token, and pveTopoNodeName (the
+ * pve.topology.node property, else the short hostname) without. The API path falls back to
+ * the property path when the API cannot answer, so a node that is briefly unreachable keeps
+ * its keys rather than losing them until the next run.
  *
  * LIKE THE TOPOLOGYSOURCE, THIS CANNOT BE COMPILED OR RUN OUTSIDE A COLLECTOR. The ERI
  * output format is not hand-written JSON: LogicMonitor's own addERI_* modules build it
@@ -56,6 +62,7 @@ def ert = 'PhysicalServer'
 
 try {
     def identity = null
+    def localIp = null
     if (!pveConfigError) {
         try {
             def status = pveGet('/cluster/status') ?: []
@@ -70,13 +77,15 @@ try {
             if (nodeName) {
                 def clusterRow = status.find { it.type?.toString() == 'cluster' }
                 identity = [cluster: clusterRow?.name?.toString() ?: nodeName, node: nodeName]
+                localIp = localRow.ip?.toString()
             }
         } catch (Exception apiException) {
             // Fall through to the properties. Still silent: see the header.
         }
     }
     identity = identity ?: pveTopoNodeIdentity()
-    if (!identity) {
+    def name = identity?.node ?: pveTopoNodeName()
+    if (!name) {
         return 0
     }
 
@@ -88,7 +97,14 @@ try {
      * harmless. Stamping into net.l2 would fight the MACs.
      */
     def keys = []
-    keys << pveTopoKey(identity.cluster, identity.node)
+    if (identity) {
+        keys << pveTopoKey(identity.cluster, identity.node)
+    }
+    keys += pveTopoNodeKeys(name, (pveHostProp('system.ips') ?: '').tokenize(',') + [localIp])
+    keys = keys.unique()
+    if (!keys) {
+        return 0
+    }
 
     def eriArray = new JSONArray()
     lmtopo.emitEri('proxmoxve', 1, keys, ert, eriArray)
