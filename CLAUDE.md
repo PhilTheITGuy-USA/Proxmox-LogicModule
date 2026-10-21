@@ -242,7 +242,9 @@ undeclared datapoint, if a declared datapoint is never printed (unless marked `"
 in the module definition), if a `batchscript` module is not `multiInstance` or a `multiInstance`
 module has no discovery script, or if brackets are unbalanced in an assembled script, or if a
 datapoint uses a name LogicMonitor reserves (`RESERVED_DATAPOINT_NAMES` — `In` was refused by a
-portal, so the CephOSD datapoint is `OSDIn`), or if a module count in the docs disagrees with
+portal, so the CephOSD datapoint is `OSDIn`), or if a definition's text field — in practice
+`technicalNotes` — passes the portal's 4096-character limit (`check_field_lengths`; the portal's
+refusal names no field), or if a module count in the docs disagrees with
 `modules/` (`check_doc_counts`). The Docker image, `groovy:4-jdk17`, matches the
 Collector's runtime.
 
