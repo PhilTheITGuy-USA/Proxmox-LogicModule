@@ -571,6 +571,64 @@ note('topo-identity', identityOf(clusterProp + ['system.hostname': 'fd00::12']) 
 note('topo-identity', identityOf(['system.hostname': 'pve2']) == null,
      'produced an identity with no pve.topology.cluster')
 
+// The second node key needs no cluster name: the node's name plus an address it holds.
+// The TopologySource takes both from /cluster/status; addERI_Proxmox_VE takes the name
+// from the resource and the address from system.ips, which LogicMonitor writes with IPv6
+// uncompressed. The two must meet byte for byte, or a token-less node is not drawn.
+def ipKey = runSource(preamble + """
+def rows = statusRows.findAll { it.type == 'node' }
+def sysIps = [pve1: 'fe80:0:0:0:be24:11ff:fe00:1,192.168.10.11',
+              pve2: 'fe80:0:0:0:be24:11ff:fe00:1, fd00:0:0:0:0:0:0:12']
+return [
+    ip       : ['192.0.2.211', ' 192.0.2.211 ', 'fd00::12', 'FD00:0:0:0:0:0:0:12',
+                'fd00::12%vmbr0'].collectEntries { [(it): pveTopoIp(it)] },
+    rejected : [null, '', '127.0.0.1', '::1', 'fe80::1', 'fe80:0:0:0:be24:11ff:fe00:1',
+                '0.0.0.0', '999.1.1.1', 'pve1.example.com'].collectEntries { [(it): pveTopoIp(it)] },
+    v4       : pveTopoNodeKey('pve1', '192.168.10.11'),
+    fqdn     : pveTopoNodeKey('PVE1.example.com', '192.168.10.11'),
+    v6       : pveTopoNodeKey('pve2', 'fd00::12'),
+    missing  : [pveTopoNodeKey('pve2', null), pveTopoNodeKey(null, '192.168.10.11'),
+                pveTopoNodeKey('', '192.168.10.11'), pveTopoNodeKey('pve2', 'fe80::1')],
+    trips    : rows.collect { [it.name, pveTopoNodeKey(it.name, it.ip),
+                               pveTopoNodeKeys(it.name, sysIps[it.name].tokenize(','))] },
+    dedupe   : pveTopoNodeKeys('pve1', ['192.168.10.11', '192.168.10.11', '10.0.0.5']),
+]
+""", [hostProps: hostProps, statusRows: fixtures['/cluster/status']])
+note('topo-ipkey', ipKey.thrown == null, "IP key helpers threw ${ipKey.thrown}")
+def ik = ipKey.exit ?: [:]
+note('topo-ipkey', ik.ip == ['192.0.2.211': '192.0.2.211', ' 192.0.2.211 ': '192.0.2.211',
+                             'fd00::12': 'fd00:0:0:0:0:0:0:12',
+                             'FD00:0:0:0:0:0:0:12': 'fd00:0:0:0:0:0:0:12',
+                             'fd00::12%vmbr0': 'fd00:0:0:0:0:0:0:12'],
+     "addresses did not normalise: ${ik.ip}")
+// Loopback, link-local and wildcard name no reachable node; a hostname or a malformed
+// quad must not reach InetAddress, which would resolve it through DNS.
+note('topo-ipkey', ik.rejected && ik.rejected.values().every { it == null },
+     "accepted an address that names no node: ${ik.rejected}")
+note('topo-ipkey', ik.v4 == 'proxmoxve--node--pve1--192-168-10-11', "IPv4 node key was ${ik.v4}")
+note('topo-ipkey', ik.fqdn == ik.v4, "an FQDN node name was not shortened: ${ik.fqdn}")
+note('topo-ipkey', ik.v6 == 'proxmoxve--node--pve2--fd00-0-0-0-0-0-0-12', "IPv6 node key was ${ik.v6}")
+note('topo-ipkey', ik.missing == [null, null, null, null], "keyed a missing part: ${ik.missing}")
+note('topo-ipkey', ik.trips?.size() == 2 && ik.trips.every { name, vertex, eri ->
+                       vertex != null && eri == [vertex] },
+     "the vertex key and the ERI key built from system.ips differ: ${ik.trips}")
+note('topo-ipkey', ik.dedupe == ['proxmoxve--node--pve1--192-168-10-11',
+                                 'proxmoxve--node--pve1--10-0-0-5'],
+     "node keys were not deduplicated in order: ${ik.dedupe}")
+
+// The node's own name, which the IP key needs, without the cluster name.
+def nodeNameOf = { Map props ->
+    def run = runSource(preamble + '\nreturn pveTopoNodeName()', [hostProps: props])
+    note('topo-ipkey', run.thrown == null, "pveTopoNodeName threw ${run.thrown}")
+    run.exit
+}
+note('topo-ipkey', nodeNameOf(['system.hostname': 'pve2.example.com']) == 'pve2',
+     'a hostname without pve.topology.cluster did not name the node')
+note('topo-ipkey', nodeNameOf(['system.hostname': '10.0.0.12']) == null,
+     'an IP address was taken as a node name')
+note('topo-ipkey', nodeNameOf(['pve.topology.node': 'pve4', 'system.sysname': 'pve3']) == 'pve4',
+     'pve.topology.node did not override the derived name')
+
 // The guest MAC prefix test and the cluster-name rule are shared by the TopologySource,
 // the guest ERI PropertySource and the guest discovery, none of which can run here.
 def guestMac = runSource(preamble + """

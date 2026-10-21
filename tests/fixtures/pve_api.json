@@ -19,14 +19,16 @@
       "name": "pve1",
       "online": 1,
       "local": 1,
-      "nodeid": 1
+      "nodeid": 1,
+      "ip": "192.168.10.11"
     },
     {
       "type": "node",
       "id": "node/pve2",
       "name": "pve2",
       "online": 0,
-      "nodeid": 2
+      "nodeid": 2,
+      "ip": "fd00::12"
     }
   ],
   "/cluster/ha/status/current": [

@@ -176,6 +176,15 @@ def pveMB = { value ->
 }
 
 /*
+ * Joins the parts of a topology key, folded to the alphabet an ERI key can carry. Both
+ * node keys and the cluster key go through it, so the two sides that build each key
+ * cannot disagree on case or punctuation.
+ */
+def pveTopoFold = { List parts ->
+    parts.collect { it.toString().toLowerCase().replaceAll('[^a-z0-9_-]', '-') }.join('--')
+}
+
+/*
  * The synthesised topology key for a Proxmox vertex, used for the cluster and for every
  * node. Proxmox exposes no hardware identifier for a node anywhere in its API, so the node
  * vertex cannot be matched on something it already has the way a guest is matched on its
@@ -185,14 +194,15 @@ def pveMB = { value ->
  */
 def pveTopoKey = { String cluster, String node ->
     def parts = node ? ['proxmoxve', cluster, node] : ['proxmoxve', cluster]
-    parts.collect { it.toString().toLowerCase().replaceAll('[^a-z0-9_-]', '-') }.join('--')
+    pveTopoFold(parts)
 }
 
 /*
- * Which cluster and node a resource stands for, read from its properties alone -- for a
- * node resource that carries no API token, and so cannot ask /cluster/status. Giving
- * every node the token would make every DataSource collect the whole cluster once per
- * node, which is the duplication docs/INSTALL.md 4.1 warns against.
+ * Which node, and for pveTopoNodeIdentity which cluster, a resource stands for, read from
+ * its properties alone -- for a node resource that carries no API token, and so cannot
+ * ask /cluster/status. Giving every node the token would make every DataSource collect
+ * the whole cluster once per node, which is the duplication docs/INSTALL.md 4.1 warns
+ * against.
  *
  * The cluster name has no source but pve.topology.cluster, set once on the group that
  * holds the nodes. The node name is pve.topology.node when set, and otherwise the short
@@ -201,9 +211,7 @@ def pveTopoKey = { String cluster, String node ->
  * name and is skipped. Returns null rather than guessing: a wrong key matches no vertex,
  * which is indistinguishable on the map from no key at all, but costs a stray ERI.
  */
-def pveTopoNodeIdentity = { ->
-    def cluster = pveHostProp('pve.topology.cluster')
-    if (!cluster) { return null }
+def pveTopoNodeName = { ->
     def node = pveHostProp('pve.topology.node')
     if (!node) {
         def hostname = ['system.sysname', 'system.hostname']
@@ -211,7 +219,63 @@ def pveTopoNodeIdentity = { ->
             .find { it && !(it ==~ /\d{1,3}(\.\d{1,3}){3}/) && !it.contains(':') }
         node = hostname?.tokenize('.')?.getAt(0)
     }
+    return node ?: null
+}
+
+// The cluster and node together, for pveTopoKey's node key; null without pve.topology.cluster.
+def pveTopoNodeIdentity = { ->
+    def cluster = pveHostProp('pve.topology.cluster')
+    if (!cluster) { return null }
+    def node = pveTopoNodeName()
     return node ? [cluster: cluster, node: node] : null
+}
+
+/*
+ * One address in the form both sides of the node IP key agree on, or null.
+ *
+ * The TopologySource reads a node's address from /cluster/status, which may write IPv6
+ * compressed (fd00::12); addERI_Proxmox_VE reads system.ips, where LogicMonitor writes it
+ * in full (fd00:0:0:0:0:0:0:12). InetAddress settles both to the full form. It is handed
+ * only a literal: given anything else Java resolves it as a hostname, and a PropertySource
+ * that runs on every opted-in resource must not make DNS lookups. A dotted quad is checked
+ * octet by octet for that reason, and an IPv6 candidate goes in bracketed, which makes Java
+ * refuse rather than resolve one it cannot parse. Loopback, link-local and the wildcard
+ * name no reachable node, and every host has the first two, so they are dropped.
+ */
+def pveTopoIp = { String raw ->
+    def text = raw?.trim()?.replaceFirst(/%.*$/, '')
+    if (!text) { return null }
+    def quad = text ==~ /\d{1,3}(\.\d{1,3}){3}/ && text.tokenize('.').every { (it as int) <= 255 }
+    if (!quad && !text.contains(':')) { return null }
+    try {
+        def address = InetAddress.getByName(quad ? text : '[' + text + ']')
+        if (address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isAnyLocalAddress()) {
+            return null
+        }
+        return address.getHostAddress().toLowerCase()
+    } catch (Exception ignored) {
+        return null
+    }
+}
+
+/*
+ * The node key that needs no cluster name: the node's short name and one of its
+ * addresses. A token-less node cannot learn its cluster's name, but it knows its own name
+ * and addresses, and /cluster/status gives the TopologySource the same two for every node.
+ * The name alone collides across clusters (pve1 is everyone's first node) and the address
+ * alone across overlapping private networks; together they are unique in practice, and
+ * topo.namespace covers the environment that reuses both. Null when either part is
+ * missing or the address is not one pveTopoIp accepts.
+ */
+def pveTopoNodeKey = { String node, String ip ->
+    def name = node?.trim()?.tokenize('.')?.getAt(0)
+    def address = pveTopoIp(ip)
+    return (name && address) ? pveTopoFold(['proxmoxve', 'node', name, address]) : null
+}
+
+// pveTopoNodeKey over every address a node holds: unusable ones dropped, duplicates once.
+def pveTopoNodeKeys = { String node, List ips ->
+    (ips ?: []).collect { pveTopoNodeKey(node, it?.toString()) }.findAll { it }.unique()
 }
 
 /*

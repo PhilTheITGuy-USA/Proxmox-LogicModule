@@ -69,9 +69,11 @@ dist/                            GENERATED, gitignored — never edit, never com
   set both guest bodies share, `pveGuestList` / `pveGuestDiscover`
 - output: `pveEmit`, `pveRound`, `pvePercent` (0 when the total is 0), `pveGB` / `pveMB` —
   decimal units, because the portal renders raw bytes as `5.001E11`
-- topology: `pveTopoKey` (must match what `addERI_Proxmox_VE` stamps), `pveGuestMac`,
-  `pveTopoNodeIdentity`, `pveTopoClusterName`, and `pveGuestMacMatch` (what
-  `addERI_Proxmox_VE_Guest` matches a guest's MAC prefix with)
+- topology: `pveTopoKey` and `pveTopoNodeKey` / `pveTopoNodeKeys` (the cluster-scoped and the
+  name-plus-IP node keys; each must match what `addERI_Proxmox_VE` stamps), `pveTopoIp` (the
+  address form both sides agree on), `pveGuestMac`, `pveTopoNodeName`, `pveTopoNodeIdentity`,
+  `pveTopoClusterName`, and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a
+  guest's MAC prefix with)
 
 **Discovery scripts are shared; collection scripts are not.** Ten AD bodies back eleven
 multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription.
