@@ -138,11 +138,16 @@ not optional.
 **`addERI_Proxmox_VE` runs without the token**, and so is not gated
 on `hasCategory("ProxmoxVE")`. The map needs its key on *every* node's resource, while the token
 belongs on one node per cluster — put it on every node and every DataSource collects the whole
-cluster once per node. Where a token is present it asks `/cluster/status`; otherwise
-`pveTopoNodeIdentity` in the preamble builds the identity from `pve.topology.cluster` and
-`pve.topology.node` or the short hostname, and returns null rather than guess. Its key must equal
-the TopologySource's byte for byte, which is why both go through `pveTopoKey` and why
-`addCategory_Proxmox_VE` publishes `auto.pve.cluster.name` for the user to copy. Do not put a
+cluster once per node. It stamps two kinds of key. The name-plus-IP key,
+`pveTopoNodeKeys(name, ips)`, needs no cluster name: one key per address in `system.ips`, plus the
+local `/cluster/status` row's `ip` where a token is present, with the name from that row or else
+`pveTopoNodeName` (`pve.topology.node`, else the short hostname). The TopologySource builds the same
+key from each node's `/cluster/status` row, so one group carrying only `pve.topology.enabled` covers
+every cluster. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
+from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
+`pve.topology.cluster` without — so existing deployments keep matching. Either key must equal the
+TopologySource's byte for byte, which is why both sides go through the same preamble helpers. The
+cluster vertex is never drawn (DESIGN §7, spike 3). Do not put a
 `pveConfigError` return back at the top of the script; the harness checks for it.
 
 **`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
