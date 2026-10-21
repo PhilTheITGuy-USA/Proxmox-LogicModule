@@ -214,11 +214,13 @@ through its own resource. Then put `pve.topology.enabled=true` on one dynamic gr
 Proxmox host in the portal, of every cluster and every standalone host, with this AppliesTo:
 
 ```
-(system.sysinfo =~ "-pve" || hasCategory("ProxmoxVE")) && !(auto.network.mac_address =~ "^[bB][cC]:24:11")
+(system.sysinfo =~ "-pve" || hasCategory("ProxmoxVE") || pve.topology.node) && !(auto.network.mac_address =~ "^[bB][cC]:24:11")
 ```
 
-The first clause catches a node by its kernel string (`-pve`) whether or not it holds the token;
-the second leaves out guests, which carry Proxmox's default MAC prefix. Scope the group to Proxmox
+The first clause catches a node by its kernel string (`-pve`) whether or not it holds the token —
+but `system.sysinfo` comes from SNMP, so a node without SNMP and without the token is caught only
+by `pve.topology.node`, set on its own resource (below), or by adding it to a static group that
+carries the flag. The last clause leaves out guests, which carry Proxmox's default MAC prefix. Scope the group to Proxmox
 hosts like this rather than to a broad group such as "Linux Servers": `addERI_Proxmox_VE` stamps a
 node key on every resource the flag reaches. A key on a non-Proxmox server matches nothing, but it
 is clutter.
@@ -238,7 +240,7 @@ Two optional properties remain, for the cases that key cannot cover:
 
 | Property | When |
 |---|---|
-| `pve.topology.node` | a node whose resource was added by IP address and has neither SNMP nor SSH, so LogicMonitor knows no hostname for it — its Proxmox node name |
+| `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name. It brings the node into the group above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
 | `pve.topology.cluster` | the older cluster-scoped key, `proxmoxve--<cluster>--<node>`, on a node without the token. Only on a group holding **one** cluster's nodes, exactly as the token holder reports it in `auto.pve.cluster.name`; **never on a group spanning clusters**, where a wrong value can attach a node to a same-named node of another cluster |
 
 A **standalone host** needs nothing beyond the flag. It holds its own token, so `addERI_Proxmox_VE`
@@ -286,7 +288,8 @@ the guests: a comma-separated list such as `bc:24:11,02:00:00`, which replaces t
 list `bc:24:11` too if it is still in use. A resource the property reaches whose MAC matches no
 prefix is left alone, and a guest with a hand-set MAC outside every prefix stays `PhysicalServer`.
 
-**A node missing from the map** carries no matching key. Check that the address `pvesh get
+**A node missing from the map** carries no matching key. First check that its resource carries
+`pve.topology.enabled=true` — that the group's AppliesTo reached it (see above). Then check that the address `pvesh get
 /cluster/status` reports for it is among its resource's `system.ips`, and that its hostname's short
 form is its Proxmox node name; if it was added by IP with no SNMP or SSH, set `pve.topology.node`.
 A name that differs from Proxmox's own in anything but case or punctuation matches nothing,
