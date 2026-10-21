@@ -382,6 +382,21 @@ had never been drawn, was drawn under its node; `Debian-test`, which has its own
 same MAC, stayed drawn once and correctly. GuestStatus's instance ERIs are built on this. Both
 spike modules are deleted at the portal check (spec §6 item 1).
 
+**Spike 3, 2026-10-21 — a cluster vertex drawn from an instance reaches only its own resource.** A
+throwaway DataSource on the token holder `Node-A` discovered one instance carrying
+`predef.externalResourceID = proxmoxve--labcluster`, the TopologySource's cluster key. With
+`predef.externalResourceType = Cluster` the map draws the vertex `Labcluster` with LogicMonitor's
+cluster icon; `VirtualCluster` draws it with the unknown-type "??" icon. Either way it is drawn with
+a Cluster edge to `Node-A` only. The TopologySource emits the same edge to `Node-B`, which is
+drawn with its guests (so its key matches), yet that edge appears neither on the "Proxmox VE" dynamic
+map nor on `Node-B`'s own map. One cluster, one observation: an instance vertex is drawn with
+edges to the resource that holds the instance and to no other. That is consistent with spike 2,
+whose instance vertices were all guests of the instance's own resource. A cluster vertex joined to
+one node of many would misdraw the cluster, so `Proxmox_VE_Cluster` stays single-instance (spec §3.4
+dropped) and the cluster vertex stays undrawn. Test Script of the TopologySource exits 2 on
+`Node-B` and succeeds on `Node-A`, consistent with only `Node-A` holding the token; the
+error text was not recorded.
+
 **The portal draws only vertices that match a resource or, as spike 2 later showed, a DataSource
 instance.** What follows is the record of 2026-09-23. Test Script on `Node-A` emitted all
 seven guests' edges, but the map drew four. The unmonitored LXC guest `Webapp01` was not drawn
