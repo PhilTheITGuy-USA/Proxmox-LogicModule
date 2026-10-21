@@ -229,7 +229,24 @@ def check_optional(path: Path, defn: dict) -> list[str]:
     return []
 
 
+# The portal refuses to save a module whose text field passes 4096 characters ("Field value
+# cannot contain more than 4096 characters"), and names no field. Scripts are exempt -- they
+# are not in the definition, only their file names are -- so every top-level string here is
+# a metadata field the portal stores as typed. technicalNotes is the one that grows.
+MAX_FIELD_CHARS = 4096
+
+
+def check_field_lengths(path: Path, defn: dict) -> list[str]:
+    return [f"{path.name}: {key} is {len(value)} characters; the portal refuses more than "
+            f"{MAX_FIELD_CHARS}"
+            for key, value in defn.items()
+            if isinstance(value, str) and len(value) > MAX_FIELD_CHARS]
+
+
 def check_definition(path: Path, defn: dict) -> list[str]:
+    too_long = check_field_lengths(path, defn)
+    if too_long:
+        return too_long
     kind = module_type(defn)
     if kind not in (DATASOURCE, TOPOLOGYSOURCE, PROPERTYSOURCE):
         return [f"{path.name}: unknown moduleType {kind!r}"]
