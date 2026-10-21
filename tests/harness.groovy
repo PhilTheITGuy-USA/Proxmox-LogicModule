@@ -592,6 +592,9 @@ return [
     trips    : rows.collect { [it.name, pveTopoNodeKey(it.name, it.ip),
                                pveTopoNodeKeys(it.name, sysIps[it.name].tokenize(','))] },
     dedupe   : pveTopoNodeKeys('pve1', ['192.168.10.11', '192.168.10.11', '10.0.0.5']),
+    vertex   : [pveTopoNodeVertexKey('pve-cluster', 'pve1', '192.168.10.11'),
+                pveTopoNodeVertexKey('pve-cluster', 'pve2', null),
+                pveTopoNodeVertexKey('pve-cluster', 'pve2', 'fe80::1')],
 ]
 """, [hostProps: hostProps, statusRows: fixtures['/cluster/status']])
 note('topo-ipkey', ipKey.thrown == null, "IP key helpers threw ${ipKey.thrown}")
@@ -612,6 +615,13 @@ note('topo-ipkey', ik.missing == [null, null, null, null], "keyed a missing part
 note('topo-ipkey', ik.trips?.size() == 2 && ik.trips.every { name, vertex, eri ->
                        vertex != null && eri == [vertex] },
      "the vertex key and the ERI key built from system.ips differ: ${ik.trips}")
+// One key per node vertex: lm.topo joins a vertex's keys into one ID ('a_b'), and the
+// portal then matches only a resource carrying all of them, not any one (2026-10-21, a
+// token-less node carrying only the IP key was left unmatched). The IP key when the
+// /cluster/status row has a usable address, else the cluster-scoped key.
+note('topo-ipkey', ik.vertex == ['proxmoxve--node--pve1--192-168-10-11',
+                                 'proxmoxve--pve-cluster--pve2', 'proxmoxve--pve-cluster--pve2'],
+     "node vertex keys were ${ik.vertex}")
 note('topo-ipkey', ik.dedupe == ['proxmoxve--node--pve1--192-168-10-11',
                                  'proxmoxve--node--pve1--10-0-0-5'],
      "node keys were not deduplicated in order: ${ik.dedupe}")
@@ -686,8 +696,10 @@ note('addERI', topoScript.contains('pveTopoKey('),
 // The same for the key that needs no cluster name, which is what draws a token-less node.
 note('addERI', eriScript.contains('pveTopoNodeKeys('),
      'the ERI PropertySource builds its name-plus-IP keys without pveTopoNodeKeys')
-note('addERI', topoScript.contains('pveTopoNodeKey('),
-     'the TopologySource builds its name-plus-IP key without pveTopoNodeKey')
+note('addERI', topoScript.contains('pveTopoNodeVertexKey('),
+     'the TopologySource builds its node vertex key without pveTopoNodeVertexKey')
+note('addERI', !(topoScript =~ /eri\(\[pveTopoKey\([^)]*\),\s*pveTopoNode/),
+     'a node vertex carries two keys again; lm.topo joins them and the portal then matches neither alone')
 note('addERI', !eriScript.contains('rawERIs'),
      'the ERI PropertySource hand-writes the rawERIs JSON instead of using emitEri')
 note('addERI', eriScript.contains('lmtopo.emitEri(') &&
