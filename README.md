@@ -103,9 +103,8 @@ Import every `dist/*.json` through **My Module Toolbox → Add → Import from f
 **`pve.api.token.credential`** on one Proxmox resource to the whole token string,
 `monitor@pve!logicmonitor=<secret>`. The PropertySource adds the `ProxmoxVE` category and every
 module applies itself from there — except the two optional topology modules, which need
-`pve.topology.enabled=true` on every node's resource, plus `pve.topology.cluster` on the nodes of a
-cluster that do not hold the token; a standalone host needs only the first
-(`docs/INSTALL.md` §3.3).
+`pve.topology.enabled=true` on every node's resource — one dynamic group holding every Proxmox
+host is enough, with no per-cluster property (`docs/INSTALL.md` §3.3).
 
 Two things account for most failed installs:
 
@@ -151,7 +150,12 @@ These are Proxmox API limits, not implementation shortcuts:
   VMware Tools. Those datapoints are left as no-data for VMs rather than reported as a misleading
   zero.
 - **No node hardware identifier.** Nothing in the API returns a node's MAC or UUID, which is why
-  the topology map needs `addERI_Proxmox_VE` to give a node's resource a key it can match on.
+  the topology map needs `addERI_Proxmox_VE` to give a node's resource a key it can match on: the
+  node's short name plus an address from its `system.ips`, which the TopologySource builds from
+  `/cluster/status`. A node resource with no hostname and no SNMP or SSH needs `pve.topology.node`.
+- **The cluster itself is not drawn on the map**, only its nodes and guests. The portal draws no
+  vertex that matches nothing, and a cluster key carried by a DataSource instance is drawn with an
+  edge to the instance's own resource only.
 - **Guests reach the topology map through the opt-in, and their label through their MAC.** With
   `pve.topology.enabled=true`, Guest Status's discovery gives each guest on an online node an
   instance ERI, so every guest is drawn under its node whether or not it is its own resource and
