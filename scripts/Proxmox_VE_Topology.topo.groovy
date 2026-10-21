@@ -19,13 +19,20 @@
  *             name guessing. This is what VMware_vSphere_VirtualMachine_Topology does.
  *   node   -- Proxmox exposes no hardware UUID or MAC for a node anywhere in its API
  *             (/cluster/status gives name, ip, nodeid; /nodes/{node}/status gives none;
- *             /nodes/{node}/network has no hwaddr). So the node key is synthesised, and
- *             addERI_Proxmox_VE stamps the identical key on each node's own resource,
- *             from the API where the resource has a token and from pve.topology.cluster
- *             where it does not. A node whose resource carries no such key is not drawn:
- *             the portal renders only vertices that match a resource (DESIGN section 7).
- *   cluster - synthesised, and matches nothing on purpose. VMware does the same for its
- *             cluster vertex: it exists only on the map.
+ *             /nodes/{node}/network has no hwaddr). So the node keys are synthesised,
+ *             and addERI_Proxmox_VE stamps the identical keys on each node's own
+ *             resource. There are two. pveTopoKey(cluster, node) needs the cluster's name,
+ *             which a resource without the token has only from pve.topology.cluster.
+ *             pveTopoNodeKey(node, ip) needs only the node's name and the address
+ *             /cluster/status reports for it, which is among the resource's system.ips --
+ *             so a token-less node matches with no property set. A vertex matches a
+ *             resource carrying any one of its keys. A node whose resource carries neither
+ *             is not drawn: the portal renders only vertices that match a resource or a
+ *             DataSource instance (DESIGN section 7).
+ *   cluster - synthesised. It resolves to the Proxmox_VE_Cluster instance that carries
+ *             its key; with nothing carrying it the portal does not draw it, unlike
+ *             VMware's map-only cluster vertex. A standalone host has no cluster, and
+ *             gets no cluster vertex and no Cluster edges.
  */
 import com.logicmonitor.mod.Snippets
 import com.santaba.agent.groovy.utils.GroovyScriptHelper as GSH
@@ -60,13 +67,18 @@ try {
 
     /*
      * The cluster's own name, which /cluster/status reports as the single row of type
-     * "cluster". A standalone host has no such row, so it falls back to the node's name --
-     * the vertex still has to be unique across a portal that monitors several of them.
+     * "cluster". A standalone host has no such row: it gets no cluster vertex, and its
+     * name falls back to the node's for the guests' fallback keys, which still have to be
+     * unique across a portal that monitors several standalone hosts.
      */
     def status = pveGet('/cluster/status') ?: []
     def clusterName = pveTopoClusterName(status)
+    def clustered = status.any { it.type?.toString() == 'cluster' }
+    def clusterEri = clustered ? eri([pveTopoKey(clusterName, null)]) : null
 
-    def clusterEri = eri([pveTopoKey(clusterName, null)])
+    // The address /cluster/status reports for each node: the second half of its IP key.
+    def nodeIps = status.findAll { it.type?.toString() == 'node' && it.name }
+        .collectEntries { [(it.name.toString()): it.ip?.toString()] }
 
     def nodes = (pveGet('/cluster/resources?type=node') ?: [])
     def nodeEris = [:]
@@ -74,12 +86,17 @@ try {
     nodes.each { node ->
         def nodeName = node.node?.toString()
         if (!nodeName) { return }
-        nodeEris[nodeName] = eri([pveTopoKey(clusterName, nodeName)])
+        // A row with no usable address keeps only the cluster-scoped key; a null must
+        // not reach eriPreProcessor.
+        nodeEris[nodeName] = eri([pveTopoKey(clusterName, nodeName),
+                                  pveTopoNodeKey(nodeName, nodeIps[nodeName])].findAll { it })
         if (node.status?.toString() == 'online') { onlineNodes << nodeName }
         // Every node gets its cluster edge, offline included: a node that is down is
         // still part of the cluster, and dropping it would make the map forget the
         // thing that has just gone wrong.
-        lmTopo.registerEdge('Cluster', clusterEri, nodeEris[nodeName], edges)
+        if (clusterEri) {
+            lmTopo.registerEdge('Cluster', clusterEri, nodeEris[nodeName], edges)
+        }
     }
 
     /*

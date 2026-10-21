@@ -683,6 +683,11 @@ note('addERI', eriScript.contains('pveTopoKey('),
      'the ERI PropertySource builds its node key without pveTopoKey')
 note('addERI', topoScript.contains('pveTopoKey('),
      'the TopologySource builds its node key without pveTopoKey')
+// The same for the key that needs no cluster name, which is what draws a token-less node.
+note('addERI', eriScript.contains('pveTopoNodeKeys('),
+     'the ERI PropertySource builds its name-plus-IP keys without pveTopoNodeKeys')
+note('addERI', topoScript.contains('pveTopoNodeKey('),
+     'the TopologySource builds its name-plus-IP key without pveTopoNodeKey')
 note('addERI', !eriScript.contains('rawERIs'),
      'the ERI PropertySource hand-writes the rawERIs JSON instead of using emitEri')
 note('addERI', eriScript.contains('lmtopo.emitEri(') &&
@@ -693,7 +698,7 @@ note('addERI', eriScript.contains('lmtopo.emitEri(') &&
 // are not Proxmox, and a PropertySource that prints on one it does not understand
 // corrupts that resource's properties. Asserted by reading the guard, since the script
 // cannot be executed here.
-note('addERI', eriScript.contains('if (!identity) {') &&
+note('addERI', eriScript.contains('if (!name) {') && eriScript.contains('if (!keys) {') &&
                eriScript.contains('return 0'),
      'the ERI PropertySource does not return silently when it cannot name the node')
 // The point of the property path: a node with no token still gets its key. If the script
