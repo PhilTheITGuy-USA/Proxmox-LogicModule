@@ -61,12 +61,18 @@ across overlapping private networks. Together they are unique in practice. Where
 reuse both — an MSP monitoring copies of one lab — `topo.namespace` is LogicMonitor's own answer, and
 both sides already honour it.
 
-### 3.2 `Proxmox_VE_Topology`: every node vertex carries both keys
+### 3.2 `Proxmox_VE_Topology`: every node vertex carries one key
 
-Each node vertex's key list becomes `[pveTopoKey(cluster, node), pveTopoNodeKey(node, ip)]`, the
-second taken from that node's `/cluster/status` row (the call the script already makes) and left
-out when null. A vertex matches a resource carrying any one of its keys, so existing deployments
-that stamp only the old key keep matching through the upgrade.
+Each node vertex carries `pveTopoNodeVertexKey(cluster, node, ip)`: the IP key
+`pveTopoNodeKey(node, ip)`, from that node's `/cluster/status` row (the call the script already
+makes), or `pveTopoKey(cluster, node)` only when the row has no usable address. Existing
+deployments keep matching through the upgrade because `addERI_Proxmox_VE` still stamps the old
+key alongside the new one.
+
+As first written this section gave the vertex both keys, on the assumption that a vertex matches a
+resource carrying any one of them. The portal disproved that: lm.topo joins a vertex's keys into
+one ID, and only a resource carrying all of them matches, so the token-less node was left undrawn
+(DESIGN §7, 2026-10-21).
 
 **A standalone host gets no cluster vertex.** When `/cluster/status` has no `cluster` row the script
 emits no cluster vertex and no Cluster edges; nodes and guests are unchanged. A one-node "cluster"
