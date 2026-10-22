@@ -163,7 +163,7 @@ secret is readable by anyone who can view the resource. Do not shorten it to `pv
 | `pve.api.insecure` | `false` | `true` accepts self-signed certificates. **Lab use only** |
 | `pve.topology.enabled` | unset | `true` (lowercase) turns on the optional topology modules — see §3.3 |
 | `pve.topology.cluster` | unset | Optional. The cluster's name, only on a group holding one cluster's nodes — see §3.3 |
-| `pve.topology.node` | the short hostname | The node's Proxmox name, where the resource was added by IP — see §3.3 |
+| `pve.topology.node` | the short hostname | The node's Proxmox name, where the resource was added by IP — see §3.3. The name `pvecm nodes` shows, never the address `pvecm status` lists; an address is ignored |
 
 Proxmox ships a self-signed certificate by default. If your Collector does not trust it, either
 install a trusted certificate on the node or set `pve.api.insecure=true` — the latter only where the
@@ -240,7 +240,7 @@ Two optional properties remain, for the cases that key cannot cover:
 
 | Property | When |
 |---|---|
-| `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name. It brings the node into the group above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
+| `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name, as `pvecm nodes` or `ls /etc/pve/nodes` shows it (the membership list of `pvecm status` shows addresses, not names). It brings the node into the group above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
 | `pve.topology.cluster` | the older cluster-scoped key, `proxmoxve--<cluster>--<node>`, on a node without the token. The map uses it only for a node `/cluster/status` reports no address for. Only on a group holding **one** cluster's nodes, exactly as the token holder reports it in `auto.pve.cluster.name`; **never on a group spanning clusters**, where a wrong value can attach a node to a same-named node of another cluster |
 
 A **standalone host** needs nothing beyond the flag. It holds its own token, so `addERI_Proxmox_VE`

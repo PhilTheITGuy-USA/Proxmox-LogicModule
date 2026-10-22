@@ -638,6 +638,12 @@ note('topo-ipkey', nodeNameOf(['system.hostname': '10.0.0.12']) == null,
      'an IP address was taken as a node name')
 note('topo-ipkey', nodeNameOf(['pve.topology.node': 'pve4', 'system.sysname': 'pve3']) == 'pve4',
      'pve.topology.node did not override the derived name')
+// An address there is the pvecm status mistake (DESIGN section 7, 2026-10-22): it would key the
+// node as "192", so it is ignored and the derived name used instead.
+note('topo-ipkey', nodeNameOf(['pve.topology.node': '192.0.2.211', 'system.sysname': 'Node-B']) == 'Node-B',
+     'an IPv4 address in pve.topology.node was taken as the node name')
+note('topo-ipkey', nodeNameOf(['pve.topology.node': 'fd00::12', 'system.sysname': 'Node-B']) == 'Node-B',
+     'an IPv6 address in pve.topology.node was taken as the node name')
 
 // The guest MAC prefix test and the cluster-name rule are shared by the TopologySource,
 // the guest ERI PropertySource and the guest discovery, none of which can run here.
