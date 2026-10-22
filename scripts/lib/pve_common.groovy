@@ -212,11 +212,14 @@ def pveTopoKey = { String cluster, String node ->
  * which is indistinguishable on the map from no key at all, but costs a stray ERI.
  */
 def pveTopoNodeName = { ->
+    // An address is never a node name: pvecm status lists members by corosync address, and
+    // copying one into pve.topology.node keyed a node as "192" (DESIGN section 7, 2026-10-22).
+    def isName = { String value -> value && !(value.trim() ==~ /\d{1,3}(\.\d{1,3}){3}/) && !value.contains(':') }
     def node = pveHostProp('pve.topology.node')
-    if (!node) {
+    if (!isName(node)) {
         def hostname = ['system.sysname', 'system.hostname']
             .collect { pveHostProp(it) }
-            .find { it && !(it ==~ /\d{1,3}(\.\d{1,3}){3}/) && !it.contains(':') }
+            .find { isName(it) }
         node = hostname?.tokenize('.')?.getAt(0)
     }
     return node ?: null
