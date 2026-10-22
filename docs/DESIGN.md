@@ -453,18 +453,26 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Four things are unproven, and each needs something no healthy lab produces on demand:
+Five things are unproven. Each needs something this lab cannot produce, and each is deferred to
+later testing (user ruling, 2026-10-22):
 
-- **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
+- **Two clusters in one topology group** (spec §6 item 5) — deferred until a second cluster is
+  available. Until then the name+IP key's claim to cover any number of clusters rests on the
+  harness and on one cluster.
+- **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster. Not
+  reproducible in this lab; deferred.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
-  unreadable disk alerting exactly like a failing one, and every disk seen so far has readable
-  SMART.
+  unreadable disk alerting exactly like a failing one. The 2026-09-22 live check covered real SSD
+  and NVMe disks on `Node-A`, all with readable SMART: it settled the wearout direction, not
+  this branch. A USB disk or one behind a hardware RAID controller usually reads `UNKNOWN`, if one
+  is ever to hand; otherwise deferred.
 - **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
-  §2, not measured at scale.
+  §2, not measured at scale. Deferred to a customer test.
 - **A standalone host with no online guest.** `Proxmox_VE_Topology` then registers no edge at all
-  (a standalone host has no cluster edge) and prints `generateTopology` of an empty list. What the
-  portal makes of an empty result — nothing, or an error on the module — has not been seen.
+  (a standalone host has no cluster edge) and prints `generateTopology` of an empty list. The user
+  recalls such a host showing no error (2026-10-22), but what the module returned was not recorded.
+  Retest if it is ever in doubt.
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on
