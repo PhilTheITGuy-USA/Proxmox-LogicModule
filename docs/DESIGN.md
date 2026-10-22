@@ -118,7 +118,7 @@ NodeDetail is already O(nodes) and that is fine.
 
 | Module | Display name | Source | Cost | Notes |
 |---|---|---|---|---|
-| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` + `/cluster/resources` | O(1) | Single-instance. Quorum, expected vs actual votes, node count, HA manager state, and the Tier 1a allocation rollups. On a standalone host `ClusterConfigured` reads 0 and the quorum datapoints are withheld. |
+| `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` + `/cluster/resources` | O(1) | One instance, the cluster (wildvalue `cluster`), which behind `pve.topology.enabled` carries the cluster's topology key. Quorum, expected vs actual votes, node count, HA manager state, and the Tier 1a allocation rollups. On a standalone host `ClusterConfigured` reads 0 and the quorum datapoints are withheld. |
 | `Proxmox_VE_Nodes` | Proxmox VE Nodes | `/cluster/resources?type=node` | O(1) | BatchScript. CPU, memory, uptime, online state. |
 | `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | O(nodes) | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. |
 | `Proxmox_VE_GuestPerformance` | Proxmox VE Guest Performance | `/cluster/resources?type=vm` | O(1) | BatchScript. CPU, memory, network rates, disk IO rates. QEMU + LXC. |
@@ -227,9 +227,12 @@ populated on the target version before designing around it.
     carries `proxmoxve--node--<name>--<ip>` from its `/cluster/status` row, and only that key (the
     cluster-scoped one only where the row has no address; see §7, 2026-10-21), and `addERI_Proxmox_VE`
     stamps the same key from every address in `system.ips`, so a token-less node matches without
-    `pve.topology.cluster` and one group can hold every cluster's nodes. The cluster vertex is not
-    drawn: an instance carrying its key reaches only its own resource (§7, spike 3), so the spec's
-    one-instance `Proxmox_VE_Cluster` was dropped.
+    `pve.topology.cluster` and one group can hold every cluster's nodes. The cluster vertex is drawn
+    through the spec's one-instance `Proxmox_VE_Cluster`, first dropped on spike 3 and restored
+    after its re-run drew the cluster to every node (§7, 2026-10-22).
+  - **Instance groups by node: built 2026-10-22.** GuestStatus, GuestPerformance, Disks,
+    NodeServices, Certificates and StorageCapacity group their instances by `auto.pve_node`
+    (`groupMethod: ilp`), so a 12-node cluster's guests, disks and units read per node.
   - **Guests without SNMP, and guest labels: built 2026-10-19**, replacing the follow-up that was
     here. Behind the same opt-in, `Proxmox_VE_GuestStatus`'s discovery puts each guest's MAC (or
     its `pveTopoKey` fallback) on the guest's instance as `predef.externalResourceID`, so every guest
@@ -331,6 +334,8 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | GuestStatus instance ERIs | **verified** 2026-10-20 (spec §6 items 4-6) on `Proxmox A` and `Proxmox-B`, both standalone: every guest is drawn under its node, including ones with no resource of their own; the portal decodes discovery values (`auto.pve_id` reads `qemu/201`), so `predef.externalResourceID` stores `bc:24:11:65:d4:40` with its colons; and turning the flag off and re-running discovery removes both instance properties. Unproven (item 7, not reachable in this lab): the token on several nodes of one cluster, which puts the same key on several instances |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. `addERI_Proxmox_VE`'s AppliesTo with no `hasCategory` imported and applies (2026-10-20), but both lab hosts are standalone and hold their own token, so the token-less path has not run. Unproven: a multi-node map with every node drawn while one node holds the token. 2026-10-21: on the two-node cluster `Proxmox-B`, where the TopologySource's Test Script exits 2 as it would without the token, is drawn with its guests while `pve.topology.cluster` is on the group — but the token's absence was inferred, not confirmed. Superseded for new deployments by the name+IP keys below |
 | Node name+IP keys | **partly verified** — built 2026-10-20; the harness covers the helpers, including the round trip from a `/cluster/status` address to `system.ips`, but cannot run either script. 2026-10-22: spec §6 item 2 holds on the two-node cluster `Proxltron` — the token-less `Proxmox-B`, with no `pve.topology.cluster` anywhere, carries `proxmoxve--node--proxmox-b--192-168-4-211` and is drawn with a Compute edge to its guest `Debian-Test` (see below). Unproven: item 5, two clusters in one group, not reachable in this lab |
+| Cluster vertex (`Proxmox_VE_Cluster` instance ERI) | **not verified** — built 2026-10-22; the harness covers the discovery (key, type, standalone, namespace, API down). The mechanism is portal-verified by the spike 3 re-run (below): a throwaway instance carrying the same key and type drew `Proxltron` above both nodes. Unproven: the real module, imported, doing the same; and the one-time loss of the module's single-instance history on that import |
+| Instance groups by node | **partly verified** — 2026-10-22, GuestStatus grouped by hand in the portal with Instance Level Property `auto.pve_node`: guests show under their node's group, and `CT-Test`, migrated, moved group and kept its history; the export carries `groupMethod: ilp`, `groupExpr: auto.pve_node`, which the build now writes for six modules. Unproven: the built modules imported, and the five not grouped by hand |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an

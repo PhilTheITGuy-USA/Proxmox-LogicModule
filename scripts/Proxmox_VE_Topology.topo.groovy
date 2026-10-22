@@ -29,12 +29,11 @@
  *             then matches only a resource carrying all of them (DESIGN section 7,
  *             2026-10-21). A node whose resource lacks the key is not drawn: the portal
  *             renders only vertices that match a resource or a DataSource instance.
- *   cluster - synthesised, and not drawn: nothing carries its key, and the portal drops
- *             a vertex that matches nothing, unlike VMware's map-only cluster vertex. A
- *             DataSource instance carrying it is drawn with an edge to its own resource
- *             only, which would misdraw the cluster (DESIGN section 7, spike 3). The edges
- *             are still emitted, so a later way of matching the key draws them. A
- *             standalone host has no cluster, and gets no cluster vertex and no Cluster edges.
+ *   cluster - synthesised, pveTopoKey(cluster, null). Proxmox_VE_Cluster's one instance
+ *             carries the same key as type Cluster behind the same opt-in, and an instance
+ *             vertex takes edges from every matched node, so the cluster is drawn above all
+ *             its nodes (DESIGN section 7, spike 3 re-run). A standalone host has no
+ *             cluster, and gets no cluster vertex and no Cluster edges.
  */
 import com.logicmonitor.mod.Snippets
 import com.santaba.agent.groovy.utils.GroovyScriptHelper as GSH

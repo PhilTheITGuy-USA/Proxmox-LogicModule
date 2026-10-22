@@ -75,11 +75,19 @@ dist/                            GENERATED, gitignored — never edit, never com
   `pveTopoClusterName`, and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a
   guest's MAC prefix with)
 
-**Discovery scripts are shared; collection scripts are not.** Ten AD bodies back eleven
+**Discovery scripts are shared; collection scripts are not.** Eleven AD bodies back twelve
 multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription.
 The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those
 modules discover identical instance sets. Editing a shared AD body changes every module naming it
 in `discoveryScript`.
+
+**Six modules group their instances by node.** GuestStatus, GuestPerformance, Disks,
+NodeServices, Certificates and StorageCapacity set `"instanceGroupProperty": "auto.pve_node"`,
+which the build turns into the `groupMethod: "ilp"` / `groupExpr` pair a portal export of a
+hand-grouped module carries. A migrated guest moves to its new node's group on the next discovery
+and keeps its history (DESIGN §7). The build refuses a name without the `auto.` prefix, and the
+harness fails any instance of a grouped module that lacks the property. A module with one instance
+per node gains nothing from it.
 
 **The two guest bodies share a helper instead.** `Proxmox_VE_Guests.ad.groovy` backs
 GuestPerformance; GuestStatus has its own `Proxmox_VE_GuestStatus.ad.groovy`, because only it
@@ -102,7 +110,7 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 
 | Module | Method | Interval | Discovery | Calls per interval |
 |---|---|---|---|---|
-| `Proxmox_VE_Cluster` | script | 5m | — (single instance) | 3, O(1) |
+| `Proxmox_VE_Cluster` | script, one instance | 5m | `Cluster.ad` | 3, O(1); hourly discovery 1 |
 | `Proxmox_VE_Ceph` | script | 5m | — (single instance) | 1, O(1) |
 | `Proxmox_VE_BackupCoverage` | script | 60m | — (single instance) | 1, O(1) |
 | `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |
@@ -150,8 +158,10 @@ from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
 address. lm.topo joins a vertex's keys into one ID and the portal then matches only a resource
 carrying all of them, so a two-key vertex leaves a token-less node unmatched (DESIGN §7,
 2026-10-21); the harness refuses one. The key must equal the TopologySource's byte for byte, which
-is why both sides go through the same preamble helpers. The cluster vertex is never drawn
-(DESIGN §7, spike 3). Do not put a
+is why both sides go through the same preamble helpers. The cluster vertex is drawn through
+`Proxmox_VE_Cluster`'s one instance, `cluster`, which behind `pve.topology.enabled` carries
+`pveTopoKey(cluster, null)` as type `Cluster`; an instance vertex takes edges from every matched
+node (DESIGN §7, spike 3 re-run). Do not put a
 `pveConfigError` return back at the top of the script; the harness checks for it.
 
 **`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
@@ -270,7 +280,7 @@ true` is set on every multiInstance module and checked by neither the build nor 
 what makes the wildvalue the instance's identity, which is the entire point of the migration-safe
 IDs below. `threshold` is LogicMonitor's `"<op> warn error critical"` string (`"> 90 95 98"`).
 `technicalNotes` carries the per-module rationale shown in the portal; every module has one and
-Exchange review expects it. Of the eleven modules that discover, seven override `discoveryInterval`
+Exchange review expects it. Of the twelve modules that discover, eight override `discoveryInterval`
 to `60m`; the four slow ones — Certificates, Disks, NodeServices, Subscription — state `1440m`
 explicitly, which is also the build default.
 
@@ -400,7 +410,7 @@ enforces the first two agreeing; nothing enforces the third.
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
 `build.py` fails the build when a numbered phrase disagrees with `modules/` — `fourteen
 DataSources`, `3 PropertySources`, `all 18 modules`, `all eighteen:` — but only those shapes; a
-count phrased any other way (`the eleven modules that discover`) is still unchecked.
+count phrased any other way (`the twelve modules that discover`) is still unchecked.
 
 **Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
 which says *what* to verify but not *when* it was. Copies elsewhere go stale unnoticed; record it
@@ -425,9 +435,10 @@ its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7.
 on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
 someone runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
 
-**A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` is the only module
-that is both `script` and `multiInstance`: it executes once per node and reads its instance
-properties through `pveInstanceProp` (see Property lookup). The harness fakes those in the
+**A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` and
+`Proxmox_VE_Cluster` are both `script` and `multiInstance`. Cluster has one instance and reads no
+instance property; NodeDetail executes once per node and reads its instance properties through
+`pveInstanceProp` (see Property lookup). The harness fakes those in the
 `instanceBindings` map in `tests/harness.groovy`, hardcoded to `pve1` so it lines up with the
 `/nodes/pve1/status` fixture. A new module that calls `pveInstanceProp` needs an entry there plus a
 fixture keyed to the same node name — without it the collect script runs with no `taskProps`, and

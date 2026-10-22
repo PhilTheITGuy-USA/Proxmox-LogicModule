@@ -259,7 +259,24 @@ def check_definition(path: Path, defn: dict) -> list[str]:
         return [f"{path.name}: module definition is missing {', '.join(missing)}"]
     if kind != DATASOURCE and defn.get("datapoints"):
         return [f"{path.name}: a {kind} declares no datapoints"]
-    return check_optional(path, defn)
+    return check_instance_group(path, defn) + check_optional(path, defn)
+
+
+def check_instance_group(path: Path, defn: dict) -> list[str]:
+    """Instance grouping by an instance-level property (groupMethod "ilp").
+
+    LogicMonitor stores every Active Discovery property as auto.<key>, so a bare name groups
+    nothing and nothing says so; and a module without discovery has no instances to group.
+    """
+    group = defn.get("instanceGroupProperty")
+    if group is None:
+        return []
+    if "discoveryScript" not in defn:
+        return [f"{path.name}: instanceGroupProperty needs a discoveryScript to group"]
+    if not (isinstance(group, str) and group.startswith("auto.") and len(group) > len("auto.")):
+        return [f"{path.name}: instanceGroupProperty {group!r} must be the stored name, "
+                f"auto.<key> -- discovery properties are stored with the auto. prefix"]
+    return []
 
 
 def build_propertysource(defn: dict) -> tuple[dict, dict[str, str]]:
@@ -370,6 +387,12 @@ def build_module(defn: dict) -> tuple[dict, dict[str, str]]:
             "groupMethod": "none",
             "filters": [],
         }
+        # Group instances by an instance-level property, the fields a portal export of a
+        # hand-grouped module carries. Regrouping on a later discovery keeps the instance and
+        # its history: a migrated guest moves to its new node's group (DESIGN section 7).
+        if defn.get("instanceGroupProperty"):
+            module["activeDiscovery"]["groupMethod"] = "ilp"
+            module["activeDiscovery"]["groupExpr"] = defn["instanceGroupProperty"]
 
     return module, scripts
 

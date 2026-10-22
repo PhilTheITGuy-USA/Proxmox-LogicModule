@@ -12,6 +12,7 @@
   "useWildValueAsUniqueIdentifier": true,
   "collectScript": "Proxmox_VE_GuestPerformance.collect.groovy",
   "discoveryScript": "Proxmox_VE_Guests.ad.groovy",
+  "instanceGroupProperty": "auto.pve_node",
   "discoveryInterval": "60m",
   "datapoints": [
     {

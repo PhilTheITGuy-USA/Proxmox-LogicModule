@@ -1,5 +1,6 @@
 /*
- * Script collection (single instance): cluster quorum and HA manager health.
+ * Script collection, one instance (the cluster, from Proxmox_VE_Cluster.ad): cluster quorum
+ * and HA manager health.
  *
  * Works on a standalone host. When no cluster is configured, /cluster/status returns only
  * the local node and no entry of type "cluster"; the quorum datapoints are then withheld

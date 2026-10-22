@@ -167,6 +167,13 @@ modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.
                 return
             }
             discovered << matcher.group(1)
+            // An instance without the grouping property falls outside every node group.
+            if (defn.instanceGroupProperty) {
+                note("${name}/ad", matcher.group(4).tokenize('&')
+                         .any { it.startsWith(defn.instanceGroupProperty + '=') },
+                     "instance ${matcher.group(1)} lacks ${defn.instanceGroupProperty}, " +
+                     'which its instance group is built from')
+            }
             note("${name}/ad", !matcher.group(1).contains(' '),
                  "instance id contains a space: ${matcher.group(1)}")
             matcher.group(4).tokenize('&').each { pair ->
@@ -176,6 +183,16 @@ modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.
                      "instance property has a blank value: ${pair}")
             }
         }
+    }
+
+    // The built export carries the grouping LogicMonitor reads: groupMethod ilp plus the
+    // property in groupExpr, exactly as a portal export of a hand-grouped module shows it.
+    if (defn.discoveryScript) {
+        def built = new JsonSlurper().parse(new File(ROOT, 'dist/' + name + '.json')).activeDiscovery
+        def wantMethod = defn.instanceGroupProperty ? 'ilp' : 'none'
+        note("${name}/ad", built.groupMethod == wantMethod && built.groupExpr == defn.instanceGroupProperty,
+             "built groupMethod/groupExpr were ${built.groupMethod}/${built.groupExpr}, " +
+             "expected ${wantMethod}/${defn.instanceGroupProperty}")
     }
 
     def bindings = [hostProps: hostProps]
@@ -461,6 +478,59 @@ def perfOn = withFixtures(extendedFixtures) { discoverWith(perfAd, on) }
 note('guest-eri-perf', perfOn.exit == 0 &&
                        parseAd(perfOn.stdout).values().every { it.predef.isEmpty() },
      "GuestPerformance discovery carried instance ERIs:\n${perfOn.stdout}")
+
+// ---------------------------------------------------- Cluster instance ERI
+//
+// Proxmox_VE_Cluster discovers one instance, the cluster, and behind the topology opt-in it
+// carries the key the TopologySource draws the cluster vertex with (DESIGN section 7, spike
+// 3 re-run). The wildvalue is fixed, so renaming the cluster orphans nothing.
+
+def clusterAd = new File(scriptsDir, 'Proxmox_VE_Cluster.ad.groovy')
+def clusterOff = discoverWith(clusterAd, hostProps)
+def clusterOffAd = parseAd(clusterOff.stdout)
+note('cluster-eri-off', clusterOff.thrown == null && clusterOff.exit == 0,
+     "exit was ${clusterOff.exit} / ${clusterOff.thrown}: ${clusterOff.stderr}")
+note('cluster-eri-off', clusterOffAd.keySet() == ['cluster'] as Set,
+     "expected exactly the instance 'cluster', got ${clusterOffAd.keySet()}")
+note('cluster-eri-off', clusterOff.stdout.startsWith('cluster##pve-cluster##'),
+     "the instance is not named after the cluster: ${clusterOff.stdout}")
+note('cluster-eri-off', clusterOffAd['cluster']?.predef?.isEmpty() == true,
+     "flag off but the cluster carried keys: ${clusterOffAd['cluster']}")
+
+def clusterOn = discoverWith(clusterAd, on)
+def clusterOnAd = parseAd(clusterOn.stdout)
+note('cluster-eri-on', clusterOn.exit == 0 && clusterOnAd.keySet() == ['cluster'] as Set,
+     "exit ${clusterOn.exit}, instances ${clusterOnAd.keySet()}: ${clusterOn.stderr}")
+// Byte for byte the TopologySource's cluster vertex, pveTopoKey(cluster, null).
+note('cluster-eri-on', clusterOnAd['cluster']?.predef?.get('predef.externalResourceID') == 'proxmoxve--pve-cluster',
+     "cluster key was ${clusterOnAd['cluster']?.predef}")
+// Cluster renders the cluster icon; VirtualCluster renders "??" (DESIGN section 7, spike 3).
+note('cluster-eri-on', clusterOnAd['cluster']?.predef?.get('predef.externalResourceType') == 'Cluster',
+     "cluster type was ${clusterOnAd['cluster']?.predef}")
+
+// A standalone host has no cluster vertex to carry, but keeps its instance and its data.
+def clusterStandalone = withFixtures(['/cluster/status': [[type: 'node', name: 'pve-a', local: 1, online: 1]]]) {
+    discoverWith(clusterAd, on)
+}
+def clusterStandaloneAd = parseAd(clusterStandalone.stdout)
+note('cluster-eri-standalone', clusterStandalone.exit == 0 &&
+                               clusterStandaloneAd.keySet() == ['cluster'] as Set &&
+                               clusterStandaloneAd['cluster'].predef.isEmpty(),
+     "standalone discovery was ${clusterStandalone.exit}: ${clusterStandalone.stdout}")
+note('cluster-eri-standalone', clusterStandalone.stdout.startsWith('cluster##pve-a##'),
+     "a standalone instance is not named after its node: ${clusterStandalone.stdout}")
+
+['topo.namespace', 'topo.blacklist'].each { prop ->
+    def run = discoverWith(clusterAd, on + [(prop): 'x'])
+    note('cluster-eri-namespace', run.exit == 0 && parseAd(run.stdout)['cluster']?.predef?.isEmpty() == true,
+         "${prop} set but the cluster still carried keys: ${run.stdout}")
+    note('cluster-eri-namespace', run.stderr.contains(prop), "${prop} set but stderr did not say so")
+}
+
+// Discovery that cannot reach the API exits 2, so LogicMonitor keeps the instance.
+def clusterDown = withFixtures(['/cluster/status': null]) { discoverWith(clusterAd, hostProps) }
+note('cluster-eri-down', clusterDown.exit == 2 && clusterDown.stdout.trim().isEmpty(),
+     "API down: exit ${clusterDown.exit}, output ${clusterDown.stdout}")
 
 // --------------------------------------------------------------- topology
 //
