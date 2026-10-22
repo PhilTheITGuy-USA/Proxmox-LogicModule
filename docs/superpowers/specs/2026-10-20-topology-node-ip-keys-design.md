@@ -1,6 +1,6 @@
 # Topology without per-cluster properties, and a cluster vertex that is drawn
 
-Status: implemented on branch `topology-node-ip-keys`, except §3.4, which was dropped after its spike failed (DESIGN §7, spike 3): the cluster vertex is not drawn. A node vertex carries one key, not both (DESIGN §7, 2026-10-21). Portal results are in DESIGN §7 only.
+Status: implemented on branch `topology-node-ip-keys`. §3.4 was dropped after its first spike failed and restored after the re-run (DESIGN §7, spike 3 and its re-run): the cluster vertex is drawn. A node vertex carries one key, not both (DESIGN §7, 2026-10-21). Portal results are in DESIGN §7 only.
 
 ## 1. Goal
 
