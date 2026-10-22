@@ -404,11 +404,10 @@ whose instance vertices were all guests of the instance's own resource. A cluste
 one node of many would misdraw the cluster, so `Proxmox_VE_Cluster` stays single-instance (spec §3.4
 dropped) and the cluster vertex stays undrawn. Test Script of the TopologySource exits 2 on
 `Node-B` and succeeds on `Node-A`, consistent with only `Node-A` holding the token; the
-error text was not recorded. If the rule holds, it reaches guests too, unproven: a guest drawn only
-through GuestStatus's instance ERI lives on the token holder, so on a cluster a guest of another node
-may be drawn without its Compute edge. GuestStatus's instance ERIs were verified on two standalone
-hosts, each its own token holder, where the question does not arise. A guest that is its own
-resource is not affected: it is drawn under its token-less node (2026-10-22, below).
+error text was not recorded. The rule does **not** reach guests: a guest that is only a GuestStatus
+instance on the token holder is drawn under its own token-less node (2026-10-22, below). Why a guest
+instance takes an edge from another resource and the cluster instance did not is not known; the
+cluster vertex stays undrawn on the strength of what was seen.
 
 **A vertex with two keys matches only a resource carrying both, 2026-10-21.** The first import of
 the name-plus-IP keys gave each node vertex both keys, the cluster-scoped and the IP one, on the
@@ -426,9 +425,14 @@ and runs the TopologySource; `Node-B` holds none and carries only the name-plus-
 `bc:24:11:0e:00:05`, while `Node-A`'s GuestStatus instance for the same guest carries the same
 MAC. After one topology run the map draws `Node-B` with a Compute edge to `Debian-Test`. So an
 edge between two resources, neither of them the one running the TopologySource, is drawn; and where a
-resource and an instance on another resource carry the same key, the edge reaches the resource. Two
-things it does not show: a guest of `Node-B` that is *only* an instance (none was tested once
-`Node-B`'s key was right), and a second cluster.
+resource and an instance on another resource carry the same key, the edge reaches the resource.
+
+A guest that is only an instance is drawn under its own node too. `CT-Test` (CT108), a new container
+on `Node-B` with no resource of its own, got a GuestStatus instance on `Node-A` carrying its MAC.
+After the next topology run the "Proxmox VE" map and `Node-B`'s own map both draw `Node-B`
+with Compute edges to `CT-Test` and `Debian-Test`, and `Node-A` with its own seven guests. So on a
+cluster every guest is drawn under the node it runs on, with no guest resource and no per-node token.
+Not shown: a second cluster.
 
 The first runs of this check failed for a configuration reason worth keeping. `Node-B` had
 `pve.topology.node = 192.0.2.211`, copied from the Name column of `pvecm status`'s membership list,
@@ -449,12 +453,8 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Five things are unproven, and each needs something no healthy lab produces on demand:
+Four things are unproven, and each needs something no healthy lab produces on demand:
 
-- **A guest of a token-less node drawn only through an instance.** A token-less node itself is now
-  drawn, through the name+IP key, and so is a guest of it that is its own resource (2026-10-22). Whether
-  a guest that is only a GuestStatus instance on the token holder gets its Compute edge from another
-  node is untested. The cluster vertex is settled: it is not drawn (spike 3).
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
