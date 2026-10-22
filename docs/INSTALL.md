@@ -197,6 +197,12 @@ them changes nothing until you opt in. `addERI_Proxmox_VE_Guest` is the other ex
 applies to guest resources by their MAC address, needs no token, and works as soon as it is
 imported (§3.3).
 
+**Upgrading an install from before 2026-10-22: delete `Proxmox_VE_Cluster` first.** It changed
+from a single-instance to a one-instance multi-instance module, and LogicMonitor fixes that when a
+module is created: importing over the old one fails with "Field value cannot be modified", naming
+no field. Delete the module (its history goes with it), import the new one, then re-import the
+Tier 1 dashboard, whose cluster tiles pointed at the deleted module, and count its 20 widgets.
+
 ### 3.3 The topology modules, if you want a map
 
 `Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw cluster → node → guest edges
