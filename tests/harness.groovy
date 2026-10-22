@@ -293,8 +293,8 @@ note('propertysource', detectedProps['pve.version'] == '8.2.2',
      "did not report the Proxmox version: ${detectedProps}")
 note('propertysource', detectedProps['pve.clustered'] == 'true',
      "did not detect cluster membership: ${detectedProps}")
-// The value a user copies into pve.topology.cluster on the token-less node resources. It
-// has to be the name the TopologySource keys the cluster on, which is this same row.
+// The value a user copies into the optional pve.topology.cluster. It has to be the name
+// the TopologySource keys the cluster on, which is this same row.
 note('propertysource', detectedProps['pve.cluster.name'] == 'pve-cluster',
      "did not publish the cluster name: ${detectedProps}")
 
@@ -583,7 +583,11 @@ return [
     ip       : ['192.0.2.211', ' 192.0.2.211 ', 'fd00::12', 'FD00:0:0:0:0:0:0:12',
                 'fd00::12%vmbr0'].collectEntries { [(it): pveTopoIp(it)] },
     rejected : [null, '', '127.0.0.1', '::1', 'fe80::1', 'fe80:0:0:0:be24:11ff:fe00:1',
-                '0.0.0.0', '999.1.1.1', 'pve1.example.com'].collectEntries { [(it): pveTopoIp(it)] },
+                '0.0.0.0', '999.1.1.1', 'pve1.example.com',
+                // The container's own name resolves offline, through /etc/hosts, to a usable
+                // address: only the literal-only gate keeps it out, so this pins that no name
+                // is ever looked up.
+                InetAddress.localHost.hostName].collectEntries { [(it): pveTopoIp(it)] },
     v4       : pveTopoNodeKey('pve1', '192.168.10.11'),
     fqdn     : pveTopoNodeKey('PVE1.example.com', '192.168.10.11'),
     v6       : pveTopoNodeKey('pve2', 'fd00::12'),

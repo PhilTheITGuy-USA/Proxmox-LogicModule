@@ -32,8 +32,8 @@ try {
     try {
         def clusterRow = (pveGet('/cluster/status') ?: []).find { it.type == 'cluster' }
         println 'pve.clustered=' + (clusterRow != null)
-        // The exact name Proxmox_VE_Topology keys the cluster on, published so it can be
-        // copied into pve.topology.cluster on the node resources that carry no token.
+        // The exact name Proxmox_VE_Topology keys the cluster on, published for the optional
+        // pve.topology.cluster; the name-plus-IP node key needs no cluster name.
         if (clusterRow?.name) { println 'pve.cluster.name=' + clusterRow.name }
     } catch (Exception clusterException) {
         System.err.println('Could not determine cluster membership: ' + clusterException.message)

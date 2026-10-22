@@ -1,6 +1,6 @@
 # Topology without per-cluster properties, and a cluster vertex that is drawn
 
-Status: proposed 2026-10-20. Branch `topology-node-ip-keys`.
+Status: implemented on branch `topology-node-ip-keys`, except §3.4, which was dropped after its spike failed (DESIGN §7, spike 3): the cluster vertex is not drawn. A node vertex carries one key, not both (DESIGN §7, 2026-10-21). Portal results are in DESIGN §7 only.
 
 ## 1. Goal
 
@@ -97,6 +97,8 @@ cannot change a resource's type. The technicalNotes and INSTALL say to scope the
 hosts, with the dynamic group below as the worked example.
 
 ### 3.4 The cluster vertex, drawn through a `Proxmox_VE_Cluster` instance
+
+**Dropped.** The spike failed (DESIGN §7, spike 3); nothing below was built.
 
 Gated on a spike (§6 item 1). If the spike fails, this section is dropped, §3.2's standalone rule
 still ships, and DESIGN §7 records why the cluster vertex is not drawn.
