@@ -404,10 +404,19 @@ whose instance vertices were all guests of the instance's own resource. A cluste
 one node of many would misdraw the cluster, so `Proxmox_VE_Cluster` stays single-instance (spec §3.4
 dropped) and the cluster vertex stays undrawn. Test Script of the TopologySource exits 2 on
 `Proxmox-B` and succeeds on `Proxmox A`, consistent with only `Proxmox A` holding the token; the
-error text was not recorded. The rule does **not** reach guests: a guest that is only a GuestStatus
-instance on the token holder is drawn under its own token-less node (2026-10-22, below). Why a guest
-instance takes an edge from another resource and the cluster instance did not is not known; the
-cluster vertex stays undrawn on the strength of what was seen.
+error text was not recorded. The rule does **not** hold: it was an artefact of the two-key mismatch, and
+the re-run below draws the cluster to every node.
+
+**Spike 3 re-run, 2026-10-22 — the cluster vertex is drawn to every node.** The first run was
+confounded: it came before the one-key fix, when `Proxmox-B`'s node vertex carried two joined keys
+it did not hold, so the Cluster edge to `Proxmox-B` had nothing to land on (its guests looked drawn
+because `Proxmox-B` itself held their instances). The same throwaway DataSource, re-imported onto
+`Proxmox A` with one instance carrying `predef.externalResourceID = proxmoxve--proxltron` and
+`predef.externalResourceType = Cluster`, now draws `Proxltron` with the cluster icon and Cluster
+edges to both `Proxmox A` and `Proxmox-B`, each node with its own guests below: Compute edges from
+`Proxmox-B` to `Debian-Test` and `CT-Test`, from `Proxmox A` to its seven. So an instance vertex takes
+edges from any matched resource, whatever it stands for, and the TopologySource's existing Cluster
+edges need only a real module to carry the key. Spike module deleted after the check.
 
 **A vertex with two keys matches only a resource carrying both, 2026-10-21.** The first import of
 the name-plus-IP keys gave each node vertex both keys, the cluster-scoped and the IP one, on the
