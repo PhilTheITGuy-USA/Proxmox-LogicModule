@@ -432,10 +432,11 @@ things it does not show: a guest of `Proxmox-B` that is *only* an instance (none
 
 The first runs of this check failed for a configuration reason worth keeping. `Proxmox-B` had
 `pve.topology.node = 192.168.4.211`, copied from the Name column of `pvecm status`'s membership list,
-which shows each member's corosync ring address and not its node name. `pveTopoNodeName` takes that
-property as given and the key cuts it at the first dot, so the resource carried
+which shows each member's corosync ring address and not its node name. `pveTopoNodeName` then took that
+property as given and the key cut it at the first dot, so the resource carried
 `proxmoxve--node--192--192-168-4-211` and matched nothing. The node name is the one `pvecm nodes`
-and `/etc/pve/nodes` show. Deleting the property let `system.sysname` (`Proxmox-B`) supply it.
+and `/etc/pve/nodes` show. Deleting the property let `system.sysname` (`Proxmox-B`) supply it. `pveTopoNodeName` now skips an
+address in the property the same way, so the mistake falls back to `system.sysname`.
 
 **The portal draws only vertices that match a resource or, as spike 2 later showed, a DataSource
 instance.** What follows is the record of 2026-09-23. Test Script on `ProxMox A` emitted all
@@ -448,7 +449,7 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Four things are unproven, and each needs something no healthy lab produces on demand:
+Five things are unproven, and each needs something no healthy lab produces on demand:
 
 - **A guest of a token-less node drawn only through an instance.** A token-less node itself is now
   drawn, through the name+IP key, and so is a guest of it that is its own resource (2026-10-22). Whether
@@ -461,6 +462,9 @@ Four things are unproven, and each needs something no healthy lab produces on de
   SMART.
 - **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
   §2, not measured at scale.
+- **A standalone host with no online guest.** `Proxmox_VE_Topology` then registers no edge at all
+  (a standalone host has no cluster edge) and prints `generateTopology` of an empty list. What the
+  portal makes of an empty result — nothing, or an error on the module — has not been seen.
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on

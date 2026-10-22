@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Draw every Proxmox node under its cluster from one dynamic group carrying only `pve.topology.enabled=true`, across any number of clusters, and draw the cluster vertex itself.
+**Goal:** Draw every Proxmox node under its cluster from one dynamic group carrying only `pve.topology.enabled=true`, across any number of clusters, and draw the cluster vertex itself. (As built: the cluster vertex is not drawn, the spike having failed — DESIGN §7, spike 3.)
 
 **Architecture:** A second node key, `proxmoxve--node--<name>--<ip>`, built by new preamble helpers that both the TopologySource (from `/cluster/status`) and `addERI_Proxmox_VE` (from `system.ips`) call, so no cluster name is needed on a token-less node. The cluster vertex resolves to a one-instance `Proxmox_VE_Cluster` carrying `predef.externalResourceID`, gated on a portal spike.
 

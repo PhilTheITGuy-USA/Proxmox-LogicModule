@@ -204,11 +204,11 @@ def pveTopoKey = { String cluster, String node ->
  * the whole cluster once per node, which is the duplication docs/INSTALL.md 4.1 warns
  * against.
  *
- * The cluster name has no source but pve.topology.cluster, set once on the group that
- * holds the nodes. The node name is pve.topology.node when set, and otherwise the short
- * form of system.sysname or system.hostname: Proxmox requires a node's name to be its
- * hostname, so the short hostname is the node name. An IP address says nothing about the
- * name and is skipped. Returns null rather than guessing: a wrong key matches no vertex,
+ * The node name is pve.topology.node when set to a name, and otherwise the short form of
+ * system.sysname or system.hostname: Proxmox requires a node's name to be its hostname,
+ * so the short hostname is the node name. An IP address says nothing about the name and
+ * is skipped, in the property too. The cluster name, which only the older cluster-scoped
+ * key needs, has no source but the optional pve.topology.cluster. Returns null rather than guessing: a wrong key matches no vertex,
  * which is indistinguishable on the map from no key at all, but costs a stray ERI.
  */
 def pveTopoNodeName = { ->

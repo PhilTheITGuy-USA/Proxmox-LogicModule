@@ -199,8 +199,8 @@ imported (§3.3).
 
 ### 3.3 The topology modules, if you want a map
 
-`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw cluster → node → guest edges
-so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
+`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw node → guest edges (the
+cluster itself is not drawn; see below) so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
 monitored as its own LogicMonitor resource. Import `addERI_Proxmox_VE` first.
 
 **Both are off by default.** One property, `pve.topology.enabled=true`, turns on both, and the
@@ -232,9 +232,16 @@ as §4.1 recommends:
 - `addERI_Proxmox_VE` runs on every node and stamps a key built from the node's name and an IP
   address, `proxmoxve--node--<name>--<ip>`, one per address in the resource's `system.ips`. The
   TopologySource builds the same key from the address `/cluster/status` reports for that node, so
-  a node without the token matches with nothing set on it. The name is the resource's hostname,
-  short form: Proxmox requires a node's name to be its hostname, so `pve2.example.com` is node
-  `pve2`.
+  a node without the token matches with nothing set on it. The name is the resource's
+  `system.sysname`, else its hostname, short form: Proxmox requires a node's name to be its
+  hostname, so `pve2.example.com` is node `pve2`. An IP address is never taken as a name.
+- **The address must be one LogicMonitor knows for the node.** `/cluster/status` reports each
+  node's cluster (corosync) address. If corosync runs on its own network, that address is in the
+  node's `system.ips` only when LogicMonitor sees every interface, which SNMP gives it; a node
+  added by its management IP with no SNMP is otherwise left unmatched.
+- **Two clusters whose nodes share a name and an address** — lab copies, or a reused private range
+  such as a dedicated corosync network — produce the same key, and the map joins them.
+  `topo.namespace`, LogicMonitor's usual remedy, is not supported (below).
 
 Two optional properties remain, for the cases that key cannot cover:
 
@@ -248,11 +255,12 @@ asks the API, and it is drawn without a cluster above it. `auto.pve.clustered` r
 standalone host, which is how to tell which case you have.
 
 **The cluster itself is not drawn**, only its nodes and guests: the portal draws no vertex that
-matches nothing, and no resource or instance can carry the cluster's key without misdrawing it
-(DESIGN §7, spike 3).
+matches nothing, no resource stands for the cluster, and an instance carrying the cluster's key is
+drawn joined to its own node only, which misdraws the cluster (DESIGN §7, spike 3).
 
-Keep both properties off guest resources: on a guest the ERI module would stamp a node key the map
-never asks for.
+Keep `pve.topology.enabled`, `pve.topology.node` and `pve.topology.cluster` off guest resources: on
+a guest `addERI_Proxmox_VE` would stamp a node key the map never asks for. The group's AppliesTo
+above already leaves guests out.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —
