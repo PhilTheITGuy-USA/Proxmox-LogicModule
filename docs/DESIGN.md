@@ -330,7 +330,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | `addERI_Proxmox_VE_Guest` | **verified** 2026-10-20 (guest topology labels spec §6 item 3) — Debian-test (Linux VM, SNMP), the Windows Server guest (VMID 200, WMI) and the LXC containers Frigate, Music-Assistant and KTV-PiKaraoke (SNMP) read `VirtualMachineResource`, so the `isLinux()` / `isWindows()` clause matches all three kinds; the Pi and a Proxmox node resource stay `PhysicalServer`. Three of the LXC labels were still `PhysicalServer` at first look and landed on their own — the module runs every 30 minutes and the map redraws hourly, so allow both before calling a label missing |
 | GuestStatus instance ERIs | **verified** 2026-10-20 (spec §6 items 4-6) on `Proxmox A` and `Proxmox-B`, both standalone: every guest is drawn under its node, including ones with no resource of their own; the portal decodes discovery values (`auto.pve_id` reads `qemu/201`), so `predef.externalResourceID` stores `bc:24:11:65:d4:40` with its colons; and turning the flag off and re-running discovery removes both instance properties. Unproven (item 7, not reachable in this lab): the token on several nodes of one cluster, which puts the same key on several instances |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. `addERI_Proxmox_VE`'s AppliesTo with no `hasCategory` imported and applies (2026-10-20), but both lab hosts are standalone and hold their own token, so the token-less path has not run. Unproven: a multi-node map with every node drawn while one node holds the token. 2026-10-21: on the two-node cluster `Proxmox-B`, where the TopologySource's Test Script exits 2 as it would without the token, is drawn with its guests while `pve.topology.cluster` is on the group — but the token's absence was inferred, not confirmed. Superseded for new deployments by the name+IP keys below |
-| Node name+IP keys | **not verified** — built 2026-10-20; the harness covers the helpers, including the round trip from a `/cluster/status` address to `system.ips`, but cannot run either script. Unproven: spec §6 items 2 (a token-less node drawn with `pve.topology.cluster` removed) and 5 (two clusters in one group, not reachable in this lab) |
+| Node name+IP keys | **partly verified** — built 2026-10-20; the harness covers the helpers, including the round trip from a `/cluster/status` address to `system.ips`, but cannot run either script. 2026-10-22: spec §6 item 2 holds on the two-node cluster `Proxltron` — the token-less `Proxmox-B`, with no `pve.topology.cluster` anywhere, carries `proxmoxve--node--proxmox-b--192-168-4-211` and is drawn with a Compute edge to its guest `Debian-Test` (see below). Unproven: item 5, two clusters in one group, not reachable in this lab |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an
@@ -407,7 +407,8 @@ dropped) and the cluster vertex stays undrawn. Test Script of the TopologySource
 error text was not recorded. If the rule holds, it reaches guests too, unproven: a guest drawn only
 through GuestStatus's instance ERI lives on the token holder, so on a cluster a guest of another node
 may be drawn without its Compute edge. GuestStatus's instance ERIs were verified on two standalone
-hosts, each its own token holder, where the question does not arise.
+hosts, each its own token holder, where the question does not arise. A guest that is its own
+resource is not affected: it is drawn under its token-less node (2026-10-22, below).
 
 **A vertex with two keys matches only a resource carrying both, 2026-10-21.** The first import of
 the name-plus-IP keys gave each node vertex both keys, the cluster-scoped and the IP one, on the
@@ -418,6 +419,23 @@ lm.topo joining them into a single ID,
 its `fe80:` address — and was left unmatched: on the map without an edge, its guests gone.
 `Proxmox A`, holding the token and so both keys, still matched. A node vertex now carries one key
 (`pveTopoNodeVertexKey`), and the harness refuses a second.
+
+**A token-less node draws its own guests, 2026-10-22.** On `Proxltron`, `Proxmox A` holds the token
+and runs the TopologySource; `Proxmox-B` holds none and carries only the name-plus-IP key. Its guest
+`Debian-Test` was added as an SNMP resource, so its `predef.externalResourceID` carries its MAC
+`bc:24:11:f7:03:e4`, while `Proxmox A`'s GuestStatus instance for the same guest carries the same
+MAC. After one topology run the map draws `Proxmox-B` with a Compute edge to `Debian-Test`. So an
+edge between two resources, neither of them the one running the TopologySource, is drawn; and where a
+resource and an instance on another resource carry the same key, the edge reaches the resource. Two
+things it does not show: a guest of `Proxmox-B` that is *only* an instance (none was tested once
+`Proxmox-B`'s key was right), and a second cluster.
+
+The first runs of this check failed for a configuration reason worth keeping. `Proxmox-B` had
+`pve.topology.node = 192.168.4.211`, copied from the Name column of `pvecm status`'s membership list,
+which shows each member's corosync ring address and not its node name. `pveTopoNodeName` takes that
+property as given and the key cuts it at the first dot, so the resource carried
+`proxmoxve--node--192--192-168-4-211` and matched nothing. The node name is the one `pvecm nodes`
+and `/etc/pve/nodes` show. Deleting the property let `system.sysname` (`Proxmox-B`) supply it.
 
 **The portal draws only vertices that match a resource or, as spike 2 later showed, a DataSource
 instance.** What follows is the record of 2026-09-23. Test Script on `ProxMox A` emitted all
@@ -432,10 +450,10 @@ own resource, not in this suite.
 
 Four things are unproven, and each needs something no healthy lab produces on demand:
 
-- **A token-less node on a multi-node map** — the two-node map above draws both nodes, but it is
-  only inferred that one of them lacked the token, so drawing a token-less node — through
-  `pve.topology.cluster` or the name+IP key — is unproven. The cluster vertex is settled: it is not
-  drawn (spike 3).
+- **A guest of a token-less node drawn only through an instance.** A token-less node itself is now
+  drawn, through the name+IP key, and so is a guest of it that is its own resource (2026-10-22). Whether
+  a guest that is only a GuestStatus instance on the token holder gets its Compute edge from another
+  node is untested. The cluster vertex is settled: it is not drawn (spike 3).
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
