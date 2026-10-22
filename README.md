@@ -11,7 +11,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 
 | Module | Collection | Covers |
 |---|---|---|
-| Proxmox VE Cluster | Script, single instance | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit |
+| Proxmox VE Cluster | Script, one instance (the cluster) | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit |
 | Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
 | Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
@@ -153,9 +153,9 @@ These are Proxmox API limits, not implementation shortcuts:
   the topology map needs `addERI_Proxmox_VE` to give a node's resource a key it can match on: the
   node's short name plus an address from its `system.ips`, which the TopologySource builds from
   `/cluster/status`. A node resource with no hostname and no SNMP or SSH needs `pve.topology.node`.
-- **The cluster itself is not drawn on the map**, only its nodes and guests. The portal draws no
-  vertex that matches nothing, and a cluster key carried by a DataSource instance is drawn with an
-  edge to the instance's own resource only.
+- **The cluster is drawn through an instance, so it is not a resource of its own.** Proxmox VE
+  Cluster's one instance carries the cluster's map key behind the opt-in; it lives on the node that
+  holds the token, and its history moves only if the token does.
 - **Guests reach the topology map through the opt-in, and their label through their MAC.** With
   `pve.topology.enabled=true`, Guest Status's discovery gives each guest on an online node an
   instance ERI, so every guest is drawn under its node whether or not it is its own resource and

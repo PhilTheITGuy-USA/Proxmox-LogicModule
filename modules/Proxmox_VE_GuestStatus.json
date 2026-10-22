@@ -12,6 +12,7 @@
   "useWildValueAsUniqueIdentifier": true,
   "collectScript": "Proxmox_VE_GuestStatus.collect.groovy",
   "discoveryScript": "Proxmox_VE_GuestStatus.ad.groovy",
+  "instanceGroupProperty": "auto.pve_node",
   "discoveryInterval": "60m",
   "datapoints": [
     {"name": "Status", "description": "1 when the guest is running, 0 otherwise. Intentionally unthresholded; see technical notes."},

@@ -199,8 +199,8 @@ imported (§3.3).
 
 ### 3.3 The topology modules, if you want a map
 
-`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw node → guest edges (the
-cluster itself is not drawn; see below) so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
+`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw cluster → node → guest edges
+so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
 monitored as its own LogicMonitor resource. Import `addERI_Proxmox_VE` first.
 
 **Both are off by default.** One property, `pve.topology.enabled=true`, turns on both, and the
@@ -254,9 +254,11 @@ A **standalone host** needs nothing beyond the flag. It holds its own token, so 
 asks the API, and it is drawn without a cluster above it. `auto.pve.clustered` reads `false` on a
 standalone host, which is how to tell which case you have.
 
-**The cluster itself is not drawn**, only its nodes and guests: the portal draws no vertex that
-matches nothing, no resource stands for the cluster, and an instance carrying the cluster's key is
-drawn joined to its own node only, which misdraws the cluster (DESIGN §7, spike 3).
+**The cluster is drawn through Proxmox VE Cluster's one instance**, which with the flag on carries
+the cluster's key (`predef.externalResourceID = proxmoxve--<cluster>`, type `Cluster`). It is drawn
+with LogicMonitor's cluster icon above every node. Its discovery runs hourly, so after turning the
+flag on, run **Run Active Discovery** on Proxmox VE Cluster rather than wait. A standalone host has
+no cluster, so its instance carries no key and the map starts at the node.
 
 Keep `pve.topology.enabled`, `pve.topology.node` and `pve.topology.cluster` off guest resources: on
 a guest `addERI_Proxmox_VE` would stamp a node key the map never asks for. The group's AppliesTo
@@ -386,19 +388,19 @@ Discovery then populates instances, and collection starts on each module's own i
 
 | Module | Interval | Instances | Empty is normal when |
 |---|---|---|---|
-| Guest Status | 3m | one per guest, templates excluded | there are no guests |
-| Cluster | 5m | single instance | — |
+| Guest Status | 3m | one per guest, templates excluded, grouped by node | there are no guests |
+| Cluster | 5m | one, the cluster (a standalone host's own name) | — |
 | Nodes | 5m | one per node, offline ones included | — |
 | Node Detail | 5m | one per online node | — |
-| Guest Performance | 5m | one per guest, templates excluded | there are no guests |
-| Node Services | 5m | one per systemd unit per online node | — |
+| Guest Performance | 5m | one per guest, templates excluded, grouped by node | there are no guests |
+| Node Services | 5m | one per systemd unit per online node, grouped by node | — |
 | Ceph | 5m | single instance | — (reports `CephAvailable=0` without Ceph) |
 | Ceph OSD | 5m | one per OSD | **Ceph is not installed — expected on most hosts** |
-| Storage Capacity | 10m | one per storage | — |
+| Storage Capacity | 10m | one per storage, grouped by node | — |
 | Replication | 10m | one per replication job | **no replication job is defined — expected on most hosts** |
 | Backup Coverage | 60m | single instance | — |
-| Certificates | 240m | one per certificate per online node, usually 2–3 | — |
-| Disks | 240m | one per physical disk per online node | — |
+| Certificates | 240m | one per certificate per online node, usually 2–3, grouped by node | — |
+| Disks | 240m | one per physical disk per online node, grouped by node | — |
 | Subscription | 720m | one per online node | — |
 
 Modules that reach into a node's own API — Node Detail, Node Services, Certificates, Disks,

@@ -12,6 +12,7 @@
   "useWildValueAsUniqueIdentifier": true,
   "collectScript": "Proxmox_VE_NodeServices.collect.groovy",
   "discoveryScript": "Proxmox_VE_NodeServices.ad.groovy",
+  "instanceGroupProperty": "auto.pve_node",
   "discoveryInterval": "1440m",
   "datapoints": [
     {
