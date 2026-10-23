@@ -76,7 +76,7 @@ The output looks like this:
 │ key          │ value                                │
 ├──────────────┼──────────────────────────────────────┤
 │ full-tokenid │ monitor@pve!logicmonitor             │
-│ value        │ 8f4e2a1b-7c3d-4e5f-9a8b-1c2d3e4f5a6b │
+│ value        │ <token>                              │
 └──────────────┴──────────────────────────────────────┘
 ```
 
@@ -111,13 +111,14 @@ pveum acl modify / --tokens 'monitor@pve!logicmonitor' --roles PVEAuditor
 From anywhere that can reach the Proxmox API:
 
 ```sh
-curl -k -H "Authorization: PVEAPIToken=monitor@pve!logicmonitor=8f4e2a1b-7c3d-4e5f-9a8b-1c2d3e4f5a6b" \
+curl -k -H 'Authorization: PVEAPIToken=monitor@pve!logicmonitor=<token>' \
   https://pve1.example.com:8006/api2/json/cluster/resources
 ```
 
 You should get a JSON body with a `data` array listing your nodes, guests and storage.
 
-- **A `401`** means the token secret is wrong, or the token has no ACL — go back to 1.4.
+- **A `401`** means authentication failed: the token ID or secret is wrong, or the token was
+  deleted. A token with no ACL still authenticates — that is the next case.
 - **`{"data":[]}`**, an empty array with no error, means the token authenticated but can see
   nothing. That is also 1.4. `/cluster/resources` filters by ACL rather than erroring, so an
   under-privileged token looks exactly like an empty cluster.
@@ -136,7 +137,7 @@ user@realm!tokenid=secret
 For the example above:
 
 ```
-monitor@pve!logicmonitor=8f4e2a1b-7c3d-4e5f-9a8b-1c2d3e4f5a6b
+monitor@pve!logicmonitor=<token>
 ```
 
 Note the punctuation, all of which matters: `@` before the realm, `!` before the token ID, `=`
@@ -348,7 +349,7 @@ On the resource (or on a group containing it): **Manage → Properties → Add**
 
 | Name | Value |
 |---|---|
-| `pve.api.token.credential` | `monitor@pve!logicmonitor=8f4e2a1b-7c3d-4e5f-9a8b-1c2d3e4f5a6b` |
+| `pve.api.token.credential` | `monitor@pve!logicmonitor=<token>` |
 
 Setting it on a **resource group** is the cleaner option if you have several clusters: create a
 group per cluster, set the property once on the group, and add the node to it.
@@ -376,6 +377,34 @@ LogicMonitor prefixes every property a PropertySource sets with `auto.`, except
 
 As soon as `ProxmoxVE` appears in `system.categories`, the rest of the suite applies itself. Active
 Discovery then populates instances, and collection starts on each module's own interval.
+
+### 4.4 Creating a cluster, or adding a standalone host to one
+
+**Creating a cluster on a monitored standalone host** (`pvecm create`) needs no change in
+LogicMonitor. The host keeps its users and token, and on the PropertySource's next run
+`auto.pve.clustered` turns `true` and `auto.pve.cluster.name` appears. Proxmox VE Cluster keeps its
+one instance — its wildvalue is the fixed `cluster`, so its history carries over — and its next
+discovery renames it from the host's name to the cluster's. With the topology flag on, run
+**Run Active Discovery** on Proxmox VE Cluster to draw the cluster above the node.
+
+**Adding a standalone host to a cluster** (`pvecm add`) replaces the joining host's `/etc/pve` with
+the cluster's, so Proxmox requires it to hold no guests, and its own users and tokens are gone
+afterwards. Users and tokens are cluster-wide: the cluster's `monitor@pve!logicmonitor` token now
+works against the joined host too. In LogicMonitor:
+
+1. **Remove `pve.api.token.credential` from the joined host's resource**, if it had its own. Its old
+   token no longer exists, and putting the cluster's token there instead makes it collect the whole
+   cluster a second time (§4.1). Once the PropertySource has run (§4.3), the suite stops applying
+   to that resource.
+2. **The token holder picks the new node up by itself.** Its next discovery adds the node to Nodes,
+   and to the per-node modules once the node is online. The joined host's earlier history stays on
+   its own resource and does not move to these instances.
+3. **For the map**, keep the joined host's resource in the topology group of §3.3. It needs no
+   token: `addERI_Proxmox_VE` stamps its name-plus-IP key from its own properties. The address
+   `pvesh get /cluster/status` reports for it must be among its `system.ips` (§3.3).
+
+The result is the layout §4.1 recommends: one token on one node of the cluster. The other nodes
+need to be resources only if you use the map.
 
 ---
 

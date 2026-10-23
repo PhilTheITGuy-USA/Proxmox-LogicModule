@@ -224,6 +224,9 @@ never be folded into Guest Performance at 5m: that trades away the property that
 work at scale, in exchange for metrics that are either occasionally useful (snapshots) or frequently
 unavailable (balloon).
 
+Before building it, check each surface below against what the built modules already emit (user
+ruling, 2026-10-23); any overlap is cleaned up first, so no metric is collected twice.
+
 | Surface | Source | Caveat |
 |---|---|---|
 | Ballooning, properly | per-guest `status/current` → `balloon` (actual), `ballooninfo`, `freemem`, `balloon_min`, and `maxmem` overwritten from the balloon's own `max_mem` | `QemuServer.pm` notes the balloon query "fails if balloon driver is not loaded, so this must be the last command". A guest without the driver yields nothing, and it must read as no-data — exactly like QEMU used-disk. |
@@ -364,13 +367,13 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
-| Topology modules opt-in via `pve.topology.enabled` | **partly verified** — AppliesTo changed 2026-10-07; re-imported 2026-10-20, and the portal accepts the clause: with `pve.topology.enabled=true` on a dynamic group of the two standalone hosts, both modules apply and draw the map. Unproven: that the modules stop applying where the property is absent, and what happens to an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
+| Topology modules opt-in via `pve.topology.enabled` | **verified** — AppliesTo changed 2026-10-07; re-imported 2026-10-20, and the portal accepts the clause: with `pve.topology.enabled=true` on a dynamic group of the two standalone hosts, both modules apply and draw the map. 2026-10-23, user-confirmed: the modules stop applying where the property is absent. Unproven: what becomes of an ERI already stamped on a node's resource once `addERI_Proxmox_VE` stops applying |
 | `addERI_Proxmox_VE_Guest` | **verified** 2026-10-20 (guest topology labels spec §6 item 3) — Debian-test (Linux VM, SNMP), the Windows Server guest (VMID 200, WMI) and the LXC containers Nvr01, Music-Assistant and Kiosk01-Display (SNMP) read `VirtualMachineResource`, so the `isLinux()` / `isWindows()` clause matches all three kinds; the Pi and a Proxmox node resource stay `PhysicalServer`. Three of the LXC labels were still `PhysicalServer` at first look and landed on their own — the module runs every 30 minutes and the map redraws hourly, so allow both before calling a label missing |
 | GuestStatus instance ERIs | **verified** 2026-10-20 (spec §6 items 4-6) on `Node-A` and `Node-B`, both standalone: every guest is drawn under its node, including ones with no resource of their own; the portal decodes discovery values (`auto.pve_id` reads `qemu/201`), so `predef.externalResourceID` stores `bc:24:11:0e:00:06` with its colons; and turning the flag off and re-running discovery removes both instance properties. Unproven (item 7, not reachable in this lab): the token on several nodes of one cluster, which puts the same key on several instances |
 | Token-less node ERIs (`pve.topology.cluster`) | **not verified** — built 2026-10-07; the harness covers `pveTopoNodeIdentity` but cannot run the script. `addERI_Proxmox_VE`'s AppliesTo with no `hasCategory` imported and applies (2026-10-20), but both lab hosts are standalone and hold their own token, so the token-less path has not run. Unproven: a multi-node map with every node drawn while one node holds the token. 2026-10-21: on the two-node cluster `Node-B`, where the TopologySource's Test Script exits 2 as it would without the token, is drawn with its guests while `pve.topology.cluster` is on the group — but the token's absence was inferred, not confirmed. Superseded for new deployments by the name+IP keys below |
 | Node name+IP keys | **partly verified** — built 2026-10-20; the harness covers the helpers, including the round trip from a `/cluster/status` address to `system.ips`, but cannot run either script. 2026-10-22: spec §6 item 2 holds on the two-node cluster `Labcluster` — the token-less `Node-B`, with no `pve.topology.cluster` anywhere, carries `proxmoxve--node--node-b--192-0-2-211` and is drawn with a Compute edge to its guest `Debian-Test` (see below). Unproven: item 5, two clusters in one group, not reachable in this lab |
 | Cluster vertex (`Proxmox_VE_Cluster` instance ERI) | **verified** — built 2026-10-22; the harness covers the discovery (key, type, standalone, namespace, API down). 2026-10-22, on `Labcluster` with the spike module deleted: Active Discovery on `Node-A` gives one instance `Labcluster` carrying `predef.externalResourceID=proxmoxve--labcluster` and type `Cluster`; after a topology run the map draws `Labcluster` with Cluster edges to `Node-A` and the token-less `Node-B`, each with its guests under it (eight under A; `Debian Test` and the instance-only `CT-Test` under B). The Tier 1 dashboard, reimported, has 20 widgets and its cluster tiles read data from the multi-instance module. Opt-in off (spec §6 item 4), 2026-10-22: with `pve.topology.enabled=false` overridden on `Node-A`, Active Discovery removes both ERI properties from the instance and the map drops the cluster vertex; removing the override and rediscovering brings both back. Unproven: a standalone host, which should get no key (harness only). Importing it over the single-instance version failed with "Field value cannot be modified" (no field named); after deleting the old module the import succeeded (2026-10-22), so `multiInstance` cannot change on an existing module. INSTALL §3.2 carries the upgrade step |
-| Instance groups by node | **verified** — 2026-10-22, GuestStatus grouped by hand in the portal with Instance Level Property `auto.pve_node`: guests show under their node's group, and `CT-Test`, migrated, moved group and kept its history; the export carries `groupMethod: ilp`, `groupExpr: auto.pve_node`, which the build now writes for six modules. Later the same day the six built modules, imported, group their instances under `Node-A` and `Node-B`. Unproven: a migration under the built modules (the hand-grouped one moved), and scale (deferred, below) |
+| Instance groups by node | **verified** — 2026-10-22, GuestStatus grouped by hand in the portal with Instance Level Property `auto.pve_node`: guests show under their node's group, and `CT-Test`, migrated, moved group and kept its history; the export carries `groupMethod: ilp`, `groupExpr: auto.pve_node`, which the build now writes for six modules. Later the same day the six built modules, imported, group their instances under `Node-A` and `Node-B`. 2026-10-23, user-confirmed: an LXC guest migrated twice under the built modules, and its instances followed it to the new node's group each time. Unproven: scale (deferred, below) |
 
 **The TopologySource took one portal round trip.** The first import, on 2026-09-23, was refused with
 `non empty field value required`, naming no field. The build had emitted `collectionAttrs` as an
@@ -502,26 +505,32 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Five things are unproven. Each needs something this lab cannot produce, and each is deferred to
-later testing (user ruling, 2026-10-22):
+Four things are unproven. Each needs something this lab cannot produce, and each is deferred to
+a customer environment (user rulings, 2026-10-22 and 2026-10-23):
 
-- **Two clusters in one topology group** (spec §6 item 5) — deferred until a second cluster is
-  available. Until then the name+IP key's claim to cover any number of clusters rests on the
+- **Two clusters in one topology group** (spec §6 item 5) — deferred until a customer with a
+  second cluster. Until then the name+IP key's claim to cover any number of clusters rests on the
   harness and on one cluster.
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster. Not
-  reproducible in this lab; deferred.
+  reproducible in this lab; deferred to a customer.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
   unreadable disk alerting exactly like a failing one. The 2026-09-22 live check covered real SSD
   and NVMe disks on `Node-A`, all with readable SMART: it settled the wearout direction, not
-  this branch. A USB disk or one behind a hardware RAID controller usually reads `UNKNOWN`, if one
-  is ever to hand; otherwise deferred.
+  this branch. A USB disk or one behind a hardware RAID controller usually reads `UNKNOWN`; none is
+  available in this lab (2026-10-23), so deferred to a customer.
 - **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
   §2, not measured at scale. Deferred to a customer test.
-- **A standalone host with no online guest.** `Proxmox_VE_Topology` then registers no edge at all
-  (a standalone host has no cluster edge) and prints `generateTopology` of an empty list. The user
-  recalls such a host showing no error (2026-10-22), but what the module returned was not recorded.
-  Retest if it is ever in doubt.
+
+**A standalone host with a stopped guest** is verified (2026-10-23). On `Node-B`, standalone and
+holding the token, with its only guest `Debian Test` powered off, the map draws `Node-B` with a
+Compute edge to `Debian Test`, the guest marked dead: guests are filtered by their node's state and
+by `template`, not by their own, so a node's down guests stay drawn under it.
+
+**A token-less standalone node** with no `pve.topology.cluster` is verified (2026-10-23):
+`addERI_Proxmox_VE` stamps exactly one Proxmox key, `proxmoxve--node--node-b--192-0-2-211`,
+from `system.sysname` and `system.ips`, beside the resource's own MAC and Docker ERIs, and no
+cluster-scoped key; the type stays `PhysicalServer`.
 
 **The dashboard's two unenforced conventions are now portal-confirmed.** A widget addresses a
 module by the plain string `"<displayedAs> (<name>)"`, and these widgets legend on
