@@ -61,6 +61,41 @@ counters** and **node `cpu_iowait`**. One useful property — each entry carries
 as `gauge`, `counter` or `derive`, which maps directly onto the datapoint `type` field in §5. It
 needs `Sys.Audit` on `/`, and takes `local-only`, `node-list`, `start-time` and `history`.
 
+### API details that bite
+
+Verified against the published API schema (454 endpoints).
+
+Base `https://host:8006/api2/json`. Auth header is exactly
+`Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET` — `=` after `PVEAPIToken`, not `-`; the
+credential property holds the whole `user@realm!tokenid=secret`, so the header is
+`'PVEAPIToken=' + apiToken`. Every endpoint this module uses has
+`allowtoken: 1`, so API tokens work throughout — but a token with **privilege separation enabled**
+gets its own ACL and will 401/403 until permissions are granted to the token itself, not just the
+user. Responses are always enveloped as `{"data": ...}`.
+
+Required privileges: `Sys.Audit` on `/` for `/cluster/status`, `Sys.Audit` on `/nodes/{node}` for
+node status and rrddata, `VM.Audit` on `/vms/{vmid}` for guest status, and `Datastore.Audit` on
+`/storage/{storage}` for storage status. `PVEAuditor` on `/` with propagate covers all of them.
+`/nodes`, `/nodes/{node}/qemu` and `/cluster/resources` are `user: all` — they silently return only
+what the token may see, so an under-privileged token produces *empty discovery*, not an error.
+
+Schema details:
+
+- Don't use `rrddata` for current values. It returns an averaged historical series, and guest
+  `status/current` already carries the network and disk counters.
+- **QEMU guests have no used-disk figure.** `/nodes/{node}/qemu` and qemu `status/current` expose
+  `maxdisk` but no `disk`; only LXC reports `disk`. `GuestPerformance` therefore emits
+  `DiskUsedGB` / `DiskUsagePercent` for LXC only (both `conditional`), leaving VMs at no-data.
+  That is Proxmox behaviour, not a bug to fix — real VM disk usage needs the guest agent.
+- `template: true` marks templates. They are never running, so discovering them creates instances
+  that alert as permanently down. Filter them out of guest discovery.
+- `/nodes/{node}/status` declares `additionalProperties: 1` — `uptime`, `swap`, `ksm` and friends
+  are returned but absent from the published schema, so don't "correct" code that reads them.
+- `loadavg` items are typed **string**, not number. Convert with `toDouble()` before arithmetic and
+  before emitting — an unconverted string reaches LogicMonitor as no-data and fails the harness.
+- Storage list entries carry `active`, `enabled` and `used_fraction`; storage `status` omits
+  `used_fraction`. A disabled or inactive storage still discovers, so `up` should reflect `active`.
+
 ---
 
 ## 3. Instance IDs: use Proxmox's own `id`
