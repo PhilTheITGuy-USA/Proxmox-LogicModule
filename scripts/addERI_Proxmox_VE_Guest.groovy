@@ -14,10 +14,9 @@
  * -- keeps the type its own ERI modules give it rather than a priority-3 VM label keyed on
  * nothing but its MAC prefix.
  *
- * Why priority 3. A portal spike (2026-10-19, DESIGN 7) emitted this same key at priority 1
- * and the type stayed PhysicalServer; at priority 3 it became VirtualMachineResource. The
- * resource type comes from the highest-priority ERI entry ACROSS categories, and the
- * built-in net.l2 entry is priority 2. Keys from every category still merge into the ID,
+ * Why priority 3. The resource type comes from the highest-priority ERI entry ACROSS
+ * categories, and the built-in net.l2 entry is priority 2: at priority 1 this key merges
+ * but the type stays PhysicalServer. Keys from every category still merge into the ID,
  * so this key adds to the guest's MAC-based ERIs rather than replacing them. The key joins
  * nothing -- the guest already meets its map vertex through the MAC net.l2 holds -- it
  * exists to carry the type at a priority that wins.

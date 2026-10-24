@@ -45,7 +45,7 @@ limits are in the Proxmox API itself, and they apply equally to either collectio
   counters. Nutanix's `citAvgLatencyUsecs` / `vmReadIOPerSecond` have no Proxmox equivalent. This
   is a platform gap, not a design choice.
 - Per-vDisk and per-vNIC breakdown is not in `/cluster/resources`. It requires per-guest config
-  calls, and belongs in a separate opt-in module if we want it at all.
+  calls, and belongs in a separate module on a long interval if we want it at all.
 - **QEMU reports no used-disk figure** — `maxdisk` only. LXC reports `disk`. VM disk usage needs
   the guest agent, exactly as VMware needs VMware Tools.
 
@@ -190,8 +190,7 @@ All eight are built and **all eight were verified against a real cluster on 2026
 three-node cluster with Ceph, which also exercised the five that a single node cannot: Ceph,
 CephOSD, Replication, Subscription, and the `wearout` direction in Disks. That last one was the
 highest-consequence unknown in the suite, because a backwards threshold would have alerted on
-healthy disks and stayed silent on dying ones; it reads as life *remaining*, as shipped. None of
-the eight carries an UNVERIFIED note any more.
+healthy disks and stayed silent on dying ones; it reads as life *remaining*, as shipped.
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
@@ -216,10 +215,10 @@ and all of them preserve the architecture.
 | `Proxmox_VE_Migrations` | same endpoint, migration `typefilter`; `source=active` for in-flight | O(nodes) | Migrations running, and migrations failed in the window. Also the natural place to see an HA failover storm, which the current HA datapoints imply but cannot show. |
 | `Proxmox_VE_NodeNetwork` | `/cluster/metrics/export` `net_in` / `net_out` | O(1) | A real blind spot: node rows in `/cluster/resources` carry no network counters at all. See §2. |
 
-### Tier 3 — per-guest detail, opt-in and throttled
+### Tier 3 — per-guest detail, throttled
 
-Everything here is O(guests). It belongs in **one** module, on a 15m-or-longer interval, shipped
-disabled, in the same spirit as VMware splitting VM Disk Capacity out of VM Performance. It must
+Everything here is O(guests). It belongs in **one** module, on a 15m-or-longer interval, in the same
+spirit as VMware splitting VM Disk Capacity out of VM Performance. It must
 never be folded into Guest Performance at 5m: that trades away the property that makes this suite
 work at scale, in exchange for metrics that are either occasionally useful (snapshots) or frequently
 unavailable (balloon).

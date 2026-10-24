@@ -203,32 +203,6 @@ def module_type(defn: dict) -> str:
     return defn.get("moduleType", DATASOURCE)
 
 
-# An optional module must not apply by default. "optional": true in a definition marks one,
-# and its AppliesTo must then also require an opt-in property, pve.<feature>.enabled set to
-# "true" on the resource. The check runs both ways: an unmarked module may not carry an
-# opt-in clause either, so the mark and the AppliesTo cannot drift apart. technicalNotes
-# must name the property, because the portal is where someone will look for how to turn
-# the module on.
-OPTIONAL_KEY = "optional"
-OPT_IN_RE = re.compile(r"""\b(pve\.[a-z0-9_.]+\.enabled)\s*==\s*"true\"""")
-
-
-def check_optional(path: Path, defn: dict) -> list[str]:
-    opt_in = OPT_IN_RE.search(defn["appliesTo"])
-    if not defn.get(OPTIONAL_KEY):
-        if opt_in:
-            return [f"{path.name}: AppliesTo requires {opt_in.group(1)} but the module "
-                    f"is not marked \"{OPTIONAL_KEY}\": true"]
-        return []
-    if not opt_in:
-        return [f"{path.name}: an optional module must not apply by default -- AppliesTo "
-                f"needs '&& pve.<feature>.enabled == \"true\"'"]
-    if opt_in.group(1) not in defn.get("technicalNotes", ""):
-        return [f"{path.name}: technicalNotes must name the opt-in property "
-                f"{opt_in.group(1)}"]
-    return []
-
-
 # The portal refuses to save a module whose text field passes 4096 characters ("Field value
 # cannot contain more than 4096 characters"), and names no field. Scripts are exempt -- they
 # are not in the definition, only their file names are -- so every top-level string here is
@@ -259,7 +233,7 @@ def check_definition(path: Path, defn: dict) -> list[str]:
         return [f"{path.name}: module definition is missing {', '.join(missing)}"]
     if kind != DATASOURCE and defn.get("datapoints"):
         return [f"{path.name}: a {kind} declares no datapoints"]
-    return check_instance_group(path, defn) + check_optional(path, defn)
+    return check_instance_group(path, defn)
 
 
 def check_instance_group(path: Path, defn: dict) -> list[str]:

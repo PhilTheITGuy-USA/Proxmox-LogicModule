@@ -10,8 +10,6 @@
  * OSD commonly reports state but no usage and no latency, so every one of those is
  * withheld when absent rather than reported as zero. A zero fill on a down OSD would read
  * as an empty, healthy disk.
- *
- * UNVERIFIED against a real Ceph cluster.
  */
 if (pveConfigError) {
     System.err.println(pveConfigError)

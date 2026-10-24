@@ -9,7 +9,7 @@
  * Proxmox_VE_Topology draws the cluster vertex with, pveTopoKey(cluster, null), as type
  * Cluster -- the type that renders LogicMonitor's cluster icon (VirtualCluster renders
  * "??"). An instance vertex takes edges from every matched node resource, so the map draws
- * the cluster above all its nodes (DESIGN section 7, spike 3 re-run). A standalone host has
+ * the cluster above all its nodes. A standalone host has
  * no cluster vertex and gets no key. With the token on several nodes of one cluster, each
  * carries this instance and the same key; INSTALL advises one token per cluster.
  */

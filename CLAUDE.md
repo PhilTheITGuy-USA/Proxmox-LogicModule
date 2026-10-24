@@ -37,8 +37,8 @@ but all ten of its items are implemented, and §3's *verbatim* wildvalue is supe
 `pveWildValue`'s fold. §4's status column is the authority on what is built (Tier 2a and Tier 3
 are not). §4 sorts the backlog by scope *and* by call cost, and cost is the one that constrains
 design: an O(1) field can join a module that already makes the call, while anything O(guests) per
-poll must be its own opt-in module on a long interval. Topology and ERI modules are never optional,
-whatever their cost (see the topology paragraphs).
+poll must be its own module on a long interval. No module is optional; the topology paragraphs
+say why topology and ERI modules never can be.
 
 ```
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
@@ -139,14 +139,6 @@ guest's `config` for its MAC, which is why both run hourly.
 turned off cleanly: the keys it stamped stay in `predef.externalResourceID` after it stops
 applying, and the portal will not let anyone delete them (DESIGN §7). LogicMonitor's own topology
 modules are not optional either. The harness fails if either is marked optional.
-
-**An optional module must not apply by default.** None is optional today; the rule is for the
-next one. Mark it `"optional": true` in `modules/<Module>.json` and add
-`&& pve.<feature>.enabled == "true"` to its AppliesTo; its `technicalNotes` must name that
-property, since the portal is where someone will look for how to turn it on. `check_optional` in
-`build.py` enforces all three, and the reverse — an opt-in clause on an unmarked module — so the
-mark and the AppliesTo cannot drift apart. AppliesTo compares the string exactly, so the value is
-lowercase `true`. Never make an ERI module optional, for the reason above.
 
 **`addERI_Proxmox_VE` runs without the token**, and so is not gated
 on `hasCategory("ProxmoxVE")` alone. The map needs its key on *every* node's resource, while the token
@@ -437,12 +429,18 @@ matching the reference exports.
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
 the same — a row in the README table, and a fixture for every endpoint it calls. Anything
-O(guests) per poll, or otherwise not wanted on every Proxmox host, is `"optional": true` — but
-never an ERI module (see the topology paragraphs). If the module
-cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
-its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness
-on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
-someone runs it. `grep -l UNVERIFIED modules/*.json` lists any module still in that state.
+O(guests) per poll goes on a long interval; no module is optional. If the module
+cannot be verified against the user's own environment, it also needs a row in `docs/DESIGN.md` §7
+and a `Limitation:` sentence in its `technicalNotes` telling the customer what has not been tested,
+in their terms (no dates, design references or verification history). A green harness on a
+hand-written fixture proves the parsing, not the shape, so a new module keeps the sentence until
+someone runs it. `grep -l Limitation: modules/*.json` lists the modules carrying one.
+
+**Customer-facing text explains, it does not narrate.** The scripts and `technicalNotes` ship to
+every customer. Comments say what the code does and the constraint that keeps it that way, stated
+as current fact; how a decision was reached, when something was learned, and what is verified
+belong in `docs/DESIGN.md`, never in a script or a note. `build.py` and the harness are
+developer tooling and may point into DESIGN freely.
 
 **A per-instance `script` module needs one thing more.** `Proxmox_VE_NodeDetail` and
 `Proxmox_VE_Cluster` are both `script` and `multiInstance`. Cluster has one instance and reads no

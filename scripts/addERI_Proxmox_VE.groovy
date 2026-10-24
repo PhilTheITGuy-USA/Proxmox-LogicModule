@@ -92,8 +92,8 @@ try {
     /*
      * Its own category, so this combines with the MAC-based ERIs the resource already has
      * rather than replacing them: keys from every category merge into the ID, and the
-     * resource type comes from the highest-priority entry across all categories (DESIGN 7,
-     * spike 1). This emits PhysicalServer, the type a node already has, so priority 1 is
+     * resource type comes from the highest-priority entry across all categories. This emits
+     * PhysicalServer, the type a node already has, so priority 1 is
      * harmless. Stamping into net.l2 would fight the MACs.
      */
     def keys = []
