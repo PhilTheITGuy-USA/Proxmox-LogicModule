@@ -1,7 +1,7 @@
 /*
  * Script collection (single instance): Ceph cluster health, OSDs, PGs and capacity.
  *
- * UNVERIFIED against a real Ceph cluster. /cluster/ceph/status is declared in the Proxmox
+ * /cluster/ceph/status is declared in the Proxmox
  * API as an untyped object -- it passes through whatever `ceph status` returns -- so every
  * field below is read defensively and nothing is assumed to exist. Ceph has also moved
  * these keys between releases, which is why osdmap is read from both the flat and the

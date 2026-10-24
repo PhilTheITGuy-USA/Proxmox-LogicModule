@@ -1,7 +1,7 @@
 /*
  * Active Discovery: QEMU virtual machines and LXC containers, cluster-wide, for
  * Proxmox_VE_GuestStatus alone. Same instances and wildvalues as Proxmox_VE_Guests.ad,
- * which GuestPerformance keeps, so moving GuestStatus here orphaned nothing.
+ * which GuestPerformance uses, so a guest's status and performance instances match.
  *
  * What it adds: each guest's instance carries the key
  * Proxmox_VE_Topology draws that guest under, so the map can resolve every guest to an
@@ -13,8 +13,7 @@
  * The map is the optional extra; the instance is not. Every failure on the way to a key
  * -- gating calls, a config read, a guest on an offline node -- leaves the guest
  * discovered without one. After a node's first failed config read, that node's later
- * guests are not read at all this run. Only /cluster/resources?type=vm failing exits 2,
- * as before.
+ * guests are not read at all this run. Only /cluster/resources?type=vm failing exits 2.
  */
 if (pveConfigError) {
     System.err.println(pveConfigError)

@@ -14,8 +14,6 @@
  * The wildvalue is the OSD name ("osd.12"), which is cluster-unique, deliberately without
  * the host. An OSD's host is a CRUSH placement that can change, and an id built from it
  * would be destroyed by a rebalance -- the same reasoning as guest instance ids.
- *
- * UNVERIFIED against a real Ceph cluster.
  */
 if (pveConfigError) {
     System.err.println(pveConfigError)

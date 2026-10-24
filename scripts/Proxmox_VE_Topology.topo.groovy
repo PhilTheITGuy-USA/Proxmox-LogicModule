@@ -2,14 +2,12 @@
  * TopologySource: cluster -> node -> guest edges, so Proxmox appears in topology maps and
  * a node's alerts can explain its guests'.
  *
- * THIS SCRIPT CANNOT BE COMPILED OR RUN OUTSIDE A COLLECTOR, and it is the only one in the
- * suite that cannot. Every LogicMonitor TopologySource works through com.logicmonitor.mod
- * .Snippets: lmTopo.eriPreProcessor normalises keys and drops the blocked ones, lmTopo.isMac
+ * THIS SCRIPT CANNOT BE COMPILED OR RUN OUTSIDE A COLLECTOR. Every LogicMonitor
+ * TopologySource works through com.logicmonitor.mod.Snippets: lmTopo.eriPreProcessor normalises keys and drops the blocked ones, lmTopo.isMac
  * validates a MAC, and lmTopo.generateTopology emits the output format. Reimplementing those
- * would mean inventing a format LogicMonitor does not document fully, which is exactly the
- * mistake that silently cost thirteen dashboard widgets. So this one script takes the
- * Collector dependency, and build.py emits it to dist/scripts/collector-only/ where the
- * compile job and the harness cannot reach it. Everything it does with the Proxmox API uses
+ * would mean inventing a format LogicMonitor does not document fully, and an output the
+ * portal does not recognise is dropped silently. So this script takes the Collector
+ * dependency. Everything it does with the Proxmox API uses
  * the same preamble as every other module, so that half stays conventional.
  *
  * The identity that makes this work:
@@ -26,13 +24,13 @@
  *             the resource's system.ips, so a token-less node matches with no property
  *             set. Only a row with no usable address falls back to pveTopoKey(cluster,
  *             node). Never both: lm.topo joins a vertex's keys into one ID, and the portal
- *             then matches only a resource carrying all of them (DESIGN section 7,
- *             2026-10-21). A node whose resource lacks the key is not drawn: the portal
+ *             then matches only a resource carrying all of them. A node whose resource
+ *             lacks the key is not drawn: the portal
  *             renders only vertices that match a resource or a DataSource instance.
  *   cluster - synthesised, pveTopoKey(cluster, null). Proxmox_VE_Cluster's one instance
  *             carries the same key as type Cluster, and an instance
  *             vertex takes edges from every matched node, so the cluster is drawn above all
- *             its nodes (DESIGN section 7, spike 3 re-run). A standalone host has no
+ *             its nodes. A standalone host has no
  *             cluster, and gets no cluster vertex and no Cluster edges.
  */
 import com.logicmonitor.mod.Snippets
@@ -100,9 +98,9 @@ try {
     }
 
     /*
-     * One config read per guest. That is O(guests), which DESIGN section 2 rules out for a
-     * metric module -- but a TopologySource runs hourly, not every five minutes, and the
-     * MAC lives nowhere else: /cluster/resources carries no network detail at all.
+     * One config read per guest, O(guests) -- acceptable because a TopologySource runs
+     * hourly, not every five minutes, and the MAC lives nowhere else: /cluster/resources
+     * carries no network detail at all.
      */
     def guests = (pveGet('/cluster/resources?type=vm') ?: [])
         .findAll { it.type in ['qemu', 'lxc'] && !it.template }
