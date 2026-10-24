@@ -824,7 +824,7 @@ note('addERI-guest', guestEriDefn.appliesTo ==
          '(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && ' +
          '(isLinux() || isWindows())',
      "the guest ERI PropertySource AppliesTo is ${guestEriDefn.appliesTo}")
-// Always on: labelling a guest correctly is not something a customer should opt into.
+// Always on: labelling a guest correctly is not something an end user should opt into.
 note('addERI-guest', !guestEriDefn.containsKey('optional'),
      'the guest ERI PropertySource is marked optional')
 
