@@ -282,6 +282,21 @@ populated on the target version before designing around it.
     `(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`;
     the OS clause, added at final review 2026-10-20, keeps virtual appliances on their own ERIs). Design and evidence:
     `docs/superpowers/specs/2026-10-19-guest-topology-labels-design.md`; what is proven is in §7.
+  - **Storage edges (guest → Proxmox storage): not built.** Which Proxmox storage holds a guest's
+    disks (Ceph RBD, NFS, iSCSI, ZFS) is visible only through the Proxmox API, so no other source
+    can draw these edges; a guest's own mounts and shares are drawn by other modules already, and
+    must not be duplicated (CLAUDE.md, "Draw only relationships no other source can see").
+    - *Data: free.* The guest `config` the TopologySource already reads for the MAC names each
+      disk's storage (`scsi0: ceph-pool:vm-101-disk-0`), so the edges cost no extra calls.
+    - *Storage vertices need a carrier.* A vertex is drawn only if it matches something, as the
+      cluster vertex does through `Proxmox_VE_Cluster`'s instance. The natural carriers are
+      `Proxmox_VE_StorageCapacity`'s instances, and `Proxmox_VE_Ceph`'s one instance for the Ceph
+      cluster.
+    - *Shared storage is the hard part.* StorageCapacity discovers a shared store once per node
+      (`storage/pve1/nfs`, `storage/pve2/nfs`), so one key would sit on several instances — the
+      same multi-match as the token on several nodes. Which instance stands for the store has to
+      be decided first.
+    - *Not testable in the lab*, which has no Ceph and no shared storage.
 
 ---
 
