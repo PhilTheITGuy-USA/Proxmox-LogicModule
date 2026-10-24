@@ -297,6 +297,14 @@ populated on the target version before designing around it.
       same multi-match as the token on several nodes. Which instance stands for the store has to
       be decided first.
     - *Not testable in the lab*, which has no Ceph and no shared storage.
+  - **One guest-config read per hour, not two: not built.** `Proxmox_VE_Topology` and
+    `Proxmox_VE_GuestStatus`'s discovery each read every online guest's `config` hourly for the
+    same MAC, so the suite's only O(guests) cost is paid twice. Both run on the token holder's
+    Collector, so one could hand the other its MAC map — the likely route is the Collector's
+    ScriptCache, written by whichever runs first with a TTL just over an hour, and read by the
+    other with the API as the fallback on a miss. Unproven: that ScriptCache is shared between a
+    TopologySource and a DataSource's discovery, and how it behaves on a Collector failover.
+    Halves the per-guest calls; changes no output, so the harness's key assertions still hold.
 
 ---
 
