@@ -15,7 +15,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
 | Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
-| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state; with the topology opt-in, the instance ERIs that draw every guest on the map |
+| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state; the instance ERIs that draw every guest on the map |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
 | Proxmox VE Backup Coverage | Script, single instance | Guests that no backup job covers |
 | Proxmox VE Certificates | BatchScript | TLS certificate expiry, per certificate per node |
@@ -45,9 +45,9 @@ fixed-cost. Node Services, Replication, Certificates, Disks and Subscription mak
 *online* node, and Node Detail one per node, because that data is only available from the node
 that owns it — and the expensive ones sit on long intervals for exactly that reason (Certificates
 and Disks at 240m, Subscription at 720m). Node counts are small and grow slowly; guest counts are
-neither. The per-guest costs in the suite both sit behind the topology opt-in: the TopologySource
-and Guest Status's discovery each read every guest's config for its MAC address once an hour,
-and only where `pve.topology.enabled=true` is set.
+neither. The suite's two per-guest costs are both hourly: the TopologySource and Guest Status's
+discovery each read every guest's config for its MAC address once an hour, on the one node per
+cluster that holds the token.
 
 ## Dashboards
 
@@ -102,9 +102,8 @@ python build/build.py       # writes dist/
 Import every `dist/*.json` through **My Module Toolbox → Add → Import from file**, then set
 **`pve.api.token.credential`** on one Proxmox resource to the whole token string,
 `monitor@pve!logicmonitor=<secret>`. The PropertySource adds the `ProxmoxVE` category and every
-module applies itself from there — except the two optional topology modules, which need
-`pve.topology.enabled=true` on every node's resource — one dynamic group holding every Proxmox
-host is enough, with no per-cluster property (`docs/INSTALL.md` §3.3).
+module applies itself from there. The topology map needs nothing more: `addERI_Proxmox_VE` finds
+every node by its `-pve` kernel, token or not (`docs/INSTALL.md` §3.3).
 
 Two things account for most failed installs:
 
@@ -154,10 +153,10 @@ These are Proxmox API limits, not implementation shortcuts:
   node's short name plus an address from its `system.ips`, which the TopologySource builds from
   `/cluster/status`. A node resource with no hostname and no SNMP or SSH needs `pve.topology.node`.
 - **The cluster is drawn through an instance, so it is not a resource of its own.** Proxmox VE
-  Cluster's one instance carries the cluster's map key behind the opt-in; it lives on the node that
+  Cluster's one instance carries the cluster's map key; it lives on the node that
   holds the token, and its history moves only if the token does.
-- **Guests reach the topology map through the opt-in, and their label through their MAC.** With
-  `pve.topology.enabled=true`, Guest Status's discovery gives each guest on an online node an
+- **Guests reach the topology map through an instance, and their label through their MAC.**
+  Guest Status's discovery gives each guest on an online node an
   instance ERI, so every guest is drawn under its node whether or not it is its own resource and
   whether or not it answers SNMP. A guest that is its own resource is labelled a virtual machine by
   `addERI_Proxmox_VE_Guest` only when it is a Linux or Windows resource and its

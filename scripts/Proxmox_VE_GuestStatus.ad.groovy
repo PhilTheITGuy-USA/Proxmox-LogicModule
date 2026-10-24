@@ -3,7 +3,7 @@
  * Proxmox_VE_GuestStatus alone. Same instances and wildvalues as Proxmox_VE_Guests.ad,
  * which GuestPerformance keeps, so moving GuestStatus here orphaned nothing.
  *
- * What it adds, only behind the topology opt-in: each guest's instance carries the key
+ * What it adds: each guest's instance carries the key
  * Proxmox_VE_Topology draws that guest under, so the map can resolve every guest to an
  * instance -- including guests with no LogicMonitor resource of their own. The key is the
  * MAC of the first virtual NIC, or for a guest with no NIC the same pveTopoKey fallback
@@ -30,14 +30,12 @@ try {
      * same; with either set the TopologySource's keys change and these would silently stop
      * matching, so the feature steps aside and says why.
      */
-    def wanted = pveHostProp('pve.topology.enabled') == 'true'
-    if (wanted) {
-        def blocking = ['topo.namespace', 'topo.blacklist'].findAll { pveHostProp(it) }
-        if (blocking) {
-            System.err.println('Guest instance ERIs skipped: ' + blocking.join(' and ') +
-                ' is set, which rewrites the topology keys these would have to match.')
-            wanted = false
-        }
+    def wanted = true
+    def blocking = ['topo.namespace', 'topo.blacklist'].findAll { pveHostProp(it) }
+    if (blocking) {
+        System.err.println('Guest instance ERIs skipped: ' + blocking.join(' and ') +
+            ' is set, which rewrites the topology keys these would have to match.')
+        wanted = false
     }
 
     def clusterName = null

@@ -5,7 +5,7 @@
  * not orphan its history; the display name is the cluster name, or on a standalone host the
  * node's own (pveTopoClusterName).
  *
- * What it adds, only behind the topology opt-in: on a cluster, the instance carries the key
+ * What it adds: on a cluster, the instance carries the key
  * Proxmox_VE_Topology draws the cluster vertex with, pveTopoKey(cluster, null), as type
  * Cluster -- the type that renders LogicMonitor's cluster icon (VirtualCluster renders
  * "??"). An instance vertex takes edges from every matched node resource, so the map draws
@@ -29,7 +29,7 @@ try {
      * topo.blacklist would rewrite the TopologySource's key, so the feature steps aside.
      */
     def raw = [:]
-    if (clusterRow && pveHostProp('pve.topology.enabled') == 'true') {
+    if (clusterRow) {
         def blocking = ['topo.namespace', 'topo.blacklist'].findAll { pveHostProp(it) }
         if (blocking) {
             System.err.println('Cluster instance ERI skipped: ' + blocking.join(' and ') +

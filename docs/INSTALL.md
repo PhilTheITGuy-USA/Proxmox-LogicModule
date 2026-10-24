@@ -162,7 +162,6 @@ secret is readable by anyone who can view the resource. Do not shorten it to `pv
 | `pve.api.port` | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | `false` | `true` accepts self-signed certificates. **Lab use only** |
-| `pve.topology.enabled` | unset | `true` (lowercase) turns on the optional topology modules — see §3.3 |
 | `pve.topology.cluster` | unset | Optional. The cluster's name, only on a group holding one cluster's nodes — see §3.3 |
 | `pve.topology.node` | the short hostname | The node's Proxmox name, where the resource was added by IP — see §3.3. The name `pvecm nodes` shows, never the address `pvecm status` lists; an address is ignored |
 
@@ -193,10 +192,9 @@ no longer any module to create by hand.
 `addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
 completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Every
 other module applies on `hasCategory("ProxmoxVE")`, so nothing applies to anything until Part 4
-sets the token. The two optional modules in §3.3 additionally need their own property, so importing
-them changes nothing until you opt in. `addERI_Proxmox_VE_Guest` is the other exception: it
-applies to guest resources by their MAC address, needs no token, and works as soon as it is
-imported (§3.3).
+sets the token. The two ERI modules are the exceptions, and need no token: `addERI_Proxmox_VE`
+finds Proxmox nodes by their kernel, and `addERI_Proxmox_VE_Guest` finds guest resources by their
+MAC address. Both work as soon as they are imported (§3.3).
 
 **Upgrading an install from before 2026-10-22: delete `Proxmox_VE_Cluster` first.** It changed
 from a single-instance to a one-instance multi-instance module, and LogicMonitor fixes that when a
@@ -204,35 +202,30 @@ module is created: importing over the old one fails with "Field value cannot be 
 no field. Delete the module (its history goes with it), import the new one, then re-import the
 Tier 1 dashboard, whose cluster tiles pointed at the deleted module, and count its 20 widgets.
 
-### 3.3 The topology modules, if you want a map
+### 3.3 The topology map
 
-`Proxmox_VE_Topology` and `addERI_Proxmox_VE` are optional. They draw cluster → node → guest edges
+`Proxmox_VE_Topology` and `addERI_Proxmox_VE` draw cluster → node → guest edges
 so that a node's alerts can explain its guests', and every guest is drawn whether or not it is
 monitored as its own LogicMonitor resource. Import `addERI_Proxmox_VE` first.
 
-**Both are off by default.** One property, `pve.topology.enabled=true`, turns on both, and the
-guest keys in Guest Status's discovery — lowercase, since AppliesTo compares the string exactly.
-The TopologySource and, with the flag on, Guest Status's discovery are the only costs in the suite
-that grow with guest count (one config read per guest each, hourly), which is a second reason they
-are not applied unasked.
+**Both apply as soon as they are imported**; there is no property to set. The TopologySource and Guest Status's discovery are the only costs in the
+suite that grow with guest count: one config read per guest each, hourly, on the one node per
+cluster that holds the token.
 
-**Where to set it.** Every node needs to be a LogicMonitor resource, because a node is drawn only
-through its own resource. Then put `pve.topology.enabled=true` on one dynamic group holding every
-Proxmox host in the portal, of every cluster and every standalone host, with this AppliesTo:
+**Which resources it reaches.** Every node needs to be a LogicMonitor resource, because a node is
+drawn only through its own resource. `addERI_Proxmox_VE` finds the nodes itself, by its AppliesTo:
 
 ```
-(system.sysinfo =~ "-pve" || hasCategory("ProxmoxVE") || pve.topology.node) && !(auto.network.mac_address =~ "^[bB][cC]:24:11")
+hasCategory("ProxmoxVE") || pve.topology.node || (system.sysinfo =~ "-pve" && !(auto.network.mac_address =~ "^[bB][cC]:24:11") && !pve.guest.mac_prefix)
 ```
 
-The first clause catches a node by its kernel string (`-pve`) whether or not it holds the token —
-but `system.sysinfo` comes from SNMP, so a node without SNMP and without the token is caught only
-by `pve.topology.node`, set on its own resource (below), or by adding it to a static group that
-carries the flag. The last clause leaves out guests, which carry Proxmox's default MAC prefix. Scope the group to Proxmox
-hosts like this rather than to a broad group such as "Linux Servers": `addERI_Proxmox_VE` stamps a
-node key on every resource the flag reaches. A key on a non-Proxmox server matches nothing, but it
-is clutter.
+A node holding the token has the category. Any other node is caught by its kernel string (`-pve`)
+in `system.sysinfo`, which comes from SNMP. An LXC container reports its host's kernel too, so a
+resource carrying Proxmox's guest MAC prefix, or `pve.guest.mac_prefix`, is left out of that test.
+A node with neither SNMP nor the token, or nested Proxmox (a Proxmox VM, whose MAC is a guest's),
+is brought in by `pve.topology.node` on its own resource (below).
 
-That is all — no per-cluster or per-node property. The API token stays on one node per cluster,
+No per-cluster or per-node property is needed. The API token stays on one node per cluster,
 as §4.1 recommends:
 
 - `Proxmox_VE_Topology` runs only where the token is, and reports the whole cluster from there.
@@ -254,22 +247,26 @@ Two optional properties remain, for the cases that key cannot cover:
 
 | Property | When |
 |---|---|
-| `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name, as `pvecm nodes` or `ls /etc/pve/nodes` shows it (the membership list of `pvecm status` shows addresses, not names). It brings the node into the group above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
+| `pve.topology.node` | a node without SNMP that does not hold the token — its Proxmox node name, as `pvecm nodes` or `ls /etc/pve/nodes` shows it (the membership list of `pvecm status` shows addresses, not names). It brings the node into `addERI_Proxmox_VE`'s AppliesTo above, and names it where LogicMonitor knows no hostname (added by IP, with no SSH either) |
 | `pve.topology.cluster` | the older cluster-scoped key, `proxmoxve--<cluster>--<node>`, on a node without the token. The map uses it only for a node `/cluster/status` reports no address for. Only on a group holding **one** cluster's nodes, exactly as the token holder reports it in `auto.pve.cluster.name`; **never on a group spanning clusters**, where a wrong value can attach a node to a same-named node of another cluster |
 
-A **standalone host** needs nothing beyond the flag. It holds its own token, so `addERI_Proxmox_VE`
+A **standalone host** needs nothing. It holds its own token, so `addERI_Proxmox_VE`
 asks the API, and it is drawn without a cluster above it. `auto.pve.clustered` reads `false` on a
 standalone host, which is how to tell which case you have.
 
-**The cluster is drawn through Proxmox VE Cluster's one instance**, which with the flag on carries
+**The cluster is drawn through Proxmox VE Cluster's one instance**, which on a cluster carries
 the cluster's key (`predef.externalResourceID = proxmoxve--<cluster>`, type `Cluster`). It is drawn
-with LogicMonitor's cluster icon above every node. Its discovery runs hourly, so after turning the
-flag on, run **Run Active Discovery** on Proxmox VE Cluster rather than wait. A standalone host has
+with LogicMonitor's cluster icon above every node. Its discovery runs hourly, so after importing,
+run **Run Active Discovery** on Proxmox VE Cluster rather than wait. A standalone host has
 no cluster, so its instance carries no key and the map starts at the node.
 
-Keep `pve.topology.enabled`, `pve.topology.node` and `pve.topology.cluster` off guest resources: on
-a guest `addERI_Proxmox_VE` would stamp a node key the map never asks for. The group's AppliesTo
-above already leaves guests out.
+**If you do not want the map, do not import `Proxmox_VE_Topology` and `addERI_Proxmox_VE`.**
+Removing them later leaves the keys `addERI_Proxmox_VE` stamped in each node's
+`predef.externalResourceID`, and the portal does not let you delete that property (DESIGN §7). Guest Status's and Proxmox VE Cluster's instances still carry their keys, which
+draw nothing without the TopologySource.
+
+Keep `pve.topology.node` and `pve.topology.cluster` off guest resources: `pve.topology.node` on a
+guest brings it into `addERI_Proxmox_VE`, which would stamp a node key the map never asks for.
 
 A guest is matched to its own resource by the MAC address of its first virtual NIC, which both
 sides already know, so no naming convention is required. A node cannot be matched that way —
@@ -277,8 +274,8 @@ Proxmox exposes no MAC or hardware UUID for a node anywhere in its API — so `a
 stamps a synthesised key on the node's resource for the map to attach to.
 
 **Every guest is drawn, with no SNMP and no per-guest setup.** The map draws a vertex only when it
-matches something in the portal: a resource, or a DataSource instance. With the flag on, Guest
-Status's discovery gives each guest on an online node an instance carrying the guest's MAC — or,
+matches something in the portal: a resource, or a DataSource instance. Guest Status's discovery
+gives each guest on an online node an instance carrying the guest's MAC — or,
 for a guest with no NIC, the same synthesised key the TopologySource emits — in
 `predef.externalResourceID`, so an unmonitored or ping-only guest is drawn through that instance.
 A guest that is also its own resource, holding the same MAC, is drawn once. Discovery runs hourly,
@@ -293,8 +290,7 @@ LogicMonitor's topology code emits, and Guest Status writes its keys without the
 silently fail to match. On a resource carrying either, Guest Status's discovery adds no keys and
 says so on stderr, and a guest with no resource of its own is not drawn.
 
-**Guests are labelled as virtual machines, always.** `addERI_Proxmox_VE_Guest` is not optional and
-needs neither the token nor the flag. LogicMonitor labels a monitored guest `PhysicalServer`,
+**Guests are labelled as virtual machines, always.** `addERI_Proxmox_VE_Guest` needs no token. LogicMonitor labels a monitored guest `PhysicalServer`,
 because Proxmox's guest MAC prefix is not on its list of virtual-machine prefixes; this module
 applies to any Linux or Windows resource whose `auto.network.mac_address` starts with Proxmox's
 default prefix `bc:24:11` and relabels it `VirtualMachineResource`. Its AppliesTo is
@@ -305,8 +301,9 @@ the guests: a comma-separated list such as `bc:24:11,02:00:00`, which replaces t
 list `bc:24:11` too if it is still in use. A resource the property reaches whose MAC matches no
 prefix is left alone, and a guest with a hand-set MAC outside every prefix stays `PhysicalServer`.
 
-**A node missing from the map** carries no matching key. First check that its resource carries
-`pve.topology.enabled=true` — that the group's AppliesTo reached it (see above). Then check that the address `pvesh get
+**A node missing from the map** carries no matching key. First check that its resource's
+`predef.externalResourceID` holds a `proxmoxve--node--` key; if not, `addERI_Proxmox_VE` did not
+reach it — look for `-pve` in its `system.sysinfo`, or set `pve.topology.node`. Then check that the address `pvesh get
 /cluster/status` reports for it is among its resource's `system.ips`, and that its hostname's short
 form is its Proxmox node name; if it was added by IP with no SNMP or SSH, set `pve.topology.node`.
 A name that differs from Proxmox's own in anything but case or punctuation matches nothing,
@@ -354,8 +351,7 @@ On the resource (or on a group containing it): **Manage → Properties → Add**
 Setting it on a **resource group** is the cleaner option if you have several clusters: create a
 group per cluster, set the property once on the group, and add the node to it.
 
-The topology flag of §3.3 does not follow that grouping: one dynamic group holding every Proxmox
-host carries it. Only the optional `pve.topology.cluster` is per cluster, and never goes on a group
+The topology map of §3.3 needs no group at all. Only the optional `pve.topology.cluster` is per cluster, and never goes on a group
 spanning clusters.
 
 ### 4.3 Run the PropertySource
