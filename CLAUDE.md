@@ -364,7 +364,7 @@ start, so they are `derive` with a min of 0; `cpu`, `mem`, `uptime`, storage `us
 resource id (`qemu/101`, `node/pve1`, `storage/pve1/local`) folded by `pveWildValue`. A guest id
 built from the node name would change on every live migration or HA failover and lose the
 instance's history, so never reintroduce the node name into a guest wildvalue. Changing an ID
-scheme orphans every already-discovered instance in a customer's portal: change discovery and
+scheme orphans every already-discovered instance in an end user's portal: change discovery and
 collection together and say so explicitly.
 
 **The rule is about things that move.** The fan-out modules deliberately *do* put the node in the
@@ -439,13 +439,13 @@ collect body, an AD body if it is `multiInstance` — reuse an existing one wher
 the same — a row in the README table, and a fixture for every endpoint it calls. Anything
 O(guests) per poll goes on a long interval; no module is optional. If the module
 cannot be verified against the user's own environment, it also needs a row in `docs/DESIGN.md` §7
-and a `Limitation:` sentence in its `technicalNotes` telling the customer what has not been tested,
+and a `Limitation:` sentence in its `technicalNotes` telling the end user what has not been tested,
 in their terms (no dates, design references or verification history). A green harness on a
 hand-written fixture proves the parsing, not the shape, so a new module keeps the sentence until
 someone runs it. `grep -l Limitation: modules/*.json` lists the modules carrying one.
 
-**Customer-facing text explains, it does not narrate.** The scripts and `technicalNotes` ship to
-every customer. Comments say what the code does and the constraint that keeps it that way, stated
+**End-user-facing text explains, it does not narrate.** The scripts and `technicalNotes` ship to
+every end user. Comments say what the code does and the constraint that keeps it that way, stated
 as current fact; how a decision was reached, when something was learned, and what is verified
 belong in `docs/DESIGN.md`, never in a script or a note. `build.py` and the harness are
 developer tooling and may point into DESIGN freely.

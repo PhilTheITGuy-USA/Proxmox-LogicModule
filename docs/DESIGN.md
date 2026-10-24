@@ -194,7 +194,7 @@ healthy disks and stayed silent on dying ones; it reads as life *remaining*, as 
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **verified live** 2026-09-22 | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. |
+| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **verified live** 2026-09-22 | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. **To be replaced by `Proxmox_VE_Backups`**, which adds the jobs, their guests, each guest's last backup and failures (`docs/superpowers/specs/2026-10-25-backups-design.md`; not built). |
 | `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built, **verified live** 2026-09-22 | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
 | `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built, **verified live** 2026-09-22 | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
 | `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built, **verified live** 2026-09-22 | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
@@ -211,9 +211,10 @@ and all of them preserve the architecture.
 
 | Module | Source | Cost | Rationale |
 |---|---|---|---|
-| `Proxmox_VE_BackupStatus` | `/nodes/{node}/tasks?typefilter=vzdump` with `since` / `statusfilter` / `limit` | O(nodes) | Age of last successful backup, and last backup failed. Coverage says a job exists; this says it worked. Both are needed. Tasks return `upid`, `type`, `id`, `starttime`, `endtime`, `status`, `user`. |
-| `Proxmox_VE_Migrations` | same endpoint, migration `typefilter`; `source=active` for in-flight | O(nodes) | Migrations running, and migrations failed in the window. Also the natural place to see an HA failover storm, which the current HA datapoints imply but cannot show. |
+| `Proxmox_VE_Migrations` | `/nodes/{node}/tasks` with a migration `typefilter`; `source=active` for in-flight | O(nodes) | Migrations running, and migrations failed in the window. Also the natural place to see an HA failover storm, which the current HA datapoints imply but cannot show. |
 | `Proxmox_VE_NodeNetwork` | `/cluster/metrics/export` `net_in` / `net_out` | O(1) | A real blind spot: node rows in `/cluster/resources` carry no network counters at all. See §2. |
+
+Backup status — age of the last good backup and failed runs — is folded into `Proxmox_VE_Backups` (Tier 2 row above) rather than built as its own module.
 
 ### Tier 3 — per-guest detail, throttled
 
@@ -282,7 +283,7 @@ populated on the target version before designing around it.
     `(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`;
     the OS clause, added at final review 2026-10-20, keeps virtual appliances on their own ERIs). Design and evidence:
     `docs/superpowers/specs/2026-10-19-guest-topology-labels-design.md`; what is proven is in §7.
-  - **Storage edges (guest → Proxmox storage): not built.** Which Proxmox storage holds a guest's
+  - **Storage edges (guest → Proxmox storage): not built; the end user validates them.** Which Proxmox storage holds a guest's
     disks (Ceph RBD, NFS, iSCSI, ZFS) is visible only through the Proxmox API, so no other source
     can draw these edges; a guest's own mounts and shares are drawn by other modules already, and
     must not be duplicated (CLAUDE.md, "Draw only relationships no other source can see").
@@ -296,8 +297,8 @@ populated on the target version before designing around it.
       (`storage/pve1/nfs`, `storage/pve2/nfs`), so one key would sit on several instances — the
       same multi-match as the token on several nodes. Which instance stands for the store has to
       be decided first.
-    - *Not testable in the lab*, which has no Ceph and no shared storage.
-  - **One guest-config read per hour, not two: not built.** `Proxmox_VE_Topology` and
+    - *Validated by the end user*: the lab has no Ceph and no shared storage.
+  - **One guest-config read per hour, not two: not built; revisit after testing at scale.** `Proxmox_VE_Topology` and
     `Proxmox_VE_GuestStatus`'s discovery each read every online guest's `config` hourly for the
     same MAC, so the suite's only O(guests) cost is paid twice. Both run on the token holder's
     Collector, so one could hand the other its MAC map — the likely route is the Collector's
@@ -337,7 +338,7 @@ rebuild that produced the current Tier 1; it is kept as the record of *why* each
 way it did, since several of them are load-bearing and cheap to undo by accident. Nothing here is
 outstanding work — for that, see §4. Item 3's `derive` choice and item 2's instance IDs in
 particular are the two most expensive to reverse: changing an ID scheme orphans every discovered
-instance in a customer's portal.
+instance in an end user's portal.
 
 1. Collection method → BatchScript for the four `/cluster/resources`-backed modules.
 2. Instance IDs → Proxmox `id`, so migration doesn't destroy instances.
@@ -391,7 +392,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23; QEMU guests (Windows and Linux) join by MAC too, 2026-10-19 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
-| Alert messages on 17 datapoints | **to do** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. Re-import those nine modules and confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
+| Alert messages on 17 datapoints | **for end-user review** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. To review: confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology AppliesTo | **verified** 2026-10-25 — `Proxmox_VE_Topology` applies on `hasCategory("ProxmoxVE")`; `addERI_Proxmox_VE` on the token, `pve.topology.node`, or a `-pve` kernel without a guest MAC; GuestStatus and Cluster discovery always carry their keys. The selector's inputs: `system.sysinfo` carries `-pve` and `PMX` on `Node-A` and `Node-B` and on the LXC guests `Nvr01` and `Music Assistant`, whose `auto.network.mac_address` starts `bc:24:11` and the nodes' does not (`e0:51:d8…`, `dc:0e:a1…`); a Raspberry Pi's kernel (`6.18.39+rpt-rpi-v8`) has neither. After re-import, Test AppliesTo on `addERI_Proxmox_VE` matches exactly `Node-A` and `Node-B` (no guest, no Pi), and on `Proxmox_VE_Topology` the same two, each holding its own token (`Node-B` is standalone, `auto.pve.clustered=false`); with no topology property anywhere, the Cluster instance carries `proxmoxve--labcluster`, Nvr01's Guest Status instance carries `bc:24:11:0e:00:03` as type `VirtualMachine`, and the map draws correctly |
 | Stamped ERI keys after the module stops applying | **verified** 2026-10-25 — they **persist**: with `addERI_Proxmox_VE` no longer applying to `Node-B` from 21:15 to 11:56 the next day, longer than a full cycle of every other ERI module on the resource (`addERI_Linux`, 12 hours, also run at 30 minutes in that window), its `predef.externalResourceID` still carried `proxmoxve--node--node-b--192-0-2-211` and `proxmoxve--node-b--node-b`. When the module applies again it re-stamps them. `predef.externalResourceID` is an auto property the portal will not let a user delete |
 | `addERI_Proxmox_VE_Guest` | **verified** 2026-10-20 (guest topology labels spec §6 item 3) — Debian-test (Linux VM, SNMP), the Windows Server guest (VMID 200, WMI) and the LXC containers Nvr01, Music-Assistant and Kiosk01-Display (SNMP) read `VirtualMachineResource`, so the `isLinux()` / `isWindows()` clause matches all three kinds; the Pi and a Proxmox node resource stay `PhysicalServer`. Three of the LXC labels were still `PhysicalServer` at first look and landed on their own — the module runs every 30 minutes and the map redraws hourly, so allow both before calling a label missing |
@@ -531,22 +532,25 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Four things are unproven. Each needs something this lab cannot produce, and each is deferred to
-a customer environment (user rulings, 2026-10-22 and 2026-10-23):
+Five things are for end-user review. Each needs something this lab cannot produce, or is left
+to the end user (user rulings, 2026-10-22, 2026-10-23 and 2026-10-25):
 
-- **Two clusters in one topology group** (spec §6 item 5) — deferred until a customer with a
+- **Alert messages on 17 datapoints** — that a raised alert shows its message with
+  `##INSTANCE##`, `##VALUE##` and `##HOST##` filled in (the row above).
+
+- **Two clusters in one topology group** (spec §6 item 5) — deferred until an end user with a
   second cluster. Until then the name+IP key's claim to cover any number of clusters rests on the
   harness and on one cluster.
 - **`Proxmox_VE_Cluster`'s HA datapoints** need a real failover, not merely an HA cluster. Not
-  reproducible in this lab; deferred to a customer.
+  reproducible in this lab; for end-user review.
 - **`Proxmox_VE_Disks` with unreadable SMART** — a disk whose `health` reads `UNKNOWN` must report
   `SmartHealthKnown=0` and *no* `SmartHealthOK` at all. That withholding is what stops an
   unreadable disk alerting exactly like a failing one. The 2026-09-22 live check covered real SSD
   and NVMe disks on `Node-A`, all with readable SMART: it settled the wearout direction, not
   this branch. A USB disk or one behind a hardware RAID controller usually reads `UNKNOWN`; none is
-  available in this lab (2026-10-23), so deferred to a customer.
+  available in this lab (2026-10-23), so for end-user review.
 - **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
-  §2, not measured at scale. Deferred to a customer test.
+  §2, not measured at scale. For end-user review.
 
 **A standalone host with a stopped guest** is verified (2026-10-23). On `Node-B`, standalone and
 holding the token, with its only guest `Debian Test` powered off, the map draws `Node-B` with a
