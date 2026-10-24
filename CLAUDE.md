@@ -78,7 +78,7 @@ dist/                            GENERATED, gitignored — never edit, never com
   `pveTopoClusterName`, and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a
   guest's MAC prefix with)
 
-**Discovery scripts are shared; collection scripts are not.** Eleven AD bodies back twelve
+**Discovery scripts are shared; collection scripts are not.** Twelve AD bodies back thirteen
 multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription.
 The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those
 modules discover identical instance sets. Editing a shared AD body changes every module naming it
@@ -90,7 +90,8 @@ which the build turns into the `groupMethod: "ilp"` / `groupExpr` pair a portal 
 hand-grouped module carries. A migrated guest moves to its new node's group on the next discovery
 and keeps its history (DESIGN §7). The build refuses a name without the `auto.` prefix, and the
 harness fails any instance of a grouped module that lacks the property. A module with one instance
-per node gains nothing from it.
+per node gains nothing from it. `Proxmox_VE_Backups` groups the same way by job instead
+(`auto.pve_backup_job`: the job's comment, else its id, or "No backup job").
 
 **The two guest bodies share a helper instead.** `Proxmox_VE_Guests.ad.groovy` backs
 GuestPerformance; GuestStatus has its own `Proxmox_VE_GuestStatus.ad.groovy`, because only it
@@ -115,7 +116,7 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 |---|---|---|---|---|
 | `Proxmox_VE_Cluster` | script, one instance | 5m | `Cluster.ad` | 3, O(1); hourly discovery 1 |
 | `Proxmox_VE_Ceph` | script | 5m | — (single instance) | 1, O(1) |
-| `Proxmox_VE_BackupCoverage` | script | 60m | — (single instance) | 1, O(1) |
+| `Proxmox_VE_Backups` | batchscript | 60m | `Backups.ad` | 3 + 1 per job + 1 per online node, + 1 log per backup run read (normally one) |
 | `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |
 | `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` | 1, O(1) |
 | `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` | 1, O(1) |
@@ -288,7 +289,7 @@ true` is set on every multiInstance module and checked by neither the build nor 
 what makes the wildvalue the instance's identity, which is the entire point of the migration-safe
 IDs below. `threshold` is LogicMonitor's `"<op> warn error critical"` string (`"> 90 95 98"`).
 `technicalNotes` carries the per-module rationale shown in the portal; every module has one and
-Exchange review expects it. Of the twelve modules that discover, eight override `discoveryInterval`
+Exchange review expects it. Of the thirteen modules that discover, nine override `discoveryInterval`
 to `60m`; the four slow ones — Certificates, Disks, NodeServices, Subscription — state `1440m`
 explicitly, which is also the build default.
 
@@ -418,7 +419,7 @@ enforces the first two agreeing; nothing enforces the third.
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
 `build.py` fails the build when a numbered phrase disagrees with `modules/` — `fourteen
 DataSources`, `3 PropertySources`, `all 18 modules`, `all eighteen:` — but only those shapes; a
-count phrased any other way (`the twelve modules that discover`) is still unchecked.
+count phrased any other way (`the thirteen modules that discover`) is still unchecked.
 
 **Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
 which says *what* to verify but not *when* it was. Copies elsewhere go stale unnoticed; record it

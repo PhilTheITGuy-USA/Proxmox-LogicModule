@@ -5,7 +5,7 @@ Proxmox VE dashboard covering the eight Tier 2 modules.
 Layout on LogicMonitor's 12-column grid:
 
     rows  1-6   Ceph Health | Ceph OSDs and Monitors      | Alert Status (noc)
-                Backup Coverage | Ceph Raw Utilisation   |
+                Backups         | Ceph Raw Utilisation   |
     rows  7-9   OSD Fill | OSD Commit Latency | OSD Apply Latency
     rows 10-12  Ceph OSDs (full width)
     rows 13-15  Certificates | Subscriptions
@@ -30,7 +30,7 @@ from dashboards import Dashboard, module_ref
 # real module with the datapoints used below, because nothing in the portal would.
 CEPH = module_ref("Proxmox VE Ceph", "Proxmox_VE_Ceph")
 CEPH_OSD = module_ref("Proxmox VE Ceph OSD", "Proxmox_VE_CephOSD")
-BACKUP = module_ref("Proxmox VE Backup Coverage", "Proxmox_VE_BackupCoverage")
+BACKUP = module_ref("Proxmox VE Backups", "Proxmox_VE_Backups")
 CERTS = module_ref("Proxmox VE Certificates", "Proxmox_VE_Certificates")
 SERVICES = module_ref("Proxmox VE Node Services", "Proxmox_VE_NodeServices")
 DISKS = module_ref("Proxmox VE Disks", "Proxmox_VE_Disks")
@@ -43,7 +43,7 @@ def build() -> Dashboard:
         name="Proxmox VE Infrastructure",
         description=(
             "Infrastructure metrics for Proxmox VE: Ceph cluster and per-OSD health, "
-            "backup coverage, certificate and subscription expiry, replication jobs, "
+            "backups, certificate and subscription expiry, replication jobs, "
             "physical disk SMART and wear, and node service state."
         ),
         group="Proxmox VE",
@@ -76,12 +76,15 @@ def build() -> Dashboard:
 
     d.alert_status(1, 9, 4, 6, "Proxmox VE Alert Status", "Proxmox VE*")
 
-    d.numbers(4, 1, 4, 3, "Backup Coverage", [
-        (BACKUP, "GuestsNotBackedUp", "Guests Not Backed Up", 0),
-        (BACKUP, "VMsNotBackedUp", "VMs Not Backed Up", 0),
-        (BACKUP, "ContainersNotBackedUp", "Containers Not Backed Up", 0),
-    ], description="Guests covered by no backup job. Coverage only: whether the jobs "
-                   "succeed is not something this module can see.")
+    d.numbers(4, 1, 4, 3, "Backups", [
+        (BACKUP, "NotCovered", "Guests Not Backed Up", 0),
+        (BACKUP, "FailedSinceLastBackup", "Failed Since Last Backup", 0),
+        (BACKUP, "LastBackupSizeGB", "Latest Backups, GB", 1),
+    ], description="Totals across every guest: guests no backup job covers, guests "
+                   "whose backup has failed since their last good one, and the size of "
+                   "each guest's latest backup added up (Proxmox Backup Server runs log "
+                   "no size). Per guest and per job, see Proxmox VE Backups on the "
+                   "resource holding the API token.")
 
     d.graph(4, 5, 4, 3, "Ceph Raw Utilisation",
             [d.series(CEPH, "UsedPercent", display="area")], "%",

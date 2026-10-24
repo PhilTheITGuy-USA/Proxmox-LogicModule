@@ -17,7 +17,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
 | Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state; the instance ERIs that draw every guest on the map |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
-| Proxmox VE Backup Coverage | Script, single instance | Guests that no backup job covers |
+| Proxmox VE Backups | BatchScript, per guest per job | Backup jobs and their guests, each guest's last good backup (age, size), its included and excluded volumes, failed backups, and guests no job covers |
 | Proxmox VE Certificates | BatchScript | TLS certificate expiry, per certificate per node |
 | Proxmox VE Node Services | BatchScript | systemd state of pveproxy, pvedaemon, corosync and the rest |
 | Proxmox VE Disks | BatchScript | Physical disk SMART health, size, SSD life remaining |
@@ -40,8 +40,8 @@ independently, so there is no dependable cross-DataSource response cache. Combin
 DataSource could reduce the count further, but would couple unrelated alerting and collection
 intervals. This is the practical low-load boundary while preserving separate modules.
 
-**No DataSource's collection scales with guest count.** Cluster, Ceph, Backup Coverage and Ceph OSD are also
-fixed-cost. Node Services, Replication, Certificates, Disks and Subscription make one call per
+**No DataSource's collection scales with guest count.** Cluster, Ceph and Ceph OSD are also
+fixed-cost, and Backups costs one call per backup job and per online node, plus one log per backup run it reads (normally one). Node Services, Replication, Certificates, Disks and Subscription make one call per
 *online* node, and Node Detail one per node, because that data is only available from the node
 that owns it — and the expensive ones sit on long intervals for exactly that reason (Certificates
 and Disks at 240m, Subscription at 720m). Node counts are small and grow slowly; guest counts are

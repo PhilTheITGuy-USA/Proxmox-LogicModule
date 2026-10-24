@@ -95,6 +95,15 @@ Schema details:
   before emitting — an unconverted string reaches LogicMonitor as no-data and fails the harness.
 - Storage list entries carry `active`, `enabled` and `used_fraction`; storage `status` omits
   `used_fraction`. A disabled or inactive storage still discovers, so `up` should reflect `active`.
+- **Backup files are invisible to `PVEAuditor`.** A storage's content listing drops, without an
+  error, every backup file the token may not access, and access to a backup needs
+  `Datastore.AllocateSpace` on the storage and `VM.Backup` on the guest (`pve-storage`,
+  `check_volume_access`). So a read-only token sees an empty listing. Backup results come from
+  vzdump task logs instead, which `Sys.Audit` covers.
+- **`included_volumes` types guests `qemu` / `lxc`**, not the `VM` / `CT` its schema describes
+  (lab, 2026-10-25).
+- **A vzdump task is a whole run**, with an empty `id`; which guest failed is only in its log, and
+  `/log` returns 50 lines unless `limit` is raised.
 
 ---
 
@@ -194,7 +203,7 @@ healthy disks and stayed silent on dying ones; it reads as life *remaining*, as 
 
 | Module | Source | Cost | Status | Rationale |
 |---|---|---|---|---|
-| `Proxmox_VE_BackupCoverage` | `/cluster/backup-info/not-backed-up` | O(1) | built, **verified live** 2026-09-22 | Guests covered by no backup job — returns `vmid`, `type`, `name`; needs `Sys.Audit` on `/`. A compliance metric with no VMware equivalent, and the cheapest high-value item on either list. **To be replaced by `Proxmox_VE_Backups`**, which adds the jobs, their guests, each guest's last backup and failures (`docs/superpowers/specs/2026-10-25-backups-design.md`; not built). |
+| `Proxmox_VE_Backups` | `/cluster/backup`, `/cluster/backup/{id}/included_volumes`, `/cluster/backup-info/not-backed-up`, `/nodes/{node}/tasks?typefilter=vzdump` and the runs' logs | O(jobs + nodes), plus one log per run read (normally one) | built, not verified in a portal | Backup jobs and the guests each covers, their included and excluded volumes, each guest's last good backup (age, size) and failures since, and guests no job covers — one instance per guest per job, grouped by job, with only `PVEAuditor`. Replaces `Proxmox_VE_BackupCoverage`. Design: `docs/superpowers/specs/2026-10-25-backups-design.md`. |
 | `Proxmox_VE_Certificates` | `/nodes/{node}/certificates/info` | O(nodes) | built, **verified live** 2026-09-22 | Days until `notafter`, one instance per certificate: the cluster CA, `pve-ssl` and `pveproxy-ssl` expire independently. |
 | `Proxmox_VE_NodeServices` | `/nodes/{node}/services` | O(nodes) | built, **verified live** 2026-09-22 | `pveproxy`, `pvedaemon`, `corosync`, `pve-cluster` systemd state — reported as three separate notions, see the module's notes. |
 | `Proxmox_VE_Disks` | `/nodes/{node}/disks/list` | O(nodes) | built, **verified live** 2026-09-22 | Physical disk SMART `health`, size, wearout. `health` defaults to `UNKNOWN` and `wearout` is the string `N/A`; both are withheld rather than zeroed. |
@@ -298,6 +307,10 @@ populated on the target version before designing around it.
       same multi-match as the token on several nodes. Which instance stands for the store has to
       be decided first.
     - *Validated by the end user*: the lab has no Ceph and no shared storage.
+  - **Backups from the storage listing, where permitted: not built.** Where the token is given
+    `Datastore.AllocateSpace` on the backup storages and `VM.Backup` on `/vms`, the listing adds
+    each guest's backup count, protection and PBS verification to `Proxmox_VE_Backups`. Ask
+    `/access/permissions` first, so "not allowed" is never read as "no backups". Spec §7.
   - **One guest-config read per hour, not two: not built; revisit after testing at scale.** `Proxmox_VE_Topology` and
     `Proxmox_VE_GuestStatus`'s discovery each read every online guest's `config` hourly for the
     same MAC, so the suite's only O(guests) cost is paid twice. Both run on the token holder's
@@ -392,6 +405,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | TopologySource, ERI PropertySource | **verified** — both import, and node and guest vertices resolve to their own resources, 2026-09-23; QEMU guests (Windows and Linux) join by MAC too, 2026-10-19 |
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
+| `Proxmox_VE_Backups` | **verified** 2026-10-25 — on Node-A with the token holding only `PVEAuditor`: discovery puts the job's six guests (100–103, 105, 106) in the group `backup-4e5f5bfc-094c` and Webapp01 (104) in `No backup job`, with the volume counts (automation01 2 included; nvr01, Media01 and Kiosk01 1 excluded each). Collection: `LastBackupAgeHours` 18.41 for the guests last backed up by the 21:00 run and 1.29 for audio01, whose newest backup was a later manual run; `LastBackupSizeGB` 3.77 for audio01 (logged `3.51GB`, binary) and 7.41 for nvr01, matching its 7,407,222,279-byte archive; Media01 `FailedSinceLastBackup` 1 after a failed run newer than its last good backup; Webapp01 `NotCovered` 1. The Tier 2 dashboard re-imports with 15 widgets, and its Backups tile fills in once the module has stored data (Poll Now stores none) |
 | Alert messages on 17 datapoints | **for end-user review** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. To review: confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology AppliesTo | **verified** 2026-10-25 — `Proxmox_VE_Topology` applies on `hasCategory("ProxmoxVE")`; `addERI_Proxmox_VE` on the token, `pve.topology.node`, or a `-pve` kernel without a guest MAC; GuestStatus and Cluster discovery always carry their keys. The selector's inputs: `system.sysinfo` carries `-pve` and `PMX` on `Node-A` and `Node-B` and on the LXC guests `Nvr01` and `Music Assistant`, whose `auto.network.mac_address` starts `bc:24:11` and the nodes' does not (`e0:51:d8…`, `dc:0e:a1…`); a Raspberry Pi's kernel (`6.18.39+rpt-rpi-v8`) has neither. After re-import, Test AppliesTo on `addERI_Proxmox_VE` matches exactly `Node-A` and `Node-B` (no guest, no Pi), and on `Proxmox_VE_Topology` the same two, each holding its own token (`Node-B` is standalone, `auto.pve.clustered=false`); with no topology property anywhere, the Cluster instance carries `proxmoxve--labcluster`, Nvr01's Guest Status instance carries `bc:24:11:0e:00:03` as type `VirtualMachine`, and the map draws correctly |
 | Stamped ERI keys after the module stops applying | **verified** 2026-10-25 — they **persist**: with `addERI_Proxmox_VE` no longer applying to `Node-B` from 21:15 to 11:56 the next day, longer than a full cycle of every other ERI module on the resource (`addERI_Linux`, 12 hours, also run at 30 minutes in that window), its `predef.externalResourceID` still carried `proxmoxve--node--node-b--192-0-2-211` and `proxmoxve--node-b--node-b`. When the module applies again it re-stamps them. `predef.externalResourceID` is an auto property the portal will not let a user delete |
