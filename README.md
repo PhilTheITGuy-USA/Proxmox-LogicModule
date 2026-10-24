@@ -164,7 +164,9 @@ These are Proxmox API limits, not implementation shortcuts:
   `pve.guest.mac_prefix`); a hand-set MAC outside them keeps LogicMonitor's default,
   `PhysicalServer`, and a virtual appliance (a firewall or router VM) is left to its own ERI
   modules. The instance ERIs are not supported where
-  `topo.namespace` or `topo.blacklist` is set.
+  `topo.namespace` or `topo.blacklist` is set. On the map, a guest that is its own resource is a
+  light hexagon (`VirtualMachineResource`) and one known only from Proxmox is a dark box
+  (`VirtualMachine`); `docs/INSTALL.md` §3.3 explains the pictures.
 - **Templates are excluded from discovery.** They are never running and would otherwise appear as
   permanently down instances.
 

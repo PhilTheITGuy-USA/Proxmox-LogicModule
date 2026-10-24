@@ -301,6 +301,26 @@ the guests: a comma-separated list such as `bc:24:11,02:00:00`, which replaces t
 list `bc:24:11` too if it is still in use. A resource the property reaches whose MAC matches no
 prefix is left alone, and a guest with a hand-set MAC outside every prefix stays `PhysicalServer`.
 
+**What the guest pictures on the map mean.** Every guest is a virtual machine, but the map draws it
+one of two ways, depending on how much LogicMonitor knows about it:
+
+| Picture | Label when you point at it | What it means |
+|---|---|---|
+| Light, flat hexagon | `VirtualMachineResource` | LogicMonitor watches this guest **directly** — you added it as its own resource, and it answers SNMP or WMI. It has its own page in Resources. |
+| Dark box | `VirtualMachine` | LogicMonitor knows this guest **only from Proxmox**. It is on the map, and its status is under Proxmox VE Guest Status on its node, but it has no page of its own. |
+
+Think of it like a school: the light hexagon is a student who checked in at the front desk
+themselves, and the dark box is a student whose teacher says they are in class. Both are there; the
+front desk just knows more about the first one.
+
+The kind of guest does not decide the picture — a QEMU VM and an LXC container look the same. Only
+"is it its own resource?" does. To turn a dark box into a light hexagon, add the guest as a resource
+with SNMP (Linux) or WMI (Windows); the map changes at its next hourly refresh.
+
+The line from a node to a guest is a **Compute** line: "this guest runs on this node". Other kinds of
+line, such as **Storage**, come from other LogicMonitor modules that look at the guest from the
+inside, not from this suite.
+
 **A node missing from the map** carries no matching key. First check that its resource's
 `predef.externalResourceID` holds a `proxmoxve--node--` key; if not, `addERI_Proxmox_VE` did not
 reach it — look for `-pve` in its `system.sysinfo`, or set `pve.topology.node`. Then check that the address `pvesh get
