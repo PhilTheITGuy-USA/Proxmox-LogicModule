@@ -140,6 +140,14 @@ turned off cleanly: the keys it stamped stay in `predef.externalResourceID` afte
 applying, and the portal will not let anyone delete them (DESIGN §7). LogicMonitor's own topology
 modules are not optional either. The harness fails if either is marked optional.
 
+**Draw only relationships no other source can see.** The map merges every TopologySource's edges
+onto the same vertices, so before adding an edge type, check what the portal already draws between
+those resources and add only what is missing. A guest's mounts and shares are seen from inside the
+guest by other modules, which is where Plex's Storage edge on the lab map comes from. Which Proxmox
+storage holds a guest's disks (Ceph RBD, NFS, iSCSI, ZFS) is visible only through the Proxmox API,
+so Storage edges for that are this suite's to draw if they are added. Today it emits Cluster and
+Compute edges only.
+
 **`addERI_Proxmox_VE` runs without the token**, and so is not gated
 on `hasCategory("ProxmoxVE")` alone. The map needs its key on *every* node's resource, while the token
 belongs on one node per cluster — put it on every node and every DataSource collects the whole
