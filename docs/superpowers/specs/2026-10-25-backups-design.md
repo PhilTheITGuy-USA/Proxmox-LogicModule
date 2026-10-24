@@ -51,8 +51,21 @@ From the lab (Node-A, 2026-10-25):
   detected" where `/nodes/Node-A/...` works. The module takes names from the API, never from
   a hostname.
 
-Not yet seen, and the first thing to verify (§6): the `status` of a run in which one guest
-failed, and the log lines that name each guest's result.
+A run with one failed guest (Node-A, 2026-10-25: container 101 locked, 102 not, one manual
+run to `media01-usb`):
+
+- The task's `status` is `job errors`, and `tasks?typefilter=vzdump&errors=1` returns it (the only
+  task listed, so successful runs are filtered out).
+- The log names each guest's result. The failed guest:
+  `ERROR: Backup of VM 101 failed - CT is locked (backup)` — "VM" for a container too. The
+  successful one: `INFO: Finished Backup of VM 102 (00:00:50)`.
+- Line 1 is the run's command line, with no job id:
+  `INFO: starting new backup job: vzdump 101 102 --node Node-A --mode snapshot --storage media01-usb`.
+- The last line is `TASK ERROR: job errors`.
+- The two-guest run logged 33 lines; `/log` returns 50 unless `limit` is raised, so a six-guest
+  run would be cut short.
+- A manual run prunes with the storage's retention (`keep-daily=2, keep-last=2, keep-weekly=2`),
+  not the job's `keep-last=3`.
 
 ## 3. Design
 
@@ -112,9 +125,11 @@ Calls: 2 + jobs. Any failure of call 1 exits 2, so existing instances are kept.
    every online node that has it. Per-node `try`, as in the fan-out modules: an unreachable node
    costs only its own storage. Content is matched to instances by `vmid`.
 4. **Failures.** One `/nodes/{node}/tasks?typefilter=vzdump&errors=1&since=<now − 8 days>` per
-   online node — normally empty. For each failed task found, one `.../log` read. A guest's
-   `FailedSinceLastBackup` is 1 when such a log, from a run that started after that guest's
-   newest backup, reports it as failed; otherwise 0.
+   online node — normally empty. For each failed task found, one `.../log` read with a `limit`
+   large enough for the whole log (paged with `start` if needed). A guest's
+   `FailedSinceLastBackup` is 1 when such a log, from a run whose `starttime` is after that
+   guest's newest backup, has `^ERROR: Backup of VM (\d+) failed` for its VMID; otherwise 0.
+   Timestamps come from the task, never from the log text.
 
 Calls: 2 + backup storages (local ones once per node that holds them) + online nodes + failed
 runs in the window. Nothing grows with guest count.
@@ -133,7 +148,7 @@ datapoints, and stderr names the job.
 ## 4. Tests (harness)
 
 Fixtures for every endpoint above, built around the lab's job (six guests, `media01-usb`, pinned to
-`pve1`) plus a second, unpinned job on shared storage, one uncovered guest, one guest with no
+`pve1`), with the failed log copied from §2 and padded past 50 lines, plus a second, unpinned job on shared storage, one uncovered guest, one guest with no
 backups, one PBS backup with `verification`, and one failed task whose log names one guest.
 
 Assertions:
@@ -144,7 +159,8 @@ Assertions:
 - `LastBackupVerified` only on the PBS backup;
 - `FailedSinceLastBackup` 1 only for the guest the failed log names, and 0 when the failure is
   older than the guest's newest backup;
-- log reads only for tasks returned by `errors=1`; no request to an offline node;
+- log reads only for tasks returned by `errors=1`, each asking for the whole log; no request to
+  an offline node;
 - a shared storage listed once, a local storage on its job's node;
 - discovery exits 2 when `/cluster/backup` fails; collection exits 2 on a dead API.
 
@@ -163,14 +179,13 @@ Assertions:
 
 ## 6. Portal verification before merging
 
-1. **A failed guest, first.** On Node-A, lock one guest (`qm set <vmid> --lock backup`, or
-   `pct set` for a container), run a manual backup of it and one other guest to `media01-usb`, then
-   unlock it (`qm unlock` / `pct unlock`). Record the task's `status` and the log lines naming each
-   guest's result; set the parser and the fixture from them.
+1. ~~A failed guest, first~~ — done 2026-10-25; the results are in §2 and set the parser and
+   the fixture.
 2. Delete `Proxmox_VE_BackupCoverage`, import `Proxmox_VE_Backups`, run Active Discovery: one
    group for the job with guests 100, 101, 102, 103, 105 and 106, and a `No backup job` group
    with every other guest.
 3. After a collection: `LastBackupAgeHours` matches the time since the last 21:00 run,
-   `BackupCount` is at most 3 (`keep-last=3`), and the locked guest reads
+   `BackupCount` matches the guest's files on `media01-usb` (retention differs between the job and
+   manual runs), and a guest with a failed run after its newest backup reads
    `FailedSinceLastBackup` 1 until its next good backup.
 4. Re-import the Tier 2 dashboard and count its widgets.
