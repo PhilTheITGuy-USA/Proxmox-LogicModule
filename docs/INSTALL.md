@@ -196,6 +196,11 @@ sets the token. The two ERI modules are the exceptions, and need no token: `addE
 finds Proxmox nodes by their kernel, and `addERI_Proxmox_VE_Guest` finds guest resources by their
 MAC address. Both work as soon as they are imported (§3.3).
 
+**Upgrading an install that has `Proxmox_VE_BackupCoverage`: delete it, then import
+`Proxmox_VE_Backups`.** Backups replaces it with one instance per guest per job, and the portal
+cannot turn a single-instance module into a multi-instance one. Re-import the Tier 2 dashboard
+afterwards, since its Backups tile points at the new module, and count its 15 widgets.
+
 **Upgrading an install from before 2026-10-22: delete `Proxmox_VE_Cluster` first.** It changed
 from a single-instance to a one-instance multi-instance module, and LogicMonitor fixes that when a
 module is created: importing over the old one fails with "Field value cannot be modified", naming
@@ -330,6 +335,30 @@ A name that differs from Proxmox's own in anything but case or punctuation match
 silently. If the token is on
 every node, the TopologySource runs on every node too — the same map, built once per node.
 
+### 3.4 Optional: backup failures in LM Logs as well
+
+Proxmox VE Backups needs nothing beyond the token. It reads the backup runs' task logs every hour
+and reports, per guest, the age of its last good backup and whether a backup has failed since —
+an alert that clears itself once the next backup succeeds. That is the source of truth for
+"is this guest protected", and it works without LM Logs.
+
+If your portal has LM Logs (licensed separately), sending Proxmox's own notifications there adds
+two things the module cannot give:
+
+- **Immediate notice.** A failed run reaches LM Logs within moments, instead of at the module's
+  next hourly collection.
+- **Searchable history**, in Proxmox's own wording, kept for LM Logs' retention period.
+
+Proxmox's notification system (**Datacenter → Notifications**) sends a message when a backup job
+finishes, if the job's notification mode is `notification-system`. Forward those messages to LM
+Logs through a webhook target where your Proxmox version offers one, or through syslog to a
+Collector. Before relying on syslog alone, check that it carries the per-guest lines you need: a
+run's per-guest results are certainly in its task log, which is what the module reads.
+
+Keep the module's alert as the one that pages someone. An alert on a log line fires when the line
+arrives and does not clear when the next backup works, and it says nothing about a backup that
+never ran at all — `LastBackupAgeHours` is what catches that.
+
 ---
 
 ## Part 4 — Apply it to your hosts
@@ -449,7 +478,7 @@ need to be resources only if you use the map.
 | Ceph OSD | 5m | one per OSD | **Ceph is not installed — expected on most hosts** |
 | Storage Capacity | 10m | one per storage, grouped by node | — |
 | Replication | 10m | one per replication job | **no replication job is defined — expected on most hosts** |
-| Backup Coverage | 60m | single instance | — |
+| Backups | 60m | one per guest per backup job, grouped by job, plus one per guest no job covers | — |
 | Certificates | 240m | one per certificate per online node, usually 2–3, grouped by node | — |
 | Disks | 240m | one per physical disk per online node, grouped by node | — |
 | Subscription | 720m | one per online node | — |
@@ -479,7 +508,7 @@ most installs and neither fails; Ceph OSD also says so on stderr in the discover
 other modules discovered instances, the token is fine.
 
 **A module has instances but no data yet.** Check its collection interval before anything else.
-Backup Coverage is 60m, Certificates and Disks are 240m, and Subscription is 720m — these endpoints
+Backups is 60m, Certificates and Disks are 240m, and Subscription is 720m — these endpoints
 are expensive (listing disks makes Proxmox run `smartctl` on every disk) or the data changes daily
 at most, so they are deliberately slow. Press **Poll Now** instead of waiting out the interval.
 

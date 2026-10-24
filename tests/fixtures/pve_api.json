@@ -696,5 +696,511 @@
     "net0": "virtio=BC:24:11:F8:1E:58,bridge=vmbr0,firewall=1",
     "scsi0": "local-lvm:vm-101-disk-0,size=50G",
     "smbios1": "uuid=6f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8"
-  }
+  },
+  "/cluster/backup": [
+    {
+      "id": "backup-4e5f5bfc-094c",
+      "type": "vzdump",
+      "enabled": 1,
+      "schedule": "21:00",
+      "node": "pve1",
+      "storage": "local",
+      "mode": "snapshot",
+      "vmid": "101,103",
+      "next-run": 4102444800,
+      "prune-backups": {
+        "keep-last": "3"
+      }
+    },
+    {
+      "id": "backup-weekly",
+      "type": "vzdump",
+      "enabled": 0,
+      "schedule": "sun 02:00",
+      "comment": "Weekly to PBS",
+      "storage": "pbs-store",
+      "mode": "snapshot",
+      "vmid": "101,105"
+    }
+  ],
+  "/cluster/backup/backup-4e5f5bfc-094c/included_volumes": {
+    "children": [
+      {
+        "id": 101,
+        "leaf": 0,
+        "name": "web-01",
+        "type": "qemu",
+        "children": [
+          {
+            "id": "101:scsi0",
+            "included": 1,
+            "leaf": 1,
+            "name": "local-lvm:vm-101-disk-0",
+            "reason": "backup=yes"
+          }
+        ]
+      },
+      {
+        "id": 103,
+        "leaf": 0,
+        "name": "relay",
+        "type": "lxc",
+        "children": [
+          {
+            "id": "103:rootfs",
+            "included": 1,
+            "leaf": 1,
+            "name": "local-lvm:vm-103-disk-0",
+            "reason": "rootfs"
+          },
+          {
+            "id": "103:mp0",
+            "included": 0,
+            "leaf": 1,
+            "name": "/mnt/data",
+            "reason": "not a volume"
+          }
+        ]
+      },
+      {
+        "id": 999,
+        "leaf": 0,
+        "name": "removed",
+        "type": "unknown",
+        "children": []
+      }
+    ]
+  },
+  "/cluster/backup/backup-weekly/included_volumes": {
+    "children": [
+      {
+        "id": 101,
+        "leaf": 0,
+        "name": "web-01",
+        "type": "VM",
+        "children": [
+          {
+            "id": "101:scsi0",
+            "included": 1,
+            "leaf": 1,
+            "name": "local-lvm:vm-101-disk-0",
+            "reason": "backup=yes"
+          }
+        ]
+      },
+      {
+        "id": 105,
+        "leaf": 0,
+        "name": "no-nic",
+        "type": "VM",
+        "children": [
+          {
+            "id": "105:scsi0",
+            "included": 1,
+            "leaf": 1,
+            "name": "local-lvm:vm-105-disk-0",
+            "reason": "backup=yes"
+          }
+        ]
+      }
+    ]
+  },
+  "/nodes/pve1/tasks?typefilter=vzdump&limit=50": [
+    {
+      "upid": "UPID:pve1:00000003:00F00D00:6AD00003:vzdump::root@pam:",
+      "node": "pve1",
+      "type": "vzdump",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792461600,
+      "endtime": 1792461900,
+      "status": "OK"
+    },
+    {
+      "upid": "UPID:pve1:00000001:00F00D00:6AD00001:vzdump::root@pam:",
+      "node": "pve1",
+      "type": "vzdump",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792865236,
+      "endtime": 1792865536,
+      "status": "job errors"
+    },
+    {
+      "upid": "UPID:pve1:00000004:00F00D00:6AD00004:vzdump::root@pam:",
+      "node": "pve1",
+      "type": "vzdump",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792400000,
+      "endtime": 1792400300,
+      "status": "job errors"
+    },
+    {
+      "upid": "UPID:pve1:00000002:00F00D00:6AD00002:vzdump::root@pam:",
+      "node": "pve1",
+      "type": "vzdump",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792803602,
+      "endtime": 1792803902,
+      "status": "OK"
+    },
+    {
+      "upid": "UPID:pve1:00000005:00F00D00:6AD00005:vzdump::root@pam:",
+      "node": "pve1",
+      "type": "vzdump",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792717201,
+      "endtime": 1792717501,
+      "status": "OK"
+    }
+  ],
+  "/nodes/pve1/tasks/UPID:pve1:00000001:00F00D00:6AD00001:vzdump::root@pam:/log?start=0&limit=1000": [
+    {
+      "n": 1,
+      "t": "INFO: starting new backup job: vzdump 103 101 --node pve1 --mode snapshot --storage local"
+    },
+    {
+      "n": 2,
+      "t": "INFO: Starting Backup of VM 103 (lxc)"
+    },
+    {
+      "n": 3,
+      "t": "INFO: Backup started at 2026-10-24 14:07:16"
+    },
+    {
+      "n": 4,
+      "t": "INFO: creating vzdump archive, part 1"
+    },
+    {
+      "n": 5,
+      "t": "INFO: creating vzdump archive, part 2"
+    },
+    {
+      "n": 6,
+      "t": "INFO: creating vzdump archive, part 3"
+    },
+    {
+      "n": 7,
+      "t": "INFO: creating vzdump archive, part 4"
+    },
+    {
+      "n": 8,
+      "t": "INFO: creating vzdump archive, part 5"
+    },
+    {
+      "n": 9,
+      "t": "INFO: creating vzdump archive, part 6"
+    },
+    {
+      "n": 10,
+      "t": "INFO: creating vzdump archive, part 7"
+    },
+    {
+      "n": 11,
+      "t": "INFO: creating vzdump archive, part 8"
+    },
+    {
+      "n": 12,
+      "t": "INFO: creating vzdump archive, part 9"
+    },
+    {
+      "n": 13,
+      "t": "INFO: creating vzdump archive, part 10"
+    },
+    {
+      "n": 14,
+      "t": "INFO: creating vzdump archive, part 11"
+    },
+    {
+      "n": 15,
+      "t": "INFO: creating vzdump archive, part 12"
+    },
+    {
+      "n": 16,
+      "t": "INFO: creating vzdump archive, part 13"
+    },
+    {
+      "n": 17,
+      "t": "INFO: creating vzdump archive, part 14"
+    },
+    {
+      "n": 18,
+      "t": "INFO: creating vzdump archive, part 15"
+    },
+    {
+      "n": 19,
+      "t": "INFO: creating vzdump archive, part 16"
+    },
+    {
+      "n": 20,
+      "t": "INFO: creating vzdump archive, part 17"
+    },
+    {
+      "n": 21,
+      "t": "INFO: creating vzdump archive, part 18"
+    },
+    {
+      "n": 22,
+      "t": "INFO: creating vzdump archive, part 19"
+    },
+    {
+      "n": 23,
+      "t": "INFO: creating vzdump archive, part 20"
+    },
+    {
+      "n": 24,
+      "t": "INFO: creating vzdump archive, part 21"
+    },
+    {
+      "n": 25,
+      "t": "INFO: creating vzdump archive, part 22"
+    },
+    {
+      "n": 26,
+      "t": "INFO: creating vzdump archive, part 23"
+    },
+    {
+      "n": 27,
+      "t": "INFO: creating vzdump archive, part 24"
+    },
+    {
+      "n": 28,
+      "t": "INFO: creating vzdump archive, part 25"
+    },
+    {
+      "n": 29,
+      "t": "INFO: creating vzdump archive, part 26"
+    },
+    {
+      "n": 30,
+      "t": "INFO: creating vzdump archive, part 27"
+    },
+    {
+      "n": 31,
+      "t": "INFO: creating vzdump archive, part 28"
+    },
+    {
+      "n": 32,
+      "t": "INFO: creating vzdump archive, part 29"
+    },
+    {
+      "n": 33,
+      "t": "INFO: creating vzdump archive, part 30"
+    },
+    {
+      "n": 34,
+      "t": "INFO: creating vzdump archive, part 31"
+    },
+    {
+      "n": 35,
+      "t": "INFO: creating vzdump archive, part 32"
+    },
+    {
+      "n": 36,
+      "t": "INFO: creating vzdump archive, part 33"
+    },
+    {
+      "n": 37,
+      "t": "INFO: creating vzdump archive, part 34"
+    },
+    {
+      "n": 38,
+      "t": "INFO: creating vzdump archive, part 35"
+    },
+    {
+      "n": 39,
+      "t": "INFO: creating vzdump archive, part 36"
+    },
+    {
+      "n": 40,
+      "t": "INFO: creating vzdump archive, part 37"
+    },
+    {
+      "n": 41,
+      "t": "INFO: creating vzdump archive, part 38"
+    },
+    {
+      "n": 42,
+      "t": "INFO: creating vzdump archive, part 39"
+    },
+    {
+      "n": 43,
+      "t": "INFO: creating vzdump archive, part 40"
+    },
+    {
+      "n": 44,
+      "t": "INFO: creating vzdump archive, part 41"
+    },
+    {
+      "n": 45,
+      "t": "INFO: creating vzdump archive, part 42"
+    },
+    {
+      "n": 46,
+      "t": "INFO: creating vzdump archive, part 43"
+    },
+    {
+      "n": 47,
+      "t": "INFO: creating vzdump archive, part 44"
+    },
+    {
+      "n": 48,
+      "t": "INFO: creating vzdump archive, part 45"
+    },
+    {
+      "n": 49,
+      "t": "INFO: creating vzdump archive, part 46"
+    },
+    {
+      "n": 50,
+      "t": "INFO: creating vzdump archive, part 47"
+    },
+    {
+      "n": 51,
+      "t": "INFO: creating vzdump archive, part 48"
+    },
+    {
+      "n": 52,
+      "t": "INFO: creating vzdump archive, part 49"
+    },
+    {
+      "n": 53,
+      "t": "INFO: archive file size: 1.50GB"
+    },
+    {
+      "n": 54,
+      "t": "INFO: Finished Backup of VM 103 (00:00:50)"
+    },
+    {
+      "n": 55,
+      "t": "INFO: Starting Backup of VM 101 (qemu)"
+    },
+    {
+      "n": 56,
+      "t": "INFO: status = running"
+    },
+    {
+      "n": 57,
+      "t": "ERROR: Backup of VM 101 failed - VM is locked (backup)"
+    },
+    {
+      "n": 58,
+      "t": "INFO: Backup job finished with errors"
+    },
+    {
+      "n": 59,
+      "t": ""
+    },
+    {
+      "n": 60,
+      "t": "TASK ERROR: job errors"
+    }
+  ],
+  "/nodes/pve1/tasks/UPID:pve1:00000002:00F00D00:6AD00002:vzdump::root@pam:/log?start=0&limit=1000": [
+    {
+      "n": 1,
+      "t": "INFO: starting new backup job: vzdump 101 103 --node pve1 --mode snapshot --storage local"
+    },
+    {
+      "n": 2,
+      "t": "INFO: Starting Backup of VM 101 (qemu)"
+    },
+    {
+      "n": 3,
+      "t": "INFO: archive file size: 2.00GB"
+    },
+    {
+      "n": 4,
+      "t": "INFO: Finished Backup of VM 101 (00:01:10)"
+    },
+    {
+      "n": 5,
+      "t": "INFO: Starting Backup of VM 103 (lxc)"
+    },
+    {
+      "n": 6,
+      "t": "INFO: archive file size: 1.40GB"
+    },
+    {
+      "n": 7,
+      "t": "INFO: Finished Backup of VM 103 (00:00:40)"
+    },
+    {
+      "n": 8,
+      "t": "INFO: Backup job finished successfully"
+    },
+    {
+      "n": 9,
+      "t": "TASK OK"
+    }
+  ],
+  "/nodes/pve1/tasks/UPID:pve1:00000005:00F00D00:6AD00005:vzdump::root@pam:/log?start=0&limit=1000": [
+    {
+      "n": 1,
+      "t": "INFO: starting new backup job: vzdump 101 103 --node pve1 --mode snapshot --storage local"
+    },
+    {
+      "n": 2,
+      "t": "INFO: Starting Backup of VM 101 (qemu)"
+    },
+    {
+      "n": 3,
+      "t": "INFO: archive file size: 1.90GB"
+    },
+    {
+      "n": 4,
+      "t": "INFO: Finished Backup of VM 101 (00:01:05)"
+    },
+    {
+      "n": 5,
+      "t": "TASK OK"
+    }
+  ],
+  "/nodes/pve1/tasks/UPID:pve1:00000003:00F00D00:6AD00003:vzdump::root@pam:/log?start=0&limit=1000": [
+    {
+      "n": 1,
+      "t": "INFO: starting new backup job: vzdump 101 105 --mode snapshot --storage pbs-store"
+    },
+    {
+      "n": 2,
+      "t": "INFO: Starting Backup of VM 101 (qemu)"
+    },
+    {
+      "n": 3,
+      "t": "INFO: Finished Backup of VM 101 (00:02:10)"
+    },
+    {
+      "n": 4,
+      "t": "INFO: Starting Backup of VM 105 (qemu)"
+    },
+    {
+      "n": 5,
+      "t": "INFO: Finished Backup of VM 105 (00:00:20)"
+    },
+    {
+      "n": 6,
+      "t": "TASK OK"
+    }
+  ],
+  "/nodes/pve1/tasks/UPID:pve1:00000004:00F00D00:6AD00004:vzdump::root@pam:/log?start=0&limit=1000": [
+    {
+      "n": 1,
+      "t": "INFO: starting new backup job: vzdump 101 105 --mode snapshot --storage pbs-store"
+    },
+    {
+      "n": 2,
+      "t": "INFO: Starting Backup of VM 105 (qemu)"
+    },
+    {
+      "n": 3,
+      "t": "ERROR: Backup of VM 105 failed - connection refused"
+    },
+    {
+      "n": 4,
+      "t": "TASK ERROR: job errors"
+    }
+  ]
 }

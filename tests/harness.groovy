@@ -846,6 +846,122 @@ note('topology-applies-to', eriDefn.appliesTo ==
          '!(auto.network.mac_address =~ "^[bB][cC]:24:11") && !pve.guest.mac_prefix)',
      "the node ERI PropertySource AppliesTo is ${eriDefn.appliesTo}")
 
+// ------------------------------------------------------------------- Backups
+//
+// One instance per guest per job, grouped by job, plus one per guest no job covers. Last
+// backups and failures come from vzdump run logs, read newest first until every job guest
+// has a success, and matched to a job by the run's --storage.
+
+def backupsAd = new File(scriptsDir, 'Proxmox_VE_Backups.ad.groovy')
+def backupsCollect = new File(scriptsDir, 'Proxmox_VE_Backups.collect.groovy')
+def backupLog = { int n -> String.format('/nodes/pve1/tasks/UPID:pve1:0000%04X:00F00D00:6AD0%04X:vzdump::root@pam:/log?start=0&limit=1000', n, n) }
+def parseBatch = { String stdout ->
+    def data = [:].withDefault { [:] }
+    stdout.readLines().each { line ->
+        def matcher = BATCH_LINE.matcher(line)
+        if (matcher.matches()) { data[matcher.group(1)][matcher.group(2)] = matcher.group(3) as double }
+    }
+    data
+}
+
+def backupAdRun = discoverWith(backupsAd, hostProps)
+def backupInstances = parseAd(backupAdRun.stdout)
+note('backups-ad', backupAdRun.exit == 0 && backupInstances.keySet() ==
+         ['backup-4e5f5bfc-094c-101', 'backup-4e5f5bfc-094c-103', 'backup-weekly-101',
+          'backup-weekly-105', 'none-102', 'none-200'] as Set,
+     "instances were ${backupInstances.keySet()}: ${backupAdRun.stderr}")
+// Grouped by the job's comment, else its id; uncovered guests in their own group.
+['backup-4e5f5bfc-094c-101': 'backup-4e5f5bfc-094c',
+ 'backup-weekly-105'       : 'Weekly to PBS',
+ 'none-102'                : 'No backup job'].each { id, group ->
+    note('backups-ad', backupInstances[id]?.auto?.get('auto.pve_backup_job') == group,
+         "${id} group was ${backupInstances[id]?.auto}")
+}
+// The guest's volumes, named: included ones by key and volume, excluded ones with the reason.
+note('backups-ad', backupInstances['backup-4e5f5bfc-094c-103']?.auto?.get('auto.pve_backup_included_volumes') ==
+                       'rootfs: local-lvm:vm-103-disk-0' &&
+                   backupInstances['backup-4e5f5bfc-094c-103']?.auto?.get('auto.pve_backup_excluded_volumes') ==
+                       'mp0: /mnt/data (not a volume)' &&
+                   !backupInstances['backup-4e5f5bfc-094c-101']?.auto?.containsKey('auto.pve_backup_excluded_volumes'),
+     "volume properties were ${backupInstances['backup-4e5f5bfc-094c-103']?.auto} / ${backupInstances['backup-4e5f5bfc-094c-101']?.auto}")
+note('backups-ad', backupAdRun.stdout.contains('backup-4e5f5bfc-094c-101##web-01 (101)##'),
+     'the display name is not "<guest> (<vmid>)"')
+// Proxmox types a job's guests qemu / lxc (the lab's shape); its schema's VM / CT is accepted too.
+note('backups-ad', backupInstances['backup-4e5f5bfc-094c-103']?.auto?.get('auto.pve_type') == 'lxc' &&
+                   backupInstances['backup-weekly-105']?.auto?.get('auto.pve_type') == 'qemu',
+     "guest types were ${backupInstances.collectEntries { k, v -> [(k): v.auto['auto.pve_type']] }}")
+
+def backupRun = discoverWith(backupsCollect, hostProps)
+def backupData = parseBatch(backupRun.stdout)
+def nowHours = System.currentTimeMillis() / 3600000.0d
+def ageNear = { Double hours, long start -> hours != null && Math.abs(hours - (nowHours - start / 3600.0d)) < 0.1 }
+note('backups-collect', backupRun.exit == 0, "exit was ${backupRun.exit}: ${backupRun.stderr}")
+
+// Last good backup from the daily run before the failed one; the failed run is newer.
+def daily101 = backupData['backup-4e5f5bfc-094c-101']
+note('backups-collect', daily101.LastBackupSizeGB == 2.15 && daily101.JobEnabled == 1 &&
+                        daily101.FailedSinceLastBackup == 1 && daily101.NotCovered == 0 &&
+                        daily101.IncludedVolumes == 1 && daily101.ExcludedVolumes == 0 &&
+                        daily101.HoursUntilNextRun > 0 && ageNear(daily101.LastBackupAgeHours, 1792803602L),
+     "daily 101 was ${daily101}")
+// Succeeded inside the run that failed for 101: that run is its last good backup.
+def daily103 = backupData['backup-4e5f5bfc-094c-103']
+note('backups-collect', daily103.LastBackupSizeGB == 1.61 && daily103.FailedSinceLastBackup == 0 &&
+                        daily103.IncludedVolumes == 1 && daily103.ExcludedVolumes == 1 &&
+                        ageNear(daily103.LastBackupAgeHours, 1792865236L),
+     "daily 103 was ${daily103}")
+// The same guest in the disabled weekly job: its PBS run logged no size, and the daily
+// failure (another storage) is not this job's.
+def weekly101 = backupData['backup-weekly-101']
+note('backups-collect', weekly101.JobEnabled == 0 && weekly101.FailedSinceLastBackup == 0 &&
+                        !weekly101.containsKey('LastBackupSizeGB') && !weekly101.containsKey('HoursUntilNextRun') &&
+                        ageNear(weekly101.LastBackupAgeHours, 1792461600L),
+     "weekly 101 was ${weekly101}")
+// A failure older than the guest's last good backup is over.
+def weekly105 = backupData['backup-weekly-105']
+note('backups-collect', weekly105.FailedSinceLastBackup == 0 && ageNear(weekly105.LastBackupAgeHours, 1792461600L),
+     "weekly 105 was ${weekly105}")
+note('backups-collect', backupData['none-102'] == [NotCovered: 1.0d],
+     "an uncovered guest reported ${backupData['none-102']}")
+
+// Newest first, each log read whole, and no further once every job guest has a success:
+// the oldest run's log is never requested. No storage listing, no offline node.
+def logReads = backupRun.requests.findAll { it.contains('/log') }
+note('backups-calls', logReads == [backupLog(1), backupLog(2), backupLog(5), backupLog(3)],
+     "unexpected log reads: ${logReads}")
+note('backups-calls', !backupRun.requests.any { it.contains('/content') || it.startsWith('/nodes/pve2/') },
+     "listed storage or asked an offline node: ${backupRun.requests}")
+
+// A node whose runs cannot be read leaves the last-backup datapoints empty, not guessed.
+def backupNoRuns = withFixtures(['/nodes/pve1/tasks?typefilter=vzdump&limit=50': null]) {
+    discoverWith(backupsCollect, hostProps)
+}
+def unread = parseBatch(backupNoRuns.stdout)['backup-4e5f5bfc-094c-101']
+note('backups-collect', backupNoRuns.exit == 0 && unread.JobEnabled == 1 &&
+                        !unread.containsKey('LastBackupAgeHours') && !unread.containsKey('FailedSinceLastBackup'),
+     "unread runs reported ${unread}")
+
+// So does a run whose log cannot be read: collection still succeeds.
+def backupNoLog = withFixtures([(backupLog(2)): null]) { discoverWith(backupsCollect, hostProps) }
+def unreadLog = parseBatch(backupNoLog.stdout)['backup-4e5f5bfc-094c-101']
+note('backups-collect', backupNoLog.exit == 0 && unreadLog.JobEnabled == 1 &&
+                        !unreadLog.containsKey('LastBackupAgeHours') && backupNoLog.stderr.contains('not read'),
+     "an unread log reported ${unreadLog}: ${backupNoLog.stderr}")
+
+// Without not-backed-up (older Proxmox) the job instances are still discovered.
+def backupNoInfo = withFixtures(['/cluster/backup-info/not-backed-up': null]) {
+    discoverWith(backupsAd, hostProps)
+}
+note('backups-ad', backupNoInfo.exit == 0 && parseAd(backupNoInfo.stdout).keySet().every { !it.startsWith('none-') } &&
+                   parseAd(backupNoInfo.stdout).size() == 4 && backupNoInfo.stderr.contains('not listed'),
+     "without not-backed-up: ${backupNoInfo.exit} ${backupNoInfo.stdout} ${backupNoInfo.stderr}")
+
+// No job list means no instances can be trusted: exit 2 keeps the existing ones.
+def backupNoJobs = withFixtures(['/cluster/backup': null]) { discoverWith(backupsAd, hostProps) }
+note('backups-ad', backupNoJobs.exit == 2, "discovery without /cluster/backup exited ${backupNoJobs.exit}")
+def backupDead = runScript(backupsCollect, [hostProps: hostProps + ['pve.api.url': 'http://127.0.0.1:1']])
+note('backups-collect', backupDead.exit == 2, "collection with the API down exited ${backupDead.exit}")
+
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),
      'guest collection did not use the bulk endpoint')

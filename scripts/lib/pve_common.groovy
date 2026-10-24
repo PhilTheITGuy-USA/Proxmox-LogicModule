@@ -391,3 +391,66 @@ def pvePercent = { used, total ->
     def totalValue = (total ?: 0) as double
     totalValue > 0 ? pveRound(((used ?: 0) as double) * 100.0d / totalValue) : 0
 }
+
+/*
+ * The instances Proxmox_VE_Backups discovers and collects: one per guest per backup job,
+ * and one per guest no job covers. Discovery and collection both build them here, so the
+ * two always agree on the wildvalues.
+ *
+ * /cluster/backup/{id}/included_volumes applies a job's all / pool / vmid / exclude
+ * selection, so each job's guests are exactly the ones it will back up. Proxmox types them
+ * "qemu" and "lxc"; its schema documents "VM" and "CT", which are accepted too. Any other
+ * type, such as "unknown" for a guest removed but not purged, is skipped. Each guest's
+ * volumes come with it, marked included or not, with Proxmox's reason ("not a volume" for a
+ * bind mount, "backup=no" for a disk excluded by hand). /cluster/backup-info/not-backed-up
+ * is absent on old Proxmox versions; then no uncovered guests are returned and stderr says
+ * so, while the job instances are unaffected.
+ */
+def pveBackupInstances = { ->
+    def instances = []
+    (pveGet('/cluster/backup') ?: []).each { job ->
+        def jobId = job.id?.toString()
+        if (!jobId) { return }
+        def label = job.comment?.toString()?.trim() ?: jobId
+        def included = pveGet('/cluster/backup/' + URLEncoder.encode(jobId, 'UTF-8') + '/included_volumes')
+        def guests = (included instanceof Map ? included.children : included) ?: []
+        guests.each { guest ->
+            def type = [qemu: 'qemu', lxc: 'lxc', VM: 'qemu', CT: 'lxc'][guest.type?.toString()]
+            if (!type || guest.id == null) { return }
+            def vmid = guest.id.toString()
+            def volumes = (guest.children ?: []).findAll { it.id != null }
+            def isIncluded = { volume -> volume.included?.toString() in ['1', 'true'] }
+            def volumeKey = { volume -> volume.id.toString().tokenize(':').last() }
+            instances << [
+                id      : jobId + '-' + vmid,
+                vmid    : vmid,
+                name    : guest.name?.toString(),
+                type    : type,
+                covered : true,
+                jobId   : jobId,
+                job     : label,
+                schedule: job.schedule?.toString(),
+                storage : job.storage?.toString(),
+                // Proxmox treats a job without "enabled" as enabled.
+                enabled : !(job.enabled?.toString() in ['0', 'false']),
+                nextRun : job.'next-run',
+                included: volumes.findAll { isIncluded(it) }
+                    .collect { volumeKey(it) + ': ' + it.name },
+                excluded: volumes.findAll { !isIncluded(it) }
+                    .collect { volumeKey(it) + ': ' + it.name + (it.reason ? ' (' + it.reason + ')' : '') }
+            ]
+        }
+    }
+    try {
+        (pveGet('/cluster/backup-info/not-backed-up') ?: []).each { guest ->
+            if (guest.vmid == null) { return }
+            def vmid = guest.vmid.toString()
+            instances << [id: 'none-' + vmid, vmid: vmid, name: guest.name?.toString(),
+                          type: guest.type?.toString(), covered: false, job: 'No backup job']
+        }
+    } catch (Exception unavailable) {
+        System.err.println('Guests covered by no backup job are not listed on this Proxmox ' +
+            'version: ' + unavailable.message)
+    }
+    return instances
+}
