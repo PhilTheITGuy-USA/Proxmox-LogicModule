@@ -36,8 +36,9 @@ repo) for module, dashboard and API work; the last two commands above are its ch
 but all ten of its items are implemented, and §3's *verbatim* wildvalue is superseded by
 `pveWildValue`'s fold. §4's status column is the authority on what is built (Tier 2a and Tier 3
 are not). §4 sorts the backlog by scope *and* by call cost, and cost is the one that constrains
-design: an O(1) field can join a module that already makes the call, while anything O(guests) must
-be its own opt-in module on a long interval.
+design: an O(1) field can join a module that already makes the call, while anything O(guests) per
+poll must be its own opt-in module on a long interval. Topology and ERI modules are never optional,
+whatever their cost (see the topology paragraphs).
 
 ```
 scripts/lib/pve_common.groovy    shared preamble: properties, TLS, HTTP, output helpers
@@ -93,7 +94,7 @@ per node gains nothing from it.
 
 **The two guest bodies share a helper instead.** `Proxmox_VE_Guests.ad.groovy` backs
 GuestPerformance; GuestStatus has its own `Proxmox_VE_GuestStatus.ad.groovy`, because only it
-carries the guests' instance ERIs (behind `pve.topology.enabled`; see the topology paragraphs).
+carries the guests' instance ERIs (see the topology paragraphs).
 Both build their output through `pveGuestList` and `pveGuestDiscover` in the preamble, so they
 still discover the same guests under the same wildvalues and a single guest carries both a
 performance and a status instance. Change the guest set or its properties there, never in one body.
@@ -118,7 +119,7 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 | `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |
 | `Proxmox_VE_Nodes` | batchscript | 5m | `Nodes.ad` | 1, O(1) |
 | `Proxmox_VE_GuestPerformance` | batchscript | 5m | `Guests.ad` | 1, O(1) |
-| `Proxmox_VE_GuestStatus` | batchscript | 3m | `GuestStatus.ad` | 1, O(1); hourly discovery + 2 + 1 per guest on an online node when `pve.topology.enabled` |
+| `Proxmox_VE_GuestStatus` | batchscript | 3m | `GuestStatus.ad` | 1, O(1); hourly discovery + 2 + 1 per guest on an online node |
 | `Proxmox_VE_CephOSD` | batchscript | 5m | `CephOSD.ad` | 2, O(1) — see below |
 | `Proxmox_VE_NodeServices` | batchscript | 5m | `NodeServices.ad` | 1 + 1 per online node |
 | `Proxmox_VE_StorageCapacity` | batchscript | 10m | `Storage.ad` | 1, O(1) |
@@ -127,33 +128,38 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 | `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
 | `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
-| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, **optional** | 30m | — | 1 with a token, 0 without |
+| `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, always on | 30m | — | 1 with a token, 0 without |
 | `addERI_Proxmox_VE_Guest` | ERI PropertySource, Collector-only, always on | 30m | — | 0 |
-| `Proxmox_VE_Topology` | TopologySource, Collector-only, **optional** | 60m | — | 3 + 1 per guest on an online node |
+| `Proxmox_VE_Topology` | TopologySource, Collector-only, always on | 60m | — | 3 + 1 per guest on an online node |
 
-The TopologySource and, with the opt-in, GuestStatus's discovery are the two O(guests) costs: each
-reads every guest's `config` for its MAC, which is why both run hourly and only behind
-`pve.topology.enabled`.
+The TopologySource and GuestStatus's discovery are the two O(guests) costs: each reads every
+guest's `config` for its MAC, which is why both run hourly.
 
-**An optional module must not apply by default.** Mark it `"optional": true` in
-`modules/<Module>.json` and add `&& pve.<feature>.enabled == "true"` to its AppliesTo; its
-`technicalNotes` must name that property, since the portal is where someone will look for how to
-turn it on. `check_optional` in `build.py` enforces all three, and the reverse — an opt-in clause on
-an unmarked module — so the mark and the AppliesTo cannot drift apart. The two topology modules
-share `pve.topology.enabled` because neither works without the other. AppliesTo compares the
-string exactly, so the value is lowercase `true`. GuestStatus's instance ERIs read the same
-property, but inside its discovery body rather than its AppliesTo, because the module itself is
-not optional.
+**Never make `Proxmox_VE_Topology` or `addERI_Proxmox_VE` optional.** An ERI module cannot be
+turned off cleanly: the keys it stamped stay in `predef.externalResourceID` after it stops
+applying, and the portal will not let anyone delete them (DESIGN §7). LogicMonitor's own topology
+modules are not optional either. The harness fails if either is marked optional.
+
+**An optional module must not apply by default.** None is optional today; the rule is for the
+next one. Mark it `"optional": true` in `modules/<Module>.json` and add
+`&& pve.<feature>.enabled == "true"` to its AppliesTo; its `technicalNotes` must name that
+property, since the portal is where someone will look for how to turn it on. `check_optional` in
+`build.py` enforces all three, and the reverse — an opt-in clause on an unmarked module — so the
+mark and the AppliesTo cannot drift apart. AppliesTo compares the string exactly, so the value is
+lowercase `true`. Never make an ERI module optional, for the reason above.
 
 **`addERI_Proxmox_VE` runs without the token**, and so is not gated
-on `hasCategory("ProxmoxVE")`. The map needs its key on *every* node's resource, while the token
+on `hasCategory("ProxmoxVE")` alone. The map needs its key on *every* node's resource, while the token
 belongs on one node per cluster — put it on every node and every DataSource collects the whole
-cluster once per node. It stamps two kinds of key. The name-plus-IP key,
+cluster once per node. Its AppliesTo,
+`hasCategory("ProxmoxVE") || pve.topology.node || (system.sysinfo =~ "-pve" && !(auto.network.mac_address =~ "^[bB][cC]:24:11") && !pve.guest.mac_prefix)`,
+finds a node by the token, by the property, or by its Proxmox kernel (`-pve`, from SNMP). An LXC
+container reports its host's kernel, so the guest MAC prefix and its override keep containers out
+(checked on two nodes, two containers and a Pi, 2026-10-25). It stamps two kinds of key. The name-plus-IP key,
 `pveTopoNodeKeys(name, ips)`, needs no cluster name: one key per address in `system.ips`, plus the
 local `/cluster/status` row's `ip` where a token is present, with the name from that row or else
 `pveTopoNodeName` (`pve.topology.node`, else the short hostname). The TopologySource builds the same
-key from each node's `/cluster/status` row, so one group carrying only `pve.topology.enabled` covers
-every cluster. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
+key from each node's `/cluster/status` row, so nodes of every cluster match with no property set. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
 from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
 `pve.topology.cluster` without. **A node vertex carries exactly one key**, chosen by
 `pveTopoNodeVertexKey`: the IP key, or the cluster-scoped key only when its row has no usable
@@ -161,7 +167,7 @@ address. lm.topo joins a vertex's keys into one ID and the portal then matches o
 carrying all of them, so a two-key vertex leaves a token-less node unmatched (DESIGN §7,
 2026-10-21); the harness refuses one. The key must equal the TopologySource's byte for byte, which
 is why both sides go through the same preamble helpers. The cluster vertex is drawn through
-`Proxmox_VE_Cluster`'s one instance, `cluster`, which behind `pve.topology.enabled` carries
+`Proxmox_VE_Cluster`'s one instance, `cluster`, which on a cluster carries
 `pveTopoKey(cluster, null)` as type `Cluster`; an instance vertex takes edges from every matched
 node (DESIGN §7, spike 3 re-run). Do not put a
 `pveConfigError` return back at the top of the script; the harness checks for it.
@@ -234,8 +240,8 @@ widgets — better, export it and count them there. Tier 1 was missing four widg
 an export showed it.
 
 **The suite is self-applying, and the PropertySource is the hinge.** Every module's AppliesTo is
-`hasCategory("ProxmoxVE")`, plus an opt-in clause on optional ones (`addERI_Proxmox_VE` and
-`addERI_Proxmox_VE_Guest`, above, are the exceptions); `addCategory_Proxmox_VE` is what sets that category, by calling `/version` and
+`hasCategory("ProxmoxVE")` (`addERI_Proxmox_VE` and `addERI_Proxmox_VE_Guest`, above, are the
+exceptions); `addCategory_Proxmox_VE` is what sets that category, by calling `/version` and
 staying completely silent — exit 0, no output — on any host that is not Proxmox or has no token. Its
 own AppliesTo is `true()`, so it runs on every resource in the portal, and that is safe *only*
 because of the silence. Break it and the whole suite starts applying itself to unrelated Linux
@@ -431,7 +437,8 @@ matching the reference exports.
 **Adding a module** means a new `modules/<Module>.json` (the build finds definitions by glob), a
 collect body, an AD body if it is `multiInstance` — reuse an existing one where the instance set is
 the same — a row in the README table, and a fixture for every endpoint it calls. Anything
-O(guests), or otherwise not wanted on every Proxmox host, is `"optional": true`. If the module
+O(guests) per poll, or otherwise not wanted on every Proxmox host, is `"optional": true` — but
+never an ERI module (see the topology paragraphs). If the module
 cannot be verified against the user's own environment, it also needs an `UNVERIFIED` paragraph in
 its `technicalNotes` naming what is unproven, and a row in `docs/DESIGN.md` §7. A green harness
 on a hand-written fixture proves the parsing, not the shape, so a new module keeps the note until
