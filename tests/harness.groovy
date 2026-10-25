@@ -962,6 +962,30 @@ note('backups-ad', backupNoJobs.exit == 2, "discovery without /cluster/backup ex
 def backupDead = runScript(backupsCollect, [hostProps: hostProps + ['pve.api.url': 'http://127.0.0.1:1']])
 note('backups-collect', backupDead.exit == 2, "collection with the API down exited ${backupDead.exit}")
 
+// ---------------------------------------------------------------- Sizes in names
+//
+// Storage and OSD instances carry their size in the display name, guests and nodes their root
+// disk in the description, so a percentage graph reads against the size it is a share of.
+def adRows = { String module ->
+    discoverWith(new File(scriptsDir, module + '.ad.groovy'), hostProps).stdout.readLines()
+        .collect { AD_LINE.matcher(it) }.findAll { it.matches() }
+        .collect { [name: it.group(2), description: it.group(3)] }
+}
+def storageNames = adRows('Proxmox_VE_StorageCapacity')*.name
+note('sizes', storageNames.contains('local on pve1 (107 GB)') && storageNames.contains('ceph-vm on pve1 (11.0 TB)') &&
+              storageNames.contains('backup.nfs on pve2'),
+     "storage names were ${storageNames}")
+def osdNames = adRows('Proxmox_VE_CephOSD')*.name
+// An OSD whose tree entry reports no size keeps its bare name.
+note('sizes', osdNames.count { it ==~ /osd\.\d+ \(4\.0 TB\)/ } == 2 && osdNames.contains('osd.2'), "OSD names were ${osdNames}")
+def guestDescriptions = adRows('Proxmox_VE_GuestStatus')*.description
+note('sizes', guestDescriptions.any { it.endsWith(', root disk 54 GB') } && guestDescriptions.any { it.endsWith(', root disk 8.6 GB') },
+     "guest descriptions were ${guestDescriptions}")
+def nodeDescriptions = adRows('Proxmox_VE_NodeDetail')*.description + adRows('Proxmox_VE_Nodes')*.description
+note('sizes', nodeDescriptions.count { it.endsWith('pve1, root filesystem 101 GB') } == 2 &&
+              nodeDescriptions.any { it.endsWith('pve2') },
+     "node descriptions were ${nodeDescriptions}")
+
 // ---------------------------------------------------------------- Migrations
 //
 // Running migrations from /cluster/tasks; finished ones from each online node's vzmigrate and

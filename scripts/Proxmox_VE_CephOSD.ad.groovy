@@ -69,9 +69,10 @@ try {
         def name = osd.name?.toString()
         if (!name) { return }
 
+        def size = pveSizeLabel(osd.total_space)
         pveDiscover(
             name,
-            name,
+            name + (size ? ' (' + size + ')' : ''),
             'Ceph OSD ' + name + (osd.host ? ' on ' + osd.host : ''),
             [
                 pve_osd         : name,

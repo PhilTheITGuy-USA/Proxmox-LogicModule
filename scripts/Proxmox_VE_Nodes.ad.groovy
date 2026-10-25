@@ -17,10 +17,11 @@ try {
     }
 
     nodes.each { node ->
+        def rootfs = pveSizeLabel(node.maxdisk)
         pveDiscover(
             node.id,
             node.node,
-            'Proxmox VE node ' + node.node,
+            'Proxmox VE node ' + node.node + (rootfs ? ', root filesystem ' + rootfs : ''),
             [pve_id: node.id, pve_node: node.node]
         )
     }

@@ -21,9 +21,11 @@ try {
 
     stores.each { store ->
         def scope = store.shared ? 'shared' : 'local'
+        // The size in the name follows the instance onto every graph and dashboard legend.
+        def size = pveSizeLabel(store.maxdisk)
         pveDiscover(
             store.id,
-            store.storage + ' on ' + store.node,
+            store.storage + ' on ' + store.node + (size ? ' (' + size + ')' : ''),
             'Proxmox ' + scope + ' storage "' + store.storage + '" (' + (store.plugintype ?: 'unknown') + ')',
             [
                 pve_id     : store.id,

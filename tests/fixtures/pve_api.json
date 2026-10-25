@@ -77,6 +77,8 @@
   "/cluster/resources?type=node": [
     {
       "id": "node/pve1",
+      "disk": 10220000000,
+      "maxdisk": 100861726720,
       "type": "node",
       "node": "pve1",
       "status": "online",

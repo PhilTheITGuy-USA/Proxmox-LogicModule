@@ -71,7 +71,9 @@ dist/                            GENERATED, gitignored — never edit, never com
 - discovery: `pveDiscover`, `pveWildValue`, `pveDisplayName`, `pvePropValue`, and the guest
   set both guest bodies share, `pveGuestList` / `pveGuestDiscover`
 - output: `pveEmit`, `pveRound`, `pvePercent` (0 when the total is 0), `pveGB` / `pveMB` —
-  decimal units, because the portal renders raw bytes as `5.001E11`
+  decimal units, because the portal renders raw bytes as `5.001E11` — and `pveSizeLabel`, the
+  size a storage or OSD instance carries in its display name and a guest or node in its
+  description ("1.8 TB"), so a percentage graph reads against the size it is a share of
 - topology: `pveTopoKey` and `pveTopoNodeKey` / `pveTopoNodeKeys` (the cluster-scoped and the
   name-plus-IP node keys; each must match what `addERI_Proxmox_VE` stamps), `pveTopoIp` (the
   address form both sides agree on), `pveGuestMac`, `pveTopoNodeName`, `pveTopoNodeIdentity`,

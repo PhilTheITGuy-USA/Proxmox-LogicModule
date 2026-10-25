@@ -26,10 +26,11 @@ try {
         def nodeName = node.node?.toString()
         if (!nodeName) { return }
 
+        def rootfs = pveSizeLabel(node.maxdisk)
         pveDiscover(
             node.id,
             nodeName,
-            'Proxmox node ' + nodeName,
+            'Proxmox node ' + nodeName + (rootfs ? ', root filesystem ' + rootfs : ''),
             [
                 pve_id  : node.id,
                 pve_node: nodeName

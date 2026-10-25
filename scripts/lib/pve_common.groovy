@@ -364,6 +364,20 @@ def pveGuestList = { ->
 }
 
 /*
+ * A size for an instance's name or description, so a percentage graph reads against the
+ * size it is a share of: "1.8 TB", "215 GB", "8.6 GB". Decimal units, like pveGB. Empty
+ * for a missing or zero size, such as unavailable storage, so nothing misleading is shown.
+ */
+def pveSizeLabel = { bytes ->
+    def value = (bytes ?: 0) as double
+    if (value <= 0) { return '' }
+    if (value >= 1e12d) { return String.format(Locale.ROOT, '%.1f TB', value / 1e12d) }
+    if (value >= 1e10d) { return String.format(Locale.ROOT, '%.0f GB', value / 1e9d) }
+    if (value >= 1e9d) { return String.format(Locale.ROOT, '%.1f GB', value / 1e9d) }
+    return String.format(Locale.ROOT, '%.0f MB', value / 1e6d)
+}
+
+/*
  * One guest's Active Discovery line. The wildvalue comes from Proxmox's own id (qemu/101)
  * and never from the node, so a live migration does not orphan the instance.
  * rawProperties passes straight through to pveDiscover.
@@ -371,10 +385,11 @@ def pveGuestList = { ->
 def pveGuestDiscover = { Map guest, Map rawProperties = [:] ->
     def vmid = guest.vmid?.toString()
     def kind = guest.type == 'qemu' ? 'virtual machine' : 'container'
+    def disk = pveSizeLabel(guest.maxdisk)
     pveDiscover(
         guest.id,
         guest.name ?: (guest.type + '-' + vmid),
-        'Proxmox ' + kind + ' ' + vmid,
+        'Proxmox ' + kind + ' ' + vmid + (disk ? ', root disk ' + disk : ''),
         [
             pve_id  : guest.id,
             pve_node: guest.node,
