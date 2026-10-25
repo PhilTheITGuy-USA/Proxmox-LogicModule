@@ -237,26 +237,28 @@ Not on the build list. Each has a reason to exist but duplicates something most 
 Everything here is O(guests). It belongs in **one** module, on a 15m-or-longer interval, in the same
 spirit as VMware splitting VM Disk Capacity out of VM Performance. It must
 never be folded into Guest Performance at 5m: that trades away the property that makes this suite
-work at scale, in exchange for metrics that change slowly (snapshots) or matter only when a guest
-is already struggling (pressure).
+work at scale, in exchange for metrics that change slowly, such as snapshots.
 
 **Overlap check: done 2026-10-24.** Each surface was checked against what the built modules emit,
-so no metric is collected twice; what remains is snapshots and pressure.
+so no metric is collected twice. What remains is snapshots, as one module, `Proxmox_VE_Snapshots`
+(spec: `docs/superpowers/specs/2026-10-24-snapshots-design.md`).
 
 | Surface | Source | Caveat |
 |---|---|---|
 | Snapshot count and age of oldest | `/nodes/{node}/{qemu,lxc}/{vmid}/snapshot` | No built module reads snapshots, and in-guest monitoring cannot see them. Snapshot sprawl silently consumes storage until a datastore fills. The response carries a synthetic `current` entry that must be filtered out, or every guest reports at least one snapshot. |
-| CPU, IO and memory pressure (PSI) | `pressurecpusome`, `pressurecpufull`, `pressureiosome`, `pressureiofull`, `pressurememorysome`, `pressurememoryfull` from per-guest `status/current` | On 9.2.3 the six fields are on both a container's and a VM's `status/current`, and not on `/cluster/resources` (lab-read), so they stay O(guests). The VM's read as numbers; the container's did not match a numeric pattern, so they may be strings and must be converted like `loadavg`. Overlaps nothing built: Node Detail's IO wait is node-wide, and guest CPU % is usage, not stall time. |
+
+**Pressure (PSI) is dropped.** On 9.2.3 the six `pressure*` fields are on each guest's
+`status/current` and nowhere cheaper: not on `/cluster/resources`, and not on `/nodes/{node}/status`
+(lab-read), so neither Guest Performance nor Node Detail can carry them for free. Pressure is a short
+rolling average, so it means something only when sampled every few minutes, and one call per guest
+every few minutes is the cost this suite is built to avoid (§2). A node monitored over SSH can still
+read `/proc/pressure` through a Linux module, outside this suite.
 
 **Ballooning is dropped.** Guest Performance already emits `mem`, `maxmem` and `memhost`, and with the
 balloon driver loaded Proxmox derives `mem` from the balloon's own free-memory figure, so `freemem`
 and `maxmem` from `status/current` would be collected twice. The balloon's current target is the
 only new figure, and one value does not justify a per-guest QMP round trip that fails on every guest
 without the driver.
-
-**There is no CPU ready time in Proxmox.** It is an ESXi scheduler metric; KVM does not expose it
-and neither does the PVE API. PSI — time tasks spent stalled waiting for CPU — is a different
-measurement doing the same diagnostic job, and is the only honest substitute.
 
 ### Supporting modules
 
