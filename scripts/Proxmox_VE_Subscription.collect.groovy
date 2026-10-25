@@ -1,10 +1,6 @@
 /*
  * BatchScript collection: Proxmox subscription status and expiry, per online node.
  *
- * Node rows in /cluster/resources already carry a "level" field, which Proxmox_VE_Nodes
- * reports as Subscribed at no extra cost. This module exists for the part that field
- * cannot answer: when the subscription runs out.
- *
  * nextduedate is a "YYYY-MM-DD" string, not an epoch, so it is parsed rather than
  * subtracted. A node with no subscription has no due date at all, and reports none --
  * zero days remaining would read as "expires today" on every unlicensed node in the

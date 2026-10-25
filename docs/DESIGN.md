@@ -164,7 +164,7 @@ NodeDetail is already O(nodes) and that is fine.
 |---|---|---|---|---|
 | `Proxmox_VE_Cluster` | Proxmox VE Cluster | `/cluster/status` + `/cluster/ha/status/current` + `/cluster/resources` | O(1) | One instance, the cluster (wildvalue `cluster`), which on a cluster carries the cluster's topology key. Quorum, expected vs actual votes, node count, HA manager state, and the Tier 1a allocation rollups. On a standalone host `ClusterConfigured` reads 0 and the quorum datapoints are withheld. |
 | `Proxmox_VE_Nodes` | Proxmox VE Nodes | `/cluster/resources?type=node` | O(1) | BatchScript. CPU, memory, uptime, online state. |
-| `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | O(nodes) | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. |
+| `Proxmox_VE_NodeDetail` | Proxmox VE Node Detail | `/nodes/{node}/status` | O(nodes) | Per-node Script. Load average, swap, rootfs — the fields `/cluster/resources` omits. CPU count, memory and uptime stay in `Proxmox_VE_Nodes` only, and the subscription flag in `Proxmox_VE_Subscription` only: each datapoint lives in one module. |
 | `Proxmox_VE_GuestPerformance` | Proxmox VE Guest Performance | `/cluster/resources?type=vm` | O(1) | BatchScript. CPU, memory, network rates, disk IO rates. QEMU + LXC. |
 | `Proxmox_VE_GuestStatus` | Proxmox VE Guest Status | same call | O(1) | BatchScript. Power state, HA state, lock state, uptime. |
 | `Proxmox_VE_StorageCapacity` | Proxmox VE Storage Capacity | `/cluster/resources?type=storage` | O(1) | BatchScript. Used/total/percent, active, shared. |

@@ -1,5 +1,6 @@
 /*
  * Script collection (per node instance): the node metrics that /cluster/resources omits.
+ * CPU count, memory and uptime are in that bulk call, so Proxmox_VE_Nodes reports them.
  *
  * This is the one module in the Tier 1 set that cannot be a BatchScript, because
  * loadavg / swap / rootfs are only exposed per node at /nodes/{node}/status. Node counts
@@ -18,7 +19,6 @@ try {
     }
 
     def status = pveGet('/nodes/' + node + '/status') ?: [:]
-    def memory = status.memory ?: [:]
     def swap = status.swap ?: [:]
     def rootfs = status.rootfs ?: [:]
     def cpuInfo = status.cpuinfo ?: [:]
@@ -33,15 +33,10 @@ try {
     pveEmit(null, 'LoadAverage15m', load.size() > 2 ? load[2] : 0)
 
     def cpuCount = cpuInfo.cpus ?: 0
-    pveEmit(null, 'CPUCount', cpuCount)
     pveEmit(null, 'CPUSockets', cpuInfo.sockets ?: 0)
     pveEmit(null, 'CPUCores', cpuInfo.cores ?: 0)
     // Load per core is the figure that means the same thing across differently sized nodes.
     pveEmit(null, 'LoadPerCore', cpuCount ? pveRound((load ? load[0] : 0.0d) / (cpuCount as double)) : 0)
-
-    pveEmit(null, 'MemoryUsedBytes', memory.used ?: 0)
-    pveEmit(null, 'MemoryCapacityBytes', memory.total ?: 0)
-    pveEmit(null, 'MemoryUsagePercent', pvePercent(memory.used, memory.total))
 
     pveEmit(null, 'SwapUsedBytes', swap.used ?: 0)
     pveEmit(null, 'SwapCapacityBytes', swap.total ?: 0)
@@ -65,8 +60,6 @@ try {
     if (ksm.shared != null) {
         pveEmit(null, 'KSMSharedBytes', ksm.shared)
     }
-
-    pveEmit(null, 'UpTimeSeconds', status.uptime ?: 0)
 
     return 0
 } catch (Exception exception) {

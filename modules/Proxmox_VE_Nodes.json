@@ -49,10 +49,6 @@
     {
       "name": "UpTimeSeconds",
       "description": "Seconds since the node booted."
-    },
-    {
-      "name": "Subscribed",
-      "description": "1 when the node carries a Proxmox subscription. Ships without a threshold: an unsubscribed node is a licensing fact, not a fault."
     }
   ]
 }

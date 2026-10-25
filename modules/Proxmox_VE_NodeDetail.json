@@ -27,27 +27,11 @@
       "description": "15 minute load average."
     },
     {
-      "name": "CPUCount",
-      "description": "Logical CPUs on the node."
-    },
-    {
       "name": "LoadPerCore",
       "description": "1 minute load average divided by logical CPU count.",
       "threshold": "> 1.5 2 4",
       "triggerInterval": 3,
       "alertBody": "Proxmox node ##INSTANCE## has a load of ##VALUE## per core.\n\nThis started at ##START##, ##DURATION## ago."
-    },
-    {
-      "name": "MemoryUsedBytes",
-      "description": "Memory in use, bytes."
-    },
-    {
-      "name": "MemoryCapacityBytes",
-      "description": "Total memory, bytes."
-    },
-    {
-      "name": "MemoryUsagePercent",
-      "description": "Memory utilisation, percent."
     },
     {
       "name": "SwapUsedBytes",
@@ -81,10 +65,6 @@
       "description": "Root filesystem utilisation, percent. A full root filesystem stops pvedaemon accepting work.",
       "threshold": "> 80 90 95",
       "alertBody": "The root filesystem on Proxmox node ##INSTANCE## is ##VALUE##% full.\n\nThis started at ##START##, ##DURATION## ago."
-    },
-    {
-      "name": "UpTimeSeconds",
-      "description": "Seconds since the node booted."
     },
     {
       "name": "CPUSockets",

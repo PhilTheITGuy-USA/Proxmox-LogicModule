@@ -12,7 +12,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Module | Collection | Covers |
 |---|---|---|
 | Proxmox VE Cluster | Script, one instance (the cluster) | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit, migrations running and completed or failed in the last hour |
-| Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
+| Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state |
 | Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
 | Proxmox VE Guest Status | BatchScript | Power state, configuration lock, migrating, HA state; the instance ERIs that draw every guest on the map |
@@ -129,8 +129,8 @@ cluster quorum, HA errors, filesystem and memory utilisation.
 `MemoryOvercommitRatio` are the figures worth watching cluster-wide, but a defensible number is
 entirely site-specific: 4:1 vCPU oversubscription is routine on some clusters and reckless on
 others, and memory overcommit above 1.0 is safe exactly to the extent that ballooning and KSM are
-configured to absorb it. Set them against your own capacity plan. `Subscribed` is unthresholded for
-the same reason in reverse — an unsubscribed node is a licensing fact, not a fault.
+configured to absorb it. Set them against your own capacity plan. Subscription's `Active` is
+unthresholded for the same reason in reverse — an unsubscribed node is a licensing fact, not a fault.
 
 **`Status` on Guest Status deliberately ships with no threshold.** A stopped guest is usually
 stopped on purpose, and alerting on every powered-off VM produces the kind of noise that gets a
