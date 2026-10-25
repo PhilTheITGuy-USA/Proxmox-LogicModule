@@ -91,10 +91,8 @@
     {"title": "Load Average", "verticalLabel": "load", "lines": [{"dp": "LoadAverage1m", "legend": "1 minute", "color": "blue"}, {"dp": "LoadAverage5m", "legend": "5 minutes", "color": "green"}, {"dp": "LoadAverage15m", "legend": "15 minutes", "color": "orange"}]},
     {"title": "Load per Core", "verticalLabel": "load", "lines": [{"dp": "LoadPerCore", "legend": "1 minute, per core"}]},
     {"title": "IO Wait", "verticalLabel": "%", "max": 100, "lines": [{"dp": "IOWaitPercent", "legend": "IO wait", "color": "orange"}]},
-    {"title": "Swap", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "SwapUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "SwapCapacityBytes", "legend": "Total", "color": "gray"}]},
-    {"title": "Swap Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "SwapUsagePercent", "legend": "Swap"}]},
-    {"title": "Root Filesystem", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "RootFSUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "RootFSFreeSpace", "legend": "Free", "color": "green"}, {"dp": "RootFSCapacity", "legend": "Size", "color": "gray"}]},
-    {"title": "Root Filesystem Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "RootFSUsedPercent", "legend": "Used"}]},
+    {"title": "Swap", "verticalLabel": "bytes / %", "scale1024": true, "lines": [{"dp": "SwapUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "SwapCapacityBytes", "legend": "Total", "color": "gray"}, {"dp": "SwapUsagePercent", "legend": "Used %", "color": "navy"}]},
+    {"title": "Root Filesystem", "verticalLabel": "bytes / %", "scale1024": true, "lines": [{"dp": "RootFSUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "RootFSFreeSpace", "legend": "Free", "color": "green"}, {"dp": "RootFSCapacity", "legend": "Size", "color": "gray"}, {"dp": "RootFSUsedPercent", "legend": "Used %", "color": "navy"}]},
     {"title": "KSM Shared Memory", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "KSMSharedBytes", "legend": "Reclaimed by KSM", "color": "teal"}]},
     {"title": "CPU Topology", "verticalLabel": "count", "lines": [{"dp": "CPUSockets", "legend": "Sockets", "color": "blue"}, {"dp": "CPUCores", "legend": "Cores per socket", "color": "green"}]}
   ]

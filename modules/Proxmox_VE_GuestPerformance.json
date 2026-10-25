@@ -88,12 +88,9 @@
     }
   ],
   "graphs": [
-    {"title": "CPU Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "CPUUsagePercent", "legend": "CPU"}]},
-    {"title": "vCPUs", "verticalLabel": "vCPUs", "lines": [{"dp": "CPUCount", "legend": "Allocated"}]},
-    {"title": "Memory", "verticalLabel": "MB", "lines": [{"dp": "MemoryUsedMB", "legend": "Used", "color": "blue"}, {"dp": "MemoryHostMB", "legend": "Host footprint", "color": "orange"}, {"dp": "MemoryCapacityMB", "legend": "Allocated", "color": "gray"}]},
-    {"title": "Memory Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "MemoryUsagePercent", "legend": "Memory"}]},
-    {"title": "Root Disk", "verticalLabel": "GB", "lines": [{"dp": "DiskUsedGB", "legend": "Used", "color": "blue"}, {"dp": "DiskCapacityGB", "legend": "Size", "color": "gray"}]},
-    {"title": "Root Disk Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "DiskUsagePercent", "legend": "Used"}]},
+    {"title": "CPU", "verticalLabel": "% / vCPUs", "lines": [{"dp": "CPUUsagePercent", "legend": "Usage %"}, {"dp": "CPUCount", "legend": "Allocated", "color": "navy"}]},
+    {"title": "Memory", "verticalLabel": "MB / %", "lines": [{"dp": "MemoryUsedMB", "legend": "Used", "color": "blue"}, {"dp": "MemoryHostMB", "legend": "Host footprint", "color": "orange"}, {"dp": "MemoryCapacityMB", "legend": "Allocated", "color": "gray"}, {"dp": "MemoryUsagePercent", "legend": "Used %", "color": "navy"}]},
+    {"title": "Root Disk", "verticalLabel": "GB / %", "lines": [{"dp": "DiskUsedGB", "legend": "Used", "color": "blue"}, {"dp": "DiskCapacityGB", "legend": "Size", "color": "gray"}, {"dp": "DiskUsagePercent", "legend": "Used %", "color": "navy"}]},
     {"title": "Network Throughput", "verticalLabel": "MB/sec", "lines": [{"dp": "DataRateRxMB", "legend": "Received", "color": "blue"}, {"dp": "DataRateTxMB", "legend": "Sent", "color": "green"}]},
     {"title": "Disk Throughput", "verticalLabel": "MB/sec", "lines": [{"dp": "DiskReadRateMB", "legend": "Read", "color": "blue"}, {"dp": "DiskWriteRateMB", "legend": "Written", "color": "orange"}]}
   ]

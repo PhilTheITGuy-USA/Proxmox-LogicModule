@@ -74,8 +74,7 @@
   ],
   "graphs": [
     {"title": "OSD State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Up", "legend": "Up", "color": "green"}, {"dp": "OSDIn", "legend": "In", "color": "teal"}, {"dp": "NoOutFlagSet", "legend": "noout flag set", "color": "orange"}]},
-    {"title": "Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used"}]},
-    {"title": "Capacity", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "UsedBytes", "legend": "Used", "color": "blue"}, {"dp": "Capacity", "legend": "Total", "color": "gray"}]},
+    {"title": "Capacity", "verticalLabel": "bytes / %", "scale1024": true, "lines": [{"dp": "UsedBytes", "legend": "Used", "color": "blue"}, {"dp": "Capacity", "legend": "Total", "color": "gray"}, {"dp": "UsedPercent", "legend": "Used %", "color": "navy"}]},
     {"title": "Latency", "verticalLabel": "milliseconds", "lines": [{"dp": "CommitLatencyMs", "legend": "Commit", "color": "blue"}, {"dp": "ApplyLatencyMs", "legend": "Apply", "color": "orange"}]},
     {"title": "Weight", "verticalLabel": "weight", "lines": [{"dp": "CrushWeight", "legend": "CRUSH weight", "color": "blue"}, {"dp": "Reweight", "legend": "Reweight", "color": "orange"}]},
     {"title": "Placement Groups", "verticalLabel": "PGs", "lines": [{"dp": "PlacementGroups", "legend": "Mapped to this OSD"}]}

@@ -23,8 +23,7 @@
     {"name": "Shared", "description": "1 when the storage is marked shared in the cluster configuration."}
   ],
   "graphs": [
-    {"title": "Capacity", "verticalLabel": "GB", "lines": [{"dp": "UsedGB", "legend": "Used", "color": "blue"}, {"dp": "FreeGB", "legend": "Free", "color": "green"}, {"dp": "CapacityGB", "legend": "Size", "color": "gray"}]},
-    {"title": "Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used"}]},
+    {"title": "Capacity", "verticalLabel": "GB / %", "lines": [{"dp": "UsedGB", "legend": "Used", "color": "blue"}, {"dp": "FreeGB", "legend": "Free", "color": "green"}, {"dp": "CapacityGB", "legend": "Size", "color": "gray"}, {"dp": "UsedPercent", "legend": "Used %", "color": "navy"}]},
     {"title": "Storage State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Status", "legend": "Available", "color": "green"}, {"dp": "Shared", "legend": "Shared", "color": "gray"}]}
   ]
 }
