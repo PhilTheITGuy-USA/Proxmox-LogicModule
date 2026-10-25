@@ -24,7 +24,7 @@
   ],
   "graphs": [
     {"title": "Capacity", "verticalLabel": "GB", "lines": [{"dp": "UsedGB", "legend": "Used", "color": "blue"}, {"dp": "FreeGB", "legend": "Free", "color": "green"}, {"dp": "CapacityGB", "legend": "Size", "color": "black"}]},
-    {"title": "Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used", "color": "blue"}]},
+    {"title": "Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used %", "color": "blue"}, {"dp": "CapacityGB", "legend": "Total size, GB", "color": "black"}]},
     {"title": "Storage State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Status", "legend": "Available", "color": "green"}, {"dp": "Shared", "legend": "Shared", "color": "black"}]}
   ]
 }

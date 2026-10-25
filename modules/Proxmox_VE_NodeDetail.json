@@ -94,7 +94,7 @@
     {"title": "Swap", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "SwapUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "SwapCapacityBytes", "legend": "Total", "color": "black"}]},
     {"title": "Swap Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "SwapUsagePercent", "legend": "Swap", "color": "blue"}]},
     {"title": "Root Filesystem", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "RootFSUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "RootFSFreeSpace", "legend": "Free", "color": "green"}, {"dp": "RootFSCapacity", "legend": "Size", "color": "black"}]},
-    {"title": "Root Filesystem Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "RootFSUsedPercent", "legend": "Used", "color": "blue"}]},
+    {"title": "Root Filesystem Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "RootFSUsedPercent", "legend": "Used %", "color": "blue"}, {"dp": "RootFSCapacity", "legend": "Total size", "color": "black"}], "scale1024": true},
     {"title": "KSM Shared Memory", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "KSMSharedBytes", "legend": "Reclaimed by KSM", "color": "fuchsia"}]},
     {"title": "CPU Topology", "verticalLabel": "count", "lines": [{"dp": "CPUSockets", "legend": "Sockets", "color": "blue"}, {"dp": "CPUCores", "legend": "Cores per socket", "color": "green"}]}
   ]
