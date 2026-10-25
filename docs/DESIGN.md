@@ -240,19 +240,23 @@ never be folded into Guest Performance at 5m: that trades away the property that
 work at scale, in exchange for metrics that are either occasionally useful (snapshots) or frequently
 unavailable (balloon).
 
-Before building it, check each surface below against what the built modules already emit (user
-ruling, 2026-10-23); any overlap is cleaned up first, so no metric is collected twice.
+**Overlap check: done 2026-10-24.** Each surface was checked against what the built modules emit,
+so no metric is collected twice; what remains is snapshots and pressure.
 
 | Surface | Source | Caveat |
 |---|---|---|
-| Ballooning, properly | per-guest `status/current` → `balloon` (actual), `ballooninfo`, `freemem`, `balloon_min`, and `maxmem` overwritten from the balloon's own `max_mem` | `QemuServer.pm` notes the balloon query "fails if balloon driver is not loaded, so this must be the last command". A guest without the driver yields nothing, and it must read as no-data — exactly like QEMU used-disk. |
-| Snapshot count and age of oldest | `/nodes/{node}/{qemu,lxc}/{vmid}/snapshot` | Snapshot sprawl silently consumes storage until a datastore fills. The response carries a synthetic `current` entry that must be filtered out, or every guest reports at least one snapshot. |
-| CPU pressure | `pressurecpusome`, `pressurecpufull` (also `pressureio*`, `pressurememory*`) from `vmstatus()` | See below. |
+| Snapshot count and age of oldest | `/nodes/{node}/{qemu,lxc}/{vmid}/snapshot` | No built module reads snapshots, and in-guest monitoring cannot see them. Snapshot sprawl silently consumes storage until a datastore fills. The response carries a synthetic `current` entry that must be filtered out, or every guest reports at least one snapshot. |
+| CPU, IO and memory pressure (PSI) | `pressurecpusome`, `pressurecpufull`, `pressureiosome`, `pressureiofull`, `pressurememorysome`, `pressurememoryfull` from per-guest `status/current` | On 9.2.3 the six fields are on both a container's and a VM's `status/current`, and not on `/cluster/resources` (lab-read), so they stay O(guests). The VM's read as numbers; the container's did not match a numeric pattern, so they may be strings and must be converted like `loadavg`. Overlaps nothing built: Node Detail's IO wait is node-wide, and guest CPU % is usage, not stall time. |
+
+**Ballooning is dropped.** Guest Performance already emits `mem`, `maxmem` and `memhost`, and with the
+balloon driver loaded Proxmox derives `mem` from the balloon's own free-memory figure, so `freemem`
+and `maxmem` from `status/current` would be collected twice. The balloon's current target is the
+only new figure, and one value does not justify a per-guest QMP round trip that fails on every guest
+without the driver.
 
 **There is no CPU ready time in Proxmox.** It is an ESXi scheduler metric; KVM does not expose it
 and neither does the PVE API. PSI — time tasks spent stalled waiting for CPU — is a different
-measurement doing the same diagnostic job, and is the only honest substitute. Confirm it is
-populated on the target version before designing around it.
+measurement doing the same diagnostic job, and is the only honest substitute.
 
 ### Supporting modules
 
