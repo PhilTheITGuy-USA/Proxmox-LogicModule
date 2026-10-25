@@ -1,6 +1,6 @@
 # Snapshots: how many each guest has, and how old the oldest is
 
-Status: spec, not built; VM response shape lab-confirmed, container shape pending. The Tier 3 module (DESIGN §4), after the overlap check dropped
+Status: built 2026-10-24; response shapes lab-confirmed; portal verification pending (DESIGN §7). The Tier 3 module (DESIGN §4), after the overlap check dropped
 ballooning and pressure.
 
 ## 1. Goal
@@ -38,9 +38,9 @@ Lab-read on 9.2.3 (Node-A, 2026-10-24):
 - Container 100: `pct snapshot` refused with "snapshot feature is not available", because its
   root filesystem is on storage without snapshot support. Its list held only `current`. Such a
   guest reports `SnapshotCount` 0, which is true.
-- A container snapshot's shape is not yet seen. The schema gives it the same fields minus
-  `vmstate`; confirm on a container whose root filesystem is on `local-lvm` before building, or
-  carry a `Limitation:` for containers.
+- Container 103, with two snapshots: the same fields as a VM's minus `vmstate`, `snaptime` a
+  number. The list is not in age order (the older snapshot came first here, the newer on the VM),
+  so the oldest age is the smallest `snaptime`, never the first entry.
 
 ## 3. Design
 

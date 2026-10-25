@@ -240,8 +240,8 @@ never be folded into Guest Performance at 5m: that trades away the property that
 work at scale, in exchange for metrics that change slowly, such as snapshots.
 
 **Overlap check: done 2026-10-24.** Each surface was checked against what the built modules emit,
-so no metric is collected twice. What remains is snapshots, as one module, `Proxmox_VE_Snapshots`
-(spec: `docs/superpowers/specs/2026-10-24-snapshots-design.md`).
+so no metric is collected twice. What remains is snapshots, as one module, `Proxmox_VE_Snapshots`:
+**built 2026-10-24** (spec: `docs/superpowers/specs/2026-10-24-snapshots-design.md`).
 
 | Surface | Source | Caveat |
 |---|---|---|
@@ -407,7 +407,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 
 | | |
 |---|---|
-| Modules built | 14 DataSources, 3 PropertySources, 1 TopologySource |
+| Modules built | 15 DataSources, 3 PropertySources, 1 TopologySource |
 | Scripts assembled | 26 compiled on Groovy 4, plus 3 Collector-only that cannot be |
 | Harness checks | 1053, against a mock Proxmox API |
 | Portal import | **verified** for all 18 — the 14 changed since `fb8aa9b`, `addERI_Proxmox_VE_Guest` among them, re-imported 2026-10-20 |
@@ -420,6 +420,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | `Proxmox_VE_Backups` | **verified** 2026-10-25 — on Node-A with the token holding only `PVEAuditor`: discovery puts the job's six guests (100–103, 105, 106) in the group `backup-4e5f5bfc-094c` and Webapp01 (104) in `No backup job`, with the volume counts (automation01 2 included; nvr01, Media01 and Kiosk01 1 excluded each). Collection: `LastBackupAgeHours` 18.41 for the guests last backed up by the 21:00 run and 1.29 for audio01, whose newest backup was a later manual run; `LastBackupSizeGB` 3.77 for audio01 (logged `3.51GB`, binary) and 7.41 for nvr01, matching its 7,407,222,279-byte archive; Media01 `FailedSinceLastBackup` 1 after a failed run newer than its last good backup; Webapp01 `NotCovered` 1. The Tier 2 dashboard re-imports with 15 widgets, and its Backups tile fills in once the module has stored data (Poll Now stores none) |
 | Migrations (`Proxmox_VE_Cluster`, `Proxmox_VE_GuestStatus`) | **portal-verified** on a two-node cluster: Cluster `MigrationsRunning` 1 during a migration and 0 after, `MigrationsCompletedLastHour` 1 after it, `MigrationsFailedLastHour` 1 after a migration refused for a locked guest. Guest Status `Migrating` portal-verified: 1, with `Locked` 1, on the moving container during its migration, and both 0 after; every other guest read 0 |
+| `Proxmox_VE_Snapshots` | **built, not yet imported** — local checks only. Response shapes lab-read on 9.2.3: a VM's and a container's snapshot lists, `snaptime` and `vmstate` as numbers, `current` without `snaptime`, no `vmstate` on a container, and a container whose storage refuses snapshots listing only `current`. To verify: take a container snapshot and a VM RAM snapshot, check `SnapshotCount`, `OldestSnapshotAgeDays` and `SnapshotsWithRAM`, then delete them |
 | stderr on a successful run | **portal-confirmed: not shown.** Poll Now and Test Script on `Proxmox_VE_Cluster` left `errOutput` empty while `MigrationsFailedLastHour` read 1, from the branch that writes the failed guests to stderr. End-user text therefore points at Proxmox's own Task History, Datacenter > Replication and Ceph views, never at the collection log |
 | Instance graphs | **Cluster portal-verified**: its nine graphs imported and rendered, each with only its own lines, replacing the portal's single all-datapoint default. The graphs of the remaining DataSources use the same build path and key set; **built, not yet imported**. Storage and OSD instances carry their size in the display name (`local-lvm on Node-A (1.8 TB)`), guests their root disk and nodes their root filesystem in the description; to verify, check the names after the next discovery |
 | Alert messages on 17 datapoints | **for end-user review** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. To review: confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |

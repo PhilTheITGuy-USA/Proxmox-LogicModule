@@ -80,13 +80,14 @@ dist/                            GENERATED, gitignored — never edit, never com
   `pveTopoClusterName`, and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a
   guest's MAC prefix with)
 
-**Discovery scripts are shared; collection scripts are not.** Twelve AD bodies back thirteen
-multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription.
+**Discovery scripts are shared; collection scripts are not.** Twelve AD bodies back fourteen
+multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription;
+`Proxmox_VE_Guests.ad.groovy` backs both GuestPerformance and Snapshots.
 The build emits a *copy* per consuming module as `dist/scripts/<Module>.ad.groovy`, so those
 modules discover identical instance sets. Editing a shared AD body changes every module naming it
 in `discoveryScript`.
 
-**Six modules group their instances by node.** GuestStatus, GuestPerformance, Disks,
+**Seven modules group their instances by node.** GuestStatus, GuestPerformance, Snapshots, Disks,
 NodeServices, Certificates and StorageCapacity set `"instanceGroupProperty": "auto.pve_node"`,
 which the build turns into the `groupMethod: "ilp"` / `groupExpr` pair a portal export of a
 hand-grouped module carries. A migrated guest moves to its new node's group on the next discovery
@@ -111,7 +112,7 @@ that can never collect is worse than no instance. A module reading node rows out
 Both bodies emit the same wildvalue, the node's Proxmox `id`, so a module can move from one to
 the other without orphaning its existing instances.
 
-Fourteen DataSources, three PropertySources and one TopologySource. `python build/build.py
+Fifteen DataSources, three PropertySources and one TopologySource. `python build/build.py
 --check` prints the count, and is the fastest way to confirm this table has not drifted.
 
 | Module | Method | Interval | Discovery | Calls per interval |
@@ -130,13 +131,15 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 | `Proxmox_VE_Certificates` | batchscript | 240m | `Certificates.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Disks` | batchscript | 240m | `Disks.ad` | 1 + 1 per online node |
 | `Proxmox_VE_Subscription` | batchscript | 720m | `OnlineNodes.ad` | 1 + 1 per online node |
+| `Proxmox_VE_Snapshots` | batchscript | 60m | `Guests.ad` | 2 + 1 per guest on an online node |
 | `addCategory_Proxmox_VE` | PropertySource, AppliesTo `true()` | PropertySource schedule | — | 1, or 2 on Proxmox |
 | `addERI_Proxmox_VE` | ERI PropertySource, Collector-only, always on | 30m | — | 1 with a token, 0 without |
 | `addERI_Proxmox_VE_Guest` | ERI PropertySource, Collector-only, always on | 30m | — | 0 |
 | `Proxmox_VE_Topology` | TopologySource, Collector-only, always on | 60m | — | 3 + 1 per guest on an online node |
 
-The TopologySource and GuestStatus's discovery are the two O(guests) costs: each reads every
-guest's `config` for its MAC, which is why both run hourly.
+The TopologySource, GuestStatus's discovery and Snapshots are the three O(guests) costs, which is
+why all three run hourly: the first two read every guest's `config` for its MAC, and Snapshots reads
+every guest's snapshot list.
 
 **Never make `Proxmox_VE_Topology` or `addERI_Proxmox_VE` optional.** An ERI module cannot be
 turned off cleanly: the keys it stamped stay in `predef.externalResourceID` after it stops
@@ -298,7 +301,7 @@ true` is set on every multiInstance module and checked by neither the build nor 
 what makes the wildvalue the instance's identity, which is the entire point of the migration-safe
 IDs below. `threshold` is LogicMonitor's `"<op> warn error critical"` string (`"> 90 95 98"`).
 `technicalNotes` carries the per-module rationale shown in the portal; every module has one and
-Exchange review expects it. Of the thirteen modules that discover, nine override `discoveryInterval`
+Exchange review expects it. Of the fourteen modules that discover, ten override `discoveryInterval`
 to `60m`; the four slow ones — Certificates, Disks, NodeServices, Subscription — state `1440m`
 explicitly, which is also the build default.
 
@@ -429,8 +432,8 @@ declared datapoint; nothing enforces the rest.
 **Adding a module drifts more than that table.** Module counts are written out in prose in
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
 `build.py` fails the build when a numbered phrase disagrees with `modules/` — `fourteen
-DataSources`, `3 PropertySources`, `all 18 modules`, `all eighteen:` — but only those shapes; a
-count phrased any other way (`the thirteen modules that discover`) is still unchecked.
+DataSources`, `3 PropertySources`, `all 19 modules`, `all nineteen:` — but only those shapes; a
+count phrased any other way (`the fourteen modules that discover`) is still unchecked.
 
 **Verification status belongs in exactly one place: `docs/DESIGN.md` §7** — including this file,
 which says *what* to verify but not *when* it was. Copies elsewhere go stale unnoticed; record it

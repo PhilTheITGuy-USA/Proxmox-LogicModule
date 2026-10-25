@@ -117,6 +117,8 @@ def hostProps = [
     'pve.api.timeout': '5000',
 ]
 
+// Modules whose collection calls each guest's own node, so a guest on an offline node reports nothing.
+def GUEST_NODE_READ_MODULES = ['Proxmox_VE_Snapshots']
 def AD_LINE = ~/^([A-Za-z0-9_.\-]+)##([^#]*)##([^#]*)####(.*)$/
 def BATCH_LINE = ~/^([A-Za-z0-9_.\-]+)\.([A-Za-z0-9_]+)=(.*)$/
 def PLAIN_LINE = ~/^([A-Za-z0-9_]+)=(.*)$/
@@ -151,6 +153,7 @@ modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.
     def required = declared.findAll { key, conditional -> !conditional }.keySet()
 
     def discovered = []
+    def onOfflineNode = [] as Set
     if (defn.discoveryScript) {
         def run = runScript(new File(scriptsDir, name + '.ad.groovy'), [hostProps: hostProps])
 
@@ -167,6 +170,7 @@ modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.
                 return
             }
             discovered << matcher.group(1)
+            if (matcher.group(4).tokenize('&').contains('auto.pve_node=pve2')) { onOfflineNode << matcher.group(1) }
             // An instance without the grouping property falls outside every node group.
             if (defn.instanceGroupProperty) {
                 note("${name}/ad", matcher.group(4).tokenize('&')
@@ -227,6 +231,13 @@ modulesDir.listFiles({ f -> f.name.endsWith('.json') } as FileFilter).sort { it.
         // A discovery/collection key mismatch is the defect that silently produces
         // instances with permanently empty graphs, so it is checked in both directions.
         discovered.each { id ->
+            // A module that asks each guest's own node has nothing for a guest on the offline
+            // node pve2, and must not pretend otherwise.
+            if (name in GUEST_NODE_READ_MODULES && id in onOfflineNode) {
+                note("${name}/collect", !perInstance.containsKey(id),
+                     "instance ${id} is on offline node pve2 but collected data")
+                return
+            }
             note("${name}/collect", perInstance.containsKey(id),
                  "instance ${id} was discovered but collected no data")
         }
@@ -1048,6 +1059,49 @@ note('call-efficiency', requested.contains('/cluster/resources?type=vm'),
      'guest collection did not use the bulk endpoint')
 note('call-efficiency', !requested.any { it.contains('rrddata') },
      "collection used the redundant rrddata endpoint: ${requested}")
+
+// ---------------------------------------------------------------- Snapshots
+//
+// One instance per guest. Proxmox's "current" entry is never counted, ages are relative to
+// now, RAM snapshots are VM-only, and one unreadable list stops that node's reads this run.
+
+def snapCollect = new File(scriptsDir, 'Proxmox_VE_Snapshots.collect.groovy')
+long snapNow = System.currentTimeMillis().intdiv(1000L)
+def snapCurrent = [description: 'You are here!', digest: 'abc', name: 'current', running: 1]
+def snapAt = { String name, double daysAgo, Integer vmstate = null ->
+    def entry = [description: '', name: name, snaptime: snapNow - (long) (daysAgo * 86400)]
+    if (vmstate != null) { entry.vmstate = vmstate }
+    entry
+}
+def snapGuests = fixtures['/cluster/resources?type=vm'] + [
+    [id: 'lxc/103', type: 'lxc', vmid: 103, node: 'pve1', name: 'ct-snap', status: 'running', template: 0],
+    [id: 'lxc/104', type: 'lxc', vmid: 104, node: 'pve1', name: 'ct-none', status: 'running', template: 0]]
+def snapFixtures = [
+    '/cluster/resources?type=vm'  : snapGuests,
+    '/nodes/pve1/qemu/101/snapshot': [snapAt('newer', 2.0, 1), snapAt('older', 10.0, 1), snapAt('disk-only', 5.0, 0), snapCurrent],
+    '/nodes/pve1/lxc/103/snapshot' : [snapAt('a', 3.0), snapCurrent, snapAt('b', 1.0)],
+    '/nodes/pve1/lxc/104/snapshot' : [snapCurrent],
+]
+def snapRun = withFixtures(snapFixtures) { discoverWith(snapCollect, hostProps) }
+def snap = parseBatch(snapRun.stdout)
+note('snapshots', snapRun.exit == 0 && snap['qemu-101'].SnapshotCount == 3 && snap['qemu-101'].SnapshotsWithRAM == 2 &&
+                  Math.abs(snap['qemu-101'].OldestSnapshotAgeDays - 10.0) < 0.02,
+     "qemu-101 was ${snap['qemu-101']}: ${snapRun.stderr}")
+note('snapshots', snap['lxc-103'].SnapshotCount == 2 && Math.abs(snap['lxc-103'].OldestSnapshotAgeDays - 3.0) < 0.02 &&
+                  !snap['lxc-103'].containsKey('SnapshotsWithRAM'),
+     "lxc-103 was ${snap['lxc-103']}")
+// Only "current": a count of 0 and no age, never an age of 0.
+note('snapshots', snap['lxc-104'] == [SnapshotCount: 0.0d], "lxc-104 was ${snap['lxc-104']}")
+note('snapshots', !snapRun.requests.any { it.startsWith('/nodes/pve2/') || it.contains('/999/') },
+     "asked an offline node's guest or a template: ${snapRun.requests}")
+// One failure stops that node's reads: 101 fails first, so 103 and 104 are skipped.
+def snapBroken = withFixtures(snapFixtures + ['/nodes/pve1/qemu/101/snapshot': null]) { discoverWith(snapCollect, hostProps) }
+note('snapshots', snapBroken.exit == 0 && parseBatch(snapBroken.stdout).isEmpty() &&
+                  !snapBroken.requests.any { it.contains('/lxc/10') } &&
+                  snapBroken.stderr.readLines().count { it.contains('Snapshot reads stopped for node pve1') } == 1,
+     "after a failure: ${snapBroken.stdout} / ${snapBroken.requests} / ${snapBroken.stderr}")
+def snapDead = withFixtures(['/cluster/resources?type=vm': null]) { discoverWith(snapCollect, hostProps) }
+note('snapshots', snapDead.exit == 2, "an unreadable guest list exited ${snapDead.exit}")
 
 server.stop(0)
 

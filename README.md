@@ -25,6 +25,7 @@ SNMP can be layered alongside for the underlying Linux hardware.
 | Proxmox VE Ceph OSD | BatchScript | Per-OSD up/in state, fill level, latency, CRUSH weight |
 | Proxmox VE Replication | BatchScript | Replication job failures, replica staleness, run duration |
 | Proxmox VE Subscription | BatchScript | Subscription status and renewal date, per node |
+| Proxmox VE Snapshots | BatchScript, hourly | Each guest's snapshot count, age of its oldest snapshot, and RAM snapshots |
 | Proxmox VE Topology | TopologySource | Cluster, node and guest vertices and the edges between them |
 | addCategory_Proxmox_VE | PropertySource | Detects Proxmox and sets the category the suite applies to |
 | addERI_Proxmox_VE | PropertySource (ERI) | Gives each node's resource the ERI the topology map attaches to; needs no token |

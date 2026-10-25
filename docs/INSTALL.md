@@ -186,7 +186,7 @@ before installing.
 ### 3.2 Import every module
 
 **Settings → LogicModules → My Module Toolbox → Add → Import from file**, once per `dist/*.json`.
-That is all eighteen: fourteen DataSources, three PropertySources and the TopologySource. There is
+That is all nineteen: fifteen DataSources, three PropertySources and the TopologySource. There is
 no longer any module to create by hand.
 
 `addCategory_Proxmox_VE` applies to every resource in the portal, which is safe only because it is
@@ -334,6 +334,9 @@ form is its Proxmox node name; if it was added by IP with no SNMP or SSH, set `p
 A name that differs from Proxmox's own in anything but case or punctuation matches nothing,
 silently. If the token is on
 every node, the TopologySource runs on every node too — the same map, built once per node.
+
+Proxmox VE Snapshots needs nothing beyond the token either. It reads each guest's snapshot list
+every hour; a guest whose storage cannot take snapshots always reports 0.
 
 ### 3.4 Optional: backup failures in LM Logs as well
 

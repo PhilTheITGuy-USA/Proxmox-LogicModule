@@ -1231,5 +1231,27 @@
       "status": "OK"
     }
   ],
-  "/nodes/pve1/tasks?typefilter=qmigrate&limit=100": []
+  "/nodes/pve1/tasks?typefilter=qmigrate&limit=100": [],
+  "/nodes/pve1/qemu/101/snapshot": [
+    {
+      "description": "",
+      "name": "spec-test",
+      "parent": "test2",
+      "snaptime": 1792899553,
+      "vmstate": 1
+    },
+    {
+      "description": "",
+      "name": "test2",
+      "snaptime": 1792899496,
+      "vmstate": 1
+    },
+    {
+      "description": "You are here!",
+      "digest": "0dc941ed676066b21dfdb906f622b8e225b59703",
+      "name": "current",
+      "parent": "spec-test",
+      "running": 1
+    }
+  ]
 }

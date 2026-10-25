@@ -1,0 +1,26 @@
+{
+  "name": "Proxmox_VE_Snapshots",
+  "displayedAs": "Proxmox VE Snapshots",
+  "description": "Snapshot count, age of the oldest snapshot and RAM snapshots for every QEMU virtual machine and LXC container in a Proxmox VE cluster.",
+  "group": "Proxmox VE",
+  "appliesTo": "hasCategory(\"ProxmoxVE\")",
+  "searchKeywords": "proxmox,pve,vm,qemu,lxc,container,guest,snapshot,storage",
+  "technicalNotes": "BatchScript, one instance per guest, the same instances as Proxmox VE Guest Status and Guest Performance, grouped by node. Templates are excluded.\n\nA snapshot lives on the guest's own storage, so it is not a backup: it keeps every block the guest has changed since it was taken, and old or forgotten snapshots fill storage with nothing else alerting. Proxmox VE Backups covers backups.\n\nCost: one /snapshot call per guest on an online node, plus two list calls, every hour. A guest on an offline node reports nothing until its node returns. If a guest's list cannot be read, that guest reports nothing this run, and the node's remaining guests are skipped so each does not wait for the API timeout.\n\nSnapshotCount does not count the entry Proxmox names current, which stands for the running state. A guest whose storage cannot take snapshots always reports 0. OldestSnapshotAgeDays is empty when a guest has no snapshots. SnapshotsWithRAM is reported for virtual machines only: a RAM snapshot also stores the VM's whole memory, often several GB each.\n\nNo thresholds ship: how many snapshots, and how old, is too many depends on the site, and some keep a long-lived base snapshot on purpose. Reasonable starting points are OldestSnapshotAgeDays > 7 and SnapshotCount > 5.\n\nRequires VM.Audit on /vms, which the PVEAuditor role includes.",
+  "collectionMethod": "batchscript",
+  "collectionInterval": "60m",
+  "multiInstance": true,
+  "useWildValueAsUniqueIdentifier": true,
+  "collectScript": "Proxmox_VE_Snapshots.collect.groovy",
+  "discoveryScript": "Proxmox_VE_Guests.ad.groovy",
+  "instanceGroupProperty": "auto.pve_node",
+  "discoveryInterval": "60m",
+  "datapoints": [
+    {"name": "SnapshotCount", "description": "Snapshots the guest has, not counting Proxmox's current entry."},
+    {"name": "OldestSnapshotAgeDays", "description": "Days since the guest's oldest snapshot was taken. Empty when it has none.", "conditional": true},
+    {"name": "SnapshotsWithRAM", "description": "Snapshots that saved the virtual machine's RAM as well as its disks. Virtual machines only.", "conditional": true}
+  ],
+  "graphs": [
+    {"title": "Snapshots", "verticalLabel": "snapshots", "lines": [{"dp": "SnapshotCount", "legend": "Snapshots", "color": "blue"}, {"dp": "SnapshotsWithRAM", "legend": "With RAM", "color": "orange"}]},
+    {"title": "Oldest Snapshot Age", "verticalLabel": "days", "lines": [{"dp": "OldestSnapshotAgeDays", "legend": "Oldest snapshot", "color": "blue"}]}
+  ]
+}
