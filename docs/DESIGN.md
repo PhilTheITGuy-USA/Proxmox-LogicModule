@@ -237,8 +237,8 @@ Not on the build list. Each has a reason to exist but duplicates something most 
 Everything here is O(guests). It belongs in **one** module, on a 15m-or-longer interval, in the same
 spirit as VMware splitting VM Disk Capacity out of VM Performance. It must
 never be folded into Guest Performance at 5m: that trades away the property that makes this suite
-work at scale, in exchange for metrics that are either occasionally useful (snapshots) or frequently
-unavailable (balloon).
+work at scale, in exchange for metrics that change slowly (snapshots) or matter only when a guest
+is already struggling (pressure).
 
 **Overlap check: done 2026-10-24.** Each surface was checked against what the built modules emit,
 so no metric is collected twice; what remains is snapshots and pressure.
