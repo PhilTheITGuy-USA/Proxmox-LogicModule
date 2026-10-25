@@ -1,6 +1,6 @@
 # Snapshots: how many each guest has, and how old the oldest is
 
-Status: built 2026-10-24; response shapes lab-confirmed; portal verification pending (DESIGN §7). The Tier 3 module (DESIGN §4), after the overlap check dropped
+Status: built and portal-verified 2026-10-24 (DESIGN §7). The Tier 3 module (DESIGN §4), after the overlap check dropped
 ballooning and pressure.
 
 ## 1. Goal
