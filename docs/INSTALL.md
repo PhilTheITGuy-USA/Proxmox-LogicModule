@@ -292,8 +292,8 @@ that is emitted and not drawn, check its Guest Status instance for `predef.exter
 
 **Not supported with `topo.namespace` or `topo.blacklist`.** Those properties rewrite the keys
 LogicMonitor's topology code emits, and Guest Status writes its keys without them, so they would
-silently fail to match. On a resource carrying either, Guest Status's discovery adds no keys and
-says so on stderr, and a guest with no resource of its own is not drawn.
+silently fail to match. On a resource carrying either, Guest Status's discovery adds no keys,
+and a guest with no resource of its own is not drawn.
 
 **Guests are labelled as virtual machines, always.** `addERI_Proxmox_VE_Guest` needs no token. LogicMonitor labels a monitored guest `PhysicalServer`,
 because Proxmox's guest MAC prefix is not on its list of virtual-machine prefixes; this module
@@ -504,7 +504,7 @@ treated as having no token at all and will go quiet rather than erroring.
 **Empty discovery, no error.** Usually the token ACL — see 1.4, then re-run the check in 1.5.
 **Two modules are the exception.** Ceph OSD discovers nothing where Ceph is not installed, and
 Replication discovers nothing where no replication job is defined. Both are the normal result on
-most installs and neither fails; Ceph OSD also says so on stderr in the discovery task log. If the
+most installs and neither fails. If the
 other modules discovered instances, the token is fine.
 
 **A module has instances but no data yet.** Check its collection interval before anything else.

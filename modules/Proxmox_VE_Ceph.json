@@ -37,7 +37,7 @@
     },
     {
       "name": "HealthChecks",
-      "description": "Number of active Ceph health checks. The check names are written to the collection task log.",
+      "description": "Number of active Ceph health checks. The checks are listed under Ceph in the Proxmox web interface, or by running ceph health detail on a node.",
       "conditional": true
     },
     {
