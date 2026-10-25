@@ -133,6 +133,15 @@ COLLECTOR_ONLY_DIR = "collector-only"
 # portal rejects here, rather than renaming it by hand in dist/.
 RESERVED_DATAPOINT_NAMES = {"in"}
 
+# Instance graphs. The key set and value vocabularies are copied from LogicMonitor's own
+# VMware_ESXi_VirtualMachinePerformance export, as the dashboard schema is copied from LM's
+# dashboard exports: the portal drops a key or value it does not know without saying so.
+GRAPH_COLORS = ("blue", "green", "orange", "red", "teal", "fuchsia", "navy", "olive",
+                "maroon", "aqua", "lime", "yellow", "gray", "black")
+GRAPH_LINE_TYPES = ("line", "area", "stack")
+GRAPH_KEYS = {"title", "verticalLabel", "max", "scale1024", "lines"}
+GRAPH_LINE_KEYS = {"dp", "legend", "color", "type"}
+
 EMIT_RE = re.compile(r"""pveEmit\(\s*[^,]+,\s*'([A-Za-z0-9_]+)'""")
 
 # BatchScript post-processor keys are scoped to the instance with this token; see
@@ -197,6 +206,67 @@ PROPERTYSOURCE_REQUIRED_KEYS = [
     "appliesTo",
     "collectScript",
 ]
+
+
+def expand_graph(graph: dict, priority: int) -> dict:
+    """One instance graph, from {"title", "verticalLabel", "lines": [{"dp", "legend"}]}.
+
+    Lines take colours in GRAPH_COLORS order unless a line names its own. A graph with a
+    "max" is rigid, so a percentage or a 0/1 state keeps its scale; one without scales to
+    its data.
+    """
+    lines = graph["lines"]
+    out = {
+        "name": graph["title"],
+        "title": graph["title"],
+        "verticalLabel": graph["verticalLabel"],
+        "min": 0,
+        "rigid": "max" in graph,
+        "scale1024": graph.get("scale1024", False),
+        "timeScale": "1day",
+        "displayPriority": priority,
+        "datapoints": [{"name": line["dp"], "datapointName": line["dp"],
+                        "consolidationFn": "average"} for line in lines],
+        "lines": [{"datapointName": line["dp"], "legend": line["legend"],
+                   "color": line.get("color", GRAPH_COLORS[i % len(GRAPH_COLORS)]),
+                   "type": line.get("type", "line"), "isVirtual": False}
+                  for i, line in enumerate(lines)],
+    }
+    if "max" in graph:
+        out["max"] = graph["max"]
+    return out
+
+
+def check_graphs(defn: dict) -> list[str]:
+    """Every graph line must name a declared datapoint, with LM's own keys and values."""
+    name = defn["name"]
+    declared = {dp["name"] for dp in defn["datapoints"]}
+    problems: list[str] = []
+    titles = [graph.get("title") for graph in defn.get("graphs", [])]
+    for dup in sorted({t for t in titles if titles.count(t) > 1}):
+        problems.append(f"{name}: graph title {dup!r} is used twice")
+    for graph in defn.get("graphs", []):
+        title = graph.get("title")
+        for key in sorted(set(graph) - GRAPH_KEYS):
+            problems.append(f"{name}: graph {title!r} has unknown key {key!r}")
+        for key in ("title", "verticalLabel", "lines"):
+            if not graph.get(key):
+                problems.append(f"{name}: graph {title!r} needs {key}")
+        for line in graph.get("lines", []):
+            for key in sorted(set(line) - GRAPH_LINE_KEYS):
+                problems.append(f"{name}: graph {title!r} line has unknown key {key!r}")
+            if line.get("dp") not in declared:
+                problems.append(f"{name}: graph {title!r} plots {line.get('dp')!r}, "
+                                f"which is not a declared datapoint")
+            if not line.get("legend"):
+                problems.append(f"{name}: graph {title!r} line {line.get('dp')!r} needs a legend")
+            if line.get("color", GRAPH_COLORS[0]) not in GRAPH_COLORS:
+                problems.append(f"{name}: graph {title!r} colour {line['color']!r} is not one "
+                                f"LogicMonitor's exports use")
+            if line.get("type", "line") not in GRAPH_LINE_TYPES:
+                problems.append(f"{name}: graph {title!r} line type {line['type']!r} is not "
+                                f"one of {GRAPH_LINE_TYPES}")
+    return problems
 
 
 def module_type(defn: dict) -> str:
@@ -344,6 +414,8 @@ def build_module(defn: dict) -> tuple[dict, dict[str, str]]:
             for dp in defn["datapoints"]
         ],
     }
+    if defn.get("graphs"):
+        module["graphs"] = [expand_graph(graph, i + 1) for i, graph in enumerate(defn["graphs"])]
 
     if "discoveryScript" in defn:
         discovery = assemble(defn["discoveryScript"])
@@ -411,6 +483,7 @@ def check_module(defn: dict, module: dict) -> list[str]:
     if module.get("multiInstance") and "activeDiscovery" not in module:
         problems.append(f"{name}: multiInstance requires an Active Discovery script")
 
+    problems.extend(check_graphs(defn))
     return problems
 
 
