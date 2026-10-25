@@ -124,7 +124,7 @@
     {"title": "OSDs", "verticalLabel": "OSDs", "lines": [{"dp": "OSDsTotal", "legend": "Total", "color": "blue"}, {"dp": "OSDsUp", "legend": "Up", "color": "green"}, {"dp": "OSDsIn", "legend": "In", "color": "fuchsia"}, {"dp": "OSDsDown", "legend": "Down", "color": "red"}, {"dp": "OSDsOut", "legend": "Out", "color": "orange"}]},
     {"title": "Placement Groups", "verticalLabel": "PGs", "lines": [{"dp": "PGsTotal", "legend": "Total", "color": "blue"}, {"dp": "PGsClean", "legend": "Clean", "color": "green"}, {"dp": "PGsNotClean", "legend": "Not clean", "color": "orange"}]},
     {"title": "Raw Capacity", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "UsedBytes", "legend": "Used", "color": "blue"}, {"dp": "FreeSpace", "legend": "Free", "color": "green"}, {"dp": "Capacity", "legend": "Total", "color": "black"}]},
-    {"title": "Raw Capacity Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used %", "color": "blue"}, {"dp": "Capacity", "legend": "Total raw capacity", "color": "black"}], "scale1024": true},
+    {"title": "Raw Capacity Used", "verticalLabel": "%", "max": 100, "lines": [{"dp": "UsedPercent", "legend": "Used", "color": "blue"}]},
     {"title": "Monitors", "verticalLabel": "monitors", "lines": [{"dp": "MonitorsTotal", "legend": "Total", "color": "blue"}, {"dp": "MonitorsInQuorum", "legend": "In quorum", "color": "green"}]}
   ]
 }
