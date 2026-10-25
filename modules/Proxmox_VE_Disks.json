@@ -51,8 +51,8 @@
     }
   ],
   "graphs": [
-    {"title": "Disk State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "SmartHealthOK", "legend": "SMART healthy", "color": "green"}, {"dp": "SmartHealthKnown", "legend": "SMART verdict known", "color": "gray"}, {"dp": "Mounted", "legend": "Mounted", "color": "blue"}, {"dp": "LifeRemainingKnown", "legend": "Wear reported", "color": "teal"}]},
+    {"title": "Disk State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "SmartHealthOK", "legend": "SMART healthy", "color": "green"}, {"dp": "SmartHealthKnown", "legend": "SMART verdict known", "color": "black"}, {"dp": "Mounted", "legend": "Mounted", "color": "blue"}, {"dp": "LifeRemainingKnown", "legend": "Wear reported", "color": "fuchsia"}]},
     {"title": "SSD Life Remaining", "verticalLabel": "%", "max": 100, "lines": [{"dp": "LifeRemainingPercent", "legend": "Life remaining", "color": "green"}]},
-    {"title": "Size", "verticalLabel": "GB", "lines": [{"dp": "SizeGB", "legend": "Capacity"}]}
+    {"title": "Size", "verticalLabel": "GB", "lines": [{"dp": "SizeGB", "legend": "Capacity", "color": "blue"}]}
   ]
 }

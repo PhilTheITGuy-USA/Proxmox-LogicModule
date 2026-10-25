@@ -132,14 +132,14 @@
     }
   ],
   "graphs": [
-    {"title": "Nodes", "verticalLabel": "nodes", "lines": [{"dp": "NodesTotal", "legend": "Total"}, {"dp": "NodesOnline", "legend": "Online", "color": "green"}, {"dp": "NodesOffline", "legend": "Offline", "color": "red"}, {"dp": "NodesExpected", "legend": "Expected", "color": "gray"}]},
-    {"title": "Quorum Votes", "verticalLabel": "votes", "lines": [{"dp": "Votes", "legend": "Votes"}, {"dp": "ExpectedVotes", "legend": "Expected", "color": "gray"}]},
-    {"title": "Cluster State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Quorate", "legend": "Quorate"}, {"dp": "ClusterConfigured", "legend": "Cluster configured", "color": "gray"}, {"dp": "HAMasterPresent", "legend": "HA master present", "color": "teal"}, {"dp": "HAFencingArmed", "legend": "HA fencing armed", "color": "navy"}]},
-    {"title": "Guests", "verticalLabel": "guests", "lines": [{"dp": "GuestsTotal", "legend": "Total"}, {"dp": "GuestsRunning", "legend": "Running", "color": "green"}]},
-    {"title": "vCPU Allocation", "verticalLabel": "vCPUs", "lines": [{"dp": "VCPUsAllocated", "legend": "Allocated"}, {"dp": "VCPUsCapacity", "legend": "Capacity", "color": "gray"}]},
-    {"title": "Memory Allocation", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "MemoryAllocatedBytes", "legend": "Allocated"}, {"dp": "MemoryCapacityBytes", "legend": "Capacity", "color": "gray"}]},
-    {"title": "Overcommit", "verticalLabel": "ratio", "lines": [{"dp": "VCPUOvercommitRatio", "legend": "vCPU"}, {"dp": "MemoryOvercommitRatio", "legend": "Memory", "color": "orange"}]},
-    {"title": "HA Services", "verticalLabel": "services", "lines": [{"dp": "HAServicesTotal", "legend": "Total"}, {"dp": "HAServicesError", "legend": "In error or fence", "color": "red"}, {"dp": "HAServicesRequestMismatch", "legend": "Not yet in requested state", "color": "orange"}]},
-    {"title": "Migrations", "verticalLabel": "migrations", "lines": [{"dp": "MigrationsRunning", "legend": "Running"}, {"dp": "MigrationsCompletedLastHour", "legend": "Completed, last hour", "color": "green"}, {"dp": "MigrationsFailedLastHour", "legend": "Failed, last hour", "color": "red"}]}
+    {"title": "Nodes", "verticalLabel": "nodes", "lines": [{"dp": "NodesTotal", "legend": "Total", "color": "blue"}, {"dp": "NodesOnline", "legend": "Online", "color": "green"}, {"dp": "NodesOffline", "legend": "Offline", "color": "red"}, {"dp": "NodesExpected", "legend": "Expected", "color": "black"}]},
+    {"title": "Quorum Votes", "verticalLabel": "votes", "lines": [{"dp": "Votes", "legend": "Votes", "color": "blue"}, {"dp": "ExpectedVotes", "legend": "Expected", "color": "black"}]},
+    {"title": "Cluster State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Quorate", "legend": "Quorate", "color": "green"}, {"dp": "ClusterConfigured", "legend": "Cluster configured", "color": "black"}, {"dp": "HAMasterPresent", "legend": "HA master present", "color": "fuchsia"}, {"dp": "HAFencingArmed", "legend": "HA fencing armed", "color": "blue"}]},
+    {"title": "Guests", "verticalLabel": "guests", "lines": [{"dp": "GuestsTotal", "legend": "Total", "color": "blue"}, {"dp": "GuestsRunning", "legend": "Running", "color": "green"}]},
+    {"title": "vCPU Allocation", "verticalLabel": "vCPUs", "lines": [{"dp": "VCPUsAllocated", "legend": "Allocated", "color": "blue"}, {"dp": "VCPUsCapacity", "legend": "Capacity", "color": "black"}]},
+    {"title": "Memory Allocation", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "MemoryAllocatedBytes", "legend": "Allocated", "color": "blue"}, {"dp": "MemoryCapacityBytes", "legend": "Capacity", "color": "black"}]},
+    {"title": "Overcommit", "verticalLabel": "ratio", "lines": [{"dp": "VCPUOvercommitRatio", "legend": "vCPU", "color": "blue"}, {"dp": "MemoryOvercommitRatio", "legend": "Memory", "color": "orange"}]},
+    {"title": "HA Services", "verticalLabel": "services", "lines": [{"dp": "HAServicesTotal", "legend": "Total", "color": "blue"}, {"dp": "HAServicesError", "legend": "In error or fence", "color": "red"}, {"dp": "HAServicesRequestMismatch", "legend": "Not yet in requested state", "color": "orange"}]},
+    {"title": "Migrations", "verticalLabel": "migrations", "lines": [{"dp": "MigrationsRunning", "legend": "Running", "color": "blue"}, {"dp": "MigrationsCompletedLastHour", "legend": "Completed, last hour", "color": "green"}, {"dp": "MigrationsFailedLastHour", "legend": "Failed, last hour", "color": "red"}]}
   ]
 }

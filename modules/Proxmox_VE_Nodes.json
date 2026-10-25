@@ -53,8 +53,10 @@
   ],
   "graphs": [
     {"title": "Node Status", "verticalLabel": "1 = online", "max": 1, "lines": [{"dp": "Status", "legend": "Online", "color": "green"}]},
-    {"title": "CPU", "verticalLabel": "% / CPUs", "lines": [{"dp": "CPUUsagePercent", "legend": "Usage %"}, {"dp": "CPUCount", "legend": "Logical CPUs", "color": "navy"}]},
-    {"title": "Memory", "verticalLabel": "bytes / %", "scale1024": true, "lines": [{"dp": "MemoryUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "MemoryCapacityBytes", "legend": "Total", "color": "gray"}, {"dp": "MemoryUsagePercent", "legend": "Used %", "color": "navy"}]},
-    {"title": "Uptime", "verticalLabel": "seconds", "lines": [{"dp": "UpTimeSeconds", "legend": "Since boot"}]}
+    {"title": "CPU Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "CPUUsagePercent", "legend": "CPU", "color": "blue"}]},
+    {"title": "CPUs", "verticalLabel": "CPUs", "lines": [{"dp": "CPUCount", "legend": "Logical CPUs", "color": "blue"}]},
+    {"title": "Memory", "verticalLabel": "bytes", "scale1024": true, "lines": [{"dp": "MemoryUsedBytes", "legend": "Used", "color": "blue"}, {"dp": "MemoryCapacityBytes", "legend": "Total", "color": "black"}]},
+    {"title": "Memory Usage", "verticalLabel": "%", "max": 100, "lines": [{"dp": "MemoryUsagePercent", "legend": "Memory", "color": "blue"}]},
+    {"title": "Uptime", "verticalLabel": "seconds", "lines": [{"dp": "UpTimeSeconds", "legend": "Since boot", "color": "blue"}]}
   ]
 }

@@ -36,6 +36,6 @@
     }
   ],
   "graphs": [
-    {"title": "Service State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Running", "legend": "Running", "color": "green"}, {"dp": "Failed", "legend": "Failed", "color": "red"}, {"dp": "Enabled", "legend": "Enabled at boot", "color": "blue"}, {"dp": "Installed", "legend": "Installed", "color": "gray"}]}
+    {"title": "Service State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Running", "legend": "Running", "color": "green"}, {"dp": "Failed", "legend": "Failed", "color": "red"}, {"dp": "Enabled", "legend": "Enabled at boot", "color": "blue"}, {"dp": "Installed", "legend": "Installed", "color": "black"}]}
   ]
 }

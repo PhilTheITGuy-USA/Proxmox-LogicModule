@@ -47,9 +47,9 @@
     }
   ],
   "graphs": [
-    {"title": "Job State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Failed", "legend": "Last run failed", "color": "red"}, {"dp": "Running", "legend": "Running", "color": "blue"}, {"dp": "Disabled", "legend": "Disabled", "color": "gray"}]},
+    {"title": "Job State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Failed", "legend": "Last run failed", "color": "red"}, {"dp": "Running", "legend": "Running", "color": "blue"}, {"dp": "Disabled", "legend": "Disabled", "color": "black"}]},
     {"title": "Consecutive Failures", "verticalLabel": "failures", "lines": [{"dp": "FailCount", "legend": "In a row", "color": "red"}]},
-    {"title": "Replica Age", "verticalLabel": "seconds", "lines": [{"dp": "SecondsSinceLastSync", "legend": "Since last good sync"}]},
-    {"title": "Run Duration", "verticalLabel": "seconds", "lines": [{"dp": "DurationSeconds", "legend": "Last run"}]}
+    {"title": "Replica Age", "verticalLabel": "seconds", "lines": [{"dp": "SecondsSinceLastSync", "legend": "Since last good sync", "color": "blue"}]},
+    {"title": "Run Duration", "verticalLabel": "seconds", "lines": [{"dp": "DurationSeconds", "legend": "Last run", "color": "blue"}]}
   ]
 }

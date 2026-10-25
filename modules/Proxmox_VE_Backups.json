@@ -25,9 +25,9 @@
     {"name": "FailedSinceLastBackup", "description": "1 when a backup of this guest has failed since its newest good backup. The reason is in the backup run's entry in the source node's Task History in the Proxmox web interface.", "conditional": true, "threshold": "> 0 0 1", "alertBody": "A backup of ##INSTANCE## has failed since its last good backup, so the newest copy available to restore is older than the job's schedule promises. The failure reason is in the Proxmox task log for the backup run.\n\nThis started at ##START##, ##DURATION## ago."}
   ],
   "graphs": [
-    {"title": "Last Backup Age", "verticalLabel": "hours", "lines": [{"dp": "LastBackupAgeHours", "legend": "Since newest good backup"}]},
-    {"title": "Next Scheduled Run", "verticalLabel": "hours", "lines": [{"dp": "HoursUntilNextRun", "legend": "Until next run"}]},
-    {"title": "Backup Size", "verticalLabel": "GB", "lines": [{"dp": "LastBackupSizeGB", "legend": "Newest backup"}]},
+    {"title": "Last Backup Age", "verticalLabel": "hours", "lines": [{"dp": "LastBackupAgeHours", "legend": "Since newest good backup", "color": "blue"}]},
+    {"title": "Next Scheduled Run", "verticalLabel": "hours", "lines": [{"dp": "HoursUntilNextRun", "legend": "Until next run", "color": "blue"}]},
+    {"title": "Backup Size", "verticalLabel": "GB", "lines": [{"dp": "LastBackupSizeGB", "legend": "Newest backup", "color": "blue"}]},
     {"title": "Volumes", "verticalLabel": "volumes", "lines": [{"dp": "IncludedVolumes", "legend": "Included", "color": "green"}, {"dp": "ExcludedVolumes", "legend": "Excluded", "color": "orange"}]},
     {"title": "Backup State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "FailedSinceLastBackup", "legend": "Failed since last backup", "color": "red"}, {"dp": "NotCovered", "legend": "Not covered by a job", "color": "orange"}, {"dp": "JobEnabled", "legend": "Job enabled", "color": "blue"}]}
   ]

@@ -136,8 +136,9 @@ RESERVED_DATAPOINT_NAMES = {"in"}
 # Instance graphs. The key set and value vocabularies are copied from LogicMonitor's own
 # VMware_ESXi_VirtualMachinePerformance export, as the dashboard schema is copied from LM's
 # dashboard exports: the portal drops a key or value it does not know without saying so.
-GRAPH_COLORS = ("blue", "green", "orange", "red", "teal", "fuchsia", "navy", "olive",
-                "maroon", "aqua", "lime", "yellow", "gray", "black")
+# This suite uses six of that export's colours, the ones that stay distinguishable on screen
+# (gray beside green and navy beside blue were not), and never one twice in a graph.
+GRAPH_COLORS = ("blue", "orange", "green", "red", "fuchsia", "black")
 GRAPH_LINE_TYPES = ("line", "area", "stack")
 GRAPH_KEYS = {"title", "verticalLabel", "max", "scale1024", "lines"}
 GRAPH_LINE_KEYS = {"dp", "legend", "color", "type"}
@@ -211,11 +212,13 @@ PROPERTYSOURCE_REQUIRED_KEYS = [
 def expand_graph(graph: dict, priority: int) -> dict:
     """One instance graph, from {"title", "verticalLabel", "lines": [{"dp", "legend"}]}.
 
-    Lines take colours in GRAPH_COLORS order unless a line names its own. A graph with a
+    A line without a colour takes the first GRAPH_COLORS entry no line in the graph uses. A graph with a
     "max" is rigid, so a percentage or a 0/1 state keeps its scale; one without scales to
     its data.
     """
     lines = graph["lines"]
+    free = [c for c in GRAPH_COLORS if c not in {line.get("color") for line in lines}]
+    colors = [line.get("color") or free.pop(0) for line in lines]
     out = {
         "name": graph["title"],
         "title": graph["title"],
@@ -228,7 +231,7 @@ def expand_graph(graph: dict, priority: int) -> dict:
         "datapoints": [{"name": line["dp"], "datapointName": line["dp"],
                         "consolidationFn": "average"} for line in lines],
         "lines": [{"datapointName": line["dp"], "legend": line["legend"],
-                   "color": line.get("color", GRAPH_COLORS[i % len(GRAPH_COLORS)]),
+                   "color": colors[i],
                    "type": line.get("type", "line"), "isVirtual": False}
                   for i, line in enumerate(lines)],
     }
@@ -249,6 +252,11 @@ def check_graphs(defn: dict) -> list[str]:
         title = graph.get("title")
         for key in sorted(set(graph) - GRAPH_KEYS):
             problems.append(f"{name}: graph {title!r} has unknown key {key!r}")
+        named = [line["color"] for line in graph.get("lines", []) if "color" in line]
+        for dup in sorted({c for c in named if named.count(c) > 1}):
+            problems.append(f"{name}: graph {title!r} uses {dup!r} for two lines")
+        if len(graph.get("lines", [])) > len(GRAPH_COLORS):
+            problems.append(f"{name}: graph {title!r} has more lines than distinct colours")
         for key in ("title", "verticalLabel", "lines"):
             if not graph.get(key):
                 problems.append(f"{name}: graph {title!r} needs {key}")
@@ -262,7 +270,7 @@ def check_graphs(defn: dict) -> list[str]:
                 problems.append(f"{name}: graph {title!r} line {line.get('dp')!r} needs a legend")
             if line.get("color", GRAPH_COLORS[0]) not in GRAPH_COLORS:
                 problems.append(f"{name}: graph {title!r} colour {line['color']!r} is not one "
-                                f"LogicMonitor's exports use")
+                                f"of {GRAPH_COLORS}")
             if line.get("type", "line") not in GRAPH_LINE_TYPES:
                 problems.append(f"{name}: graph {title!r} line type {line['type']!r} is not "
                                 f"one of {GRAPH_LINE_TYPES}")

@@ -279,7 +279,10 @@ carries only its name, description and what deviates — `threshold`, `type: der
 optional `max` (makes the graph rigid: `100` for a percentage, `1` for a 0/1 state) and `scale1024`
 (raw bytes only), and `lines` of `dp`, `legend` and optional `color`/`type` — and `expand_graph`
 turns it into the key set of LogicMonitor's own VMware export. `check_graphs` refuses a line naming
-an undeclared datapoint, an unknown key, or a colour or line type that export does not use. The Active Discovery block, `deleteInactiveInstances: false` included,
+an undeclared datapoint, an unknown key, a line type that export does not use, a colour outside
+`GRAPH_COLORS` (six that stay distinguishable on screen), or one colour twice in a graph. A
+percentage always has a graph of its own, never an axis shared with bytes, MB or GB; the other
+figures about one subject (used, free, total) share one graph. The Active Discovery block, `deleteInactiveInstances: false` included,
 is hardcoded in `build_module` rather than set per module.
 
 **The interval field differs by module type**, so don't copy it across types. DataSources take
