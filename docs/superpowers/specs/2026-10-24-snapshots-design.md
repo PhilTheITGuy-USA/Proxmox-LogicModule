@@ -1,6 +1,6 @@
 # Snapshots: how many each guest has, and how old the oldest is
 
-Status: spec, not built. The Tier 3 module (DESIGN §4), after the overlap check dropped
+Status: spec, not built; VM response shape lab-confirmed, container shape pending. The Tier 3 module (DESIGN §4), after the overlap check dropped
 ballooning and pressure.
 
 ## 1. Goal
@@ -29,22 +29,18 @@ From the published API schema (`apidoc.js`):
   snapshot.
 - The call is made on the node that holds the guest. A guest on an offline node cannot be asked.
 
-To confirm in the lab before building, with one snapshot taken on a container and one on the VM
-(`pct snapshot 100 spec-test`, `qm snapshot 106 spec-test --vmstate 1`):
+Lab-read on 9.2.3 (Node-A, 2026-10-24):
 
-```
-pvesh get /nodes/Node-A/lxc/100/snapshot --output-format json-pretty
-pvesh get /nodes/Node-A/qemu/106/snapshot --output-format json-pretty
-```
-
-Check four things:
-1. `current` is present.
-2. `snaptime` is a number.
-3. `vmstate` is present on the VM's snapshot and absent on the container's.
-4. Whether `snaptime` and `vmstate` come back as numbers or as strings.
-
-Afterwards, remove the test snapshots with `pct delsnapshot 100 spec-test` and
-`qm delsnapshot 106 spec-test`.
+- VM 106, with two RAM snapshots: each real snapshot has `name`, `description`, `snaptime` and
+  `vmstate`, both as **numbers** (`"snaptime" : 1792899553`, `"vmstate" : 1`); the newer one carries
+  `parent` naming the older. The `current` entry has `description` "You are here!", `digest`,
+  `running` and `parent`, and **no `snaptime`**, so it is told apart by `name == 'current'`.
+- Container 100: `pct snapshot` refused with "snapshot feature is not available", because its
+  root filesystem is on storage without snapshot support. Its list held only `current`. Such a
+  guest reports `SnapshotCount` 0, which is true.
+- A container snapshot's shape is not yet seen. The schema gives it the same fields minus
+  `vmstate`; confirm on a container whose root filesystem is on `local-lvm` before building, or
+  carry a `Limitation:` for containers.
 
 ## 3. Design
 
