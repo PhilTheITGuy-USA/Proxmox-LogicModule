@@ -275,7 +275,11 @@ Collector's runtime.
 defaults every datapoint shares (`gauge`, `useValue: output`, `interpretMethod: namevalue`,
 `dataType 7`, `maxDigits 4`) and derives `interpretExpr` from the datapoint name, so an entry
 carries only its name, description and what deviates — `threshold`, `type: derive`, `min`,
-`alertBody`, `conditional`. The Active Discovery block, `deleteInactiveInstances: false` included,
+`alertBody`, `conditional`. A DataSource's `graphs` list is short too — `title`, `verticalLabel`,
+optional `max` (makes the graph rigid: `100` for a percentage, `1` for a 0/1 state) and `scale1024`
+(raw bytes only), and `lines` of `dp`, `legend` and optional `color`/`type` — and `expand_graph`
+turns it into the key set of LogicMonitor's own VMware export. `check_graphs` refuses a line naming
+an undeclared datapoint, an unknown key, or a colour or line type that export does not use. The Active Discovery block, `deleteInactiveInstances: false` included,
 is hardcoded in `build_module` rather than set per module.
 
 **The interval field differs by module type**, so don't copy it across types. DataSources take
@@ -411,9 +415,11 @@ status on a cluster without HA — gets its own inner `try` and simply omits its
 
 ## Editing checklist
 
-Adding or changing a datapoint touches three places: the `pveEmit` call in the collection script,
-the `datapoints` array in `modules/<Module>.json`, and the coverage table in `README.md`. The build
-enforces the first two agreeing; nothing enforces the third.
+Adding or changing a datapoint touches four places: the `pveEmit` call in the collection script,
+the `datapoints` array in `modules/<Module>.json`, a line in one of that file's `graphs` (related
+datapoints share a graph; unrelated ones never do, or the graph becomes unreadable), and the coverage
+table in `README.md`. The build enforces the first two agreeing and that every graph line names a
+declared datapoint; nothing enforces the rest.
 
 **Adding a module drifts more than that table.** Module counts are written out in prose in
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in

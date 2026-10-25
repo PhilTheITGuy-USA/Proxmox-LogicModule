@@ -21,5 +21,9 @@
     {"name": "Migrating", "description": "1 while the guest is being migrated (Proxmox's migrate lock)."},
     {"name": "HAManaged", "description": "1 when the guest is managed by the HA stack."},
     {"name": "HAError", "description": "1 when the HA stack reports this guest in an error or fence state.", "threshold": "> 0 0 1", "alertBody": "Proxmox guest ##INSTANCE## is in an HA error or fence state. The cluster could not keep the guest running on its assigned node.\n\nThis started at ##START##, ##DURATION## ago."}
+  ],
+  "graphs": [
+    {"title": "Guest State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Status", "legend": "Running", "color": "green"}, {"dp": "Locked", "legend": "Locked", "color": "orange"}, {"dp": "Migrating", "legend": "Migrating", "color": "teal"}, {"dp": "HAManaged", "legend": "HA managed", "color": "gray"}, {"dp": "HAError", "legend": "HA error or fence", "color": "red"}]},
+    {"title": "Uptime", "verticalLabel": "seconds", "lines": [{"dp": "UpTimeSeconds", "legend": "Since start"}]}
   ]
 }

@@ -34,5 +34,8 @@
       "name": "Installed",
       "description": "0 when systemd has no such unit on this node, which is normal for services tied to features the node does not run."
     }
+  ],
+  "graphs": [
+    {"title": "Service State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Running", "legend": "Running", "color": "green"}, {"dp": "Failed", "legend": "Failed", "color": "red"}, {"dp": "Enabled", "legend": "Enabled at boot", "color": "blue"}, {"dp": "Installed", "legend": "Installed", "color": "gray"}]}
   ]
 }

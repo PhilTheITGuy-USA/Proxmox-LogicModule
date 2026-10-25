@@ -34,5 +34,11 @@
       "description": "Days since Proxmox last validated the key against the subscription server.",
       "conditional": true
     }
+  ],
+  "graphs": [
+    {"title": "Subscription State", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Active", "legend": "Active", "color": "green"}]},
+    {"title": "Days Until Due", "verticalLabel": "days", "lines": [{"dp": "DaysUntilDue", "legend": "Days left"}]},
+    {"title": "Days Since Last Check", "verticalLabel": "days", "lines": [{"dp": "DaysSinceLastCheck", "legend": "Since key last validated", "color": "orange"}]},
+    {"title": "Sockets Covered", "verticalLabel": "sockets", "lines": [{"dp": "Sockets", "legend": "Covered by the key"}]}
   ]
 }

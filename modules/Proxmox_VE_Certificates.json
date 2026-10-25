@@ -31,5 +31,10 @@
       "name": "PublicKeyBits",
       "description": "Certificate public key size in bits."
     }
+  ],
+  "graphs": [
+    {"title": "Days Until Expiry", "verticalLabel": "days", "lines": [{"dp": "DaysUntilExpiry", "legend": "Days left"}]},
+    {"title": "Expired", "verticalLabel": "1 = yes", "max": 1, "lines": [{"dp": "Expired", "legend": "Expired", "color": "red"}]},
+    {"title": "Key Size", "verticalLabel": "bits", "lines": [{"dp": "PublicKeyBits", "legend": "Public key"}]}
   ]
 }
