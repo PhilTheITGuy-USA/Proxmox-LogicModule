@@ -1202,5 +1202,32 @@
       "n": 4,
       "t": "TASK ERROR: job errors"
     }
-  ]
+  ],
+  "/cluster/tasks": [
+    {
+      "upid": "UPID:pve1:0000AAAA:00F00D00:6AD0AAAA:vncshell::root@pam:",
+      "node": "pve1",
+      "type": "vncshell",
+      "id": "",
+      "user": "root@pam",
+      "starttime": 1792684000,
+      "endtime": 1792684100,
+      "status": "OK"
+    }
+  ],
+  "/nodes/pve1/tasks?typefilter=vzmigrate&limit=100": [
+    {
+      "upid": "UPID:pve1:003C61A0:01AD7B78:6ADA316B:vzmigrate:108:root@pam:",
+      "node": "pve1",
+      "type": "vzmigrate",
+      "id": "108",
+      "user": "root@pam",
+      "pid": 3957152,
+      "pstart": 28146552,
+      "starttime": 1792684395,
+      "endtime": 1792684499,
+      "status": "OK"
+    }
+  ],
+  "/nodes/pve1/tasks?typefilter=qmigrate&limit=100": []
 }

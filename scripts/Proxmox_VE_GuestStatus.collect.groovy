@@ -25,6 +25,8 @@ try {
         pveEmit(id, 'Status', status == 'running' ? 1 : 0)
         pveEmit(id, 'UpTimeSeconds', guest.uptime ?: 0)
         pveEmit(id, 'Locked', guest.lock ? 1 : 0)
+        // Proxmox holds the "migrate" lock for the whole of a migration.
+        pveEmit(id, 'Migrating', guest.lock?.toString() == 'migrate' ? 1 : 0)
         pveEmit(id, 'HAManaged', haState ? 1 : 0)
         pveEmit(id, 'HAError', haErrorStates.contains(haState) ? 1 : 0)
     }

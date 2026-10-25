@@ -11,11 +11,11 @@ SNMP can be layered alongside for the underlying Linux hardware.
 
 | Module | Collection | Covers |
 |---|---|---|
-| Proxmox VE Cluster | Script, one instance (the cluster) | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit |
+| Proxmox VE Cluster | Script, one instance (the cluster) | Corosync quorum, votes, node counts, HA manager state, cluster-wide vCPU and memory allocation and overcommit, migrations running and completed or failed in the last hour |
 | Proxmox VE Nodes | BatchScript | Per-node CPU, memory, uptime, online state, subscription |
 | Proxmox VE Node Detail | Script, per node | Load average, load per core, swap, root filesystem, IO wait, KSM sharing, socket and core counts |
 | Proxmox VE Guest Performance | BatchScript | Per-guest CPU, memory, network and disk throughput (QEMU + LXC) |
-| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, HA state; the instance ERIs that draw every guest on the map |
+| Proxmox VE Guest Status | BatchScript | Power state, configuration lock, migrating, HA state; the instance ERIs that draw every guest on the map |
 | Proxmox VE Storage Capacity | BatchScript | Per-storage capacity, free space, availability |
 | Proxmox VE Backups | BatchScript, per guest per job | Backup jobs and their guests, each guest's last good backup (age, size), its included and excluded volumes, failed backups, and guests no job covers |
 | Proxmox VE Certificates | BatchScript | TLS certificate expiry, per certificate per node |

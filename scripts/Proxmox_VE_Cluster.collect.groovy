@@ -98,6 +98,54 @@ try {
             haException.message)
     }
 
+    /*
+     * Migrations. Each is its own task -- vzmigrate for a container, qmigrate for a VM --
+     * with the guest's vmid as its id and its own status, recorded on the node it started
+     * from. /cluster/tasks shows running tasks cluster-wide but keeps only about 25 recent
+     * tasks of every type, so finished migrations are counted from each online node's own,
+     * much longer history. A node whose history cannot be read withholds the hourly counts
+     * rather than undercounting them; running migrations are reported either way.
+     */
+    def migrationTypes = ['vzmigrate', 'qmigrate']
+    try {
+        def running = (pveGet('/cluster/tasks') ?: []).count { task ->
+            task.type?.toString() in migrationTypes && task.endtime == null && task.status == null
+        }
+        pveEmit(null, 'MigrationsRunning', running)
+    } catch (Exception tasksException) {
+        System.err.println('Running migrations not read: ' + tasksException.message)
+    }
+
+    def hourAgo = System.currentTimeMillis() / 1000L - 3600
+    def completed = 0
+    def failed = []
+    def counted = true
+    nodes.findAll { (it.online == null ? true : it.online as boolean) && it.name }.each { node ->
+        migrationTypes.each { type ->
+            // Per-node try: one unreachable node must not cost the others their data.
+            try {
+                def path = '/nodes/' + node.name + '/tasks?typefilter=' + type + '&limit=100'
+                (pveGet(path) ?: []).findAll { it.starttime != null && (it.starttime as long) >= hourAgo }.each { task ->
+                    if (task.status?.toString() == 'OK') {
+                        completed++
+                    } else if (task.status) {
+                        failed << ('guest ' + task.id + ' from ' + node.name + ' (' + task.status + ')')
+                    }
+                }
+            } catch (Exception nodeException) {
+                counted = false
+                System.err.println('Migrations not read from node ' + node.name + ': ' + nodeException.message)
+            }
+        }
+    }
+    if (counted) {
+        pveEmit(null, 'MigrationsCompletedLastHour', completed)
+        pveEmit(null, 'MigrationsFailedLastHour', failed.size())
+        if (failed) {
+            System.err.println('Migrations failed in the last hour: ' + failed.join(', '))
+        }
+    }
+
     return 0
 } catch (Exception exception) {
     System.err.println('Proxmox cluster collection failed: ' + exception.message)

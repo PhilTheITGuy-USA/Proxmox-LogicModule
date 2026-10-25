@@ -218,12 +218,19 @@ The list above was written from "what do the competitor suites monitor". It is e
 infrastructure-facing, and it misses what an operator running guests asks for. These fill that gap,
 and all of them preserve the architecture.
 
-| Module | Source | Cost | Rationale |
-|---|---|---|---|
-| `Proxmox_VE_Migrations` | `/nodes/{node}/tasks` with a migration `typefilter`; `source=active` for in-flight | O(nodes) | Migrations running, and migrations failed in the window. Also the natural place to see an HA failover storm, which the current HA datapoints imply but cannot show. |
-| `Proxmox_VE_NodeNetwork` | `/cluster/metrics/export` `net_in` / `net_out` | O(1) | A real blind spot: node rows in `/cluster/resources` carry no network counters at all. See §2. |
+Both are now part of built modules:
 
 Backup status — age of the last good backup and failed runs — is folded into `Proxmox_VE_Backups` (Tier 2 row above) rather than built as its own module.
+
+**Migrations are folded into existing modules: built 2026-10-25.** A migration is its own task — `vzmigrate` for a container, `qmigrate` for a VM — with the guest's VMID as its `id` and its own `status`, recorded on the node it started from (lab-read). `Proxmox_VE_Cluster` gains `MigrationsRunning` from `/cluster/tasks`, which lists running tasks cluster-wide but keeps only about 25 recent tasks of every type, and `MigrationsCompletedLastHour` / `MigrationsFailedLastHour` from each online node's own history (`typefilter`, `limit=100`), so it now costs 4 + 2 per online node every 5 minutes. `Proxmox_VE_GuestStatus` gains `Migrating` from the `migrate` lock it already reads, at no cost. A separate module would have repeated the Cluster module's single instance for three counts.
+
+### Might want, not needed
+
+Not on the build list. Each has a reason to exist but duplicates something most deployments already have.
+
+| Module | Source | Cost | Why it waits |
+|---|---|---|---|
+| `Proxmox_VE_NodeNetwork` | `/cluster/metrics/export` | O(1) | Node rows in `/cluster/resources` carry no network counters, but a node monitored over SNMP already gets per-interface traffic from LogicMonitor's standard interface module, in more detail. Only a node without SNMP gains anything. The schema does not list the export's metric names, so `net_in` / `net_out` are unconfirmed. |
 
 ### Tier 3 — per-guest detail, throttled
 
@@ -406,6 +413,7 @@ The single record of what is proven and what is not. Nothing else in the reposit
 | Node Detail on online-only discovery | **verified** — re-imported 2026-09-23; existing instances and their history kept, since both discovery bodies emit the node's `id` |
 | PropertySource property names | **verified** — `addCategory_Proxmox_VE` prints bare `pve.version` / `pve.release` / `pve.clustered`; the portal stores them as `auto.pve.*`, matching LogicMonitor's docs. Docs corrected 2026-10-14 |
 | `Proxmox_VE_Backups` | **verified** 2026-10-25 — on Node-A with the token holding only `PVEAuditor`: discovery puts the job's six guests (100–103, 105, 106) in the group `backup-4e5f5bfc-094c` and Webapp01 (104) in `No backup job`, with the volume counts (automation01 2 included; nvr01, Media01 and Kiosk01 1 excluded each). Collection: `LastBackupAgeHours` 18.41 for the guests last backed up by the 21:00 run and 1.29 for audio01, whose newest backup was a later manual run; `LastBackupSizeGB` 3.77 for audio01 (logged `3.51GB`, binary) and 7.41 for nvr01, matching its 7,407,222,279-byte archive; Media01 `FailedSinceLastBackup` 1 after a failed run newer than its last good backup; Webapp01 `NotCovered` 1. The Tier 2 dashboard re-imports with 15 widgets, and its Backups tile fills in once the module has stored data (Poll Now stores none) |
+| Migrations (`Proxmox_VE_Cluster`, `Proxmox_VE_GuestStatus`) | **Cluster counts portal-verified** on a two-node cluster: `MigrationsRunning` 1 during a migration and 0 after, `MigrationsCompletedLastHour` 1 after it, `MigrationsFailedLastHour` 1 after a migration refused for a locked guest. The guest's `Migrating` is built, not yet observed; to verify, Poll Now on the moving guest's Guest Status instance during a migration |
 | Alert messages on 17 datapoints | **for end-user review** — added 2026-10-13 (`4d78666`) across Ceph, CephOSD, Certificates, Disks, GuestPerformance, NodeDetail, Nodes, Replication and Subscription; local checks only. To review: confirm a raised alert shows its message with `##INSTANCE##` / `##VALUE##` / `##HOST##` filled in |
 | Topology AppliesTo | **verified** 2026-10-25 — `Proxmox_VE_Topology` applies on `hasCategory("ProxmoxVE")`; `addERI_Proxmox_VE` on the token, `pve.topology.node`, or a `-pve` kernel without a guest MAC; GuestStatus and Cluster discovery always carry their keys. The selector's inputs: `system.sysinfo` carries `-pve` and `PMX` on `Node-A` and `Node-B` and on the LXC guests `Nvr01` and `Music Assistant`, whose `auto.network.mac_address` starts `bc:24:11` and the nodes' does not (`e0:51:d8…`, `dc:0e:a1…`); a Raspberry Pi's kernel (`6.18.39+rpt-rpi-v8`) has neither. After re-import, Test AppliesTo on `addERI_Proxmox_VE` matches exactly `Node-A` and `Node-B` (no guest, no Pi), and on `Proxmox_VE_Topology` the same two, each holding its own token (`Node-B` is standalone, `auto.pve.clustered=false`); with no topology property anywhere, the Cluster instance carries `proxmoxve--labcluster`, Nvr01's Guest Status instance carries `bc:24:11:0e:00:03` as type `VirtualMachine`, and the map draws correctly |
 | Stamped ERI keys after the module stops applying | **verified** 2026-10-25 — they **persist**: with `addERI_Proxmox_VE` no longer applying to `Node-B` from 21:15 to 11:56 the next day, longer than a full cycle of every other ERI module on the resource (`addERI_Linux`, 12 hours, also run at 30 minutes in that window), its `predef.externalResourceID` still carried `proxmoxve--node--node-b--192-0-2-211` and `proxmoxve--node-b--node-b`. When the module applies again it re-stamps them. `predef.externalResourceID` is an auto property the portal will not let a user delete |

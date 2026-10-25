@@ -114,7 +114,7 @@ Fourteen DataSources, three PropertySources and one TopologySource. `python buil
 
 | Module | Method | Interval | Discovery | Calls per interval |
 |---|---|---|---|---|
-| `Proxmox_VE_Cluster` | script, one instance | 5m | `Cluster.ad` | 3, O(1); hourly discovery 1 |
+| `Proxmox_VE_Cluster` | script, one instance | 5m | `Cluster.ad` | 4 + 2 per online node (migration history); hourly discovery 1 |
 | `Proxmox_VE_Ceph` | script | 5m | — (single instance) | 1, O(1) |
 | `Proxmox_VE_Backups` | batchscript | 60m | `Backups.ad` | 3 + 1 per job + 1 per online node, + 1 log per backup run read (normally one) |
 | `Proxmox_VE_NodeDetail` | script, per instance | 5m | `OnlineNodes.ad` | 1 per node |

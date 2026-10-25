@@ -962,6 +962,63 @@ note('backups-ad', backupNoJobs.exit == 2, "discovery without /cluster/backup ex
 def backupDead = runScript(backupsCollect, [hostProps: hostProps + ['pve.api.url': 'http://127.0.0.1:1']])
 note('backups-collect', backupDead.exit == 2, "collection with the API down exited ${backupDead.exit}")
 
+// ---------------------------------------------------------------- Migrations
+//
+// Running migrations from /cluster/tasks; finished ones from each online node's vzmigrate and
+// qmigrate history over the last hour. Times are relative to now, so they are built here.
+
+def clusterCollect = new File(scriptsDir, 'Proxmox_VE_Cluster.collect.groovy')
+long nowSec = System.currentTimeMillis().intdiv(1000L)
+def migTask = { String type, String id, long ago, String status ->
+    def task = [upid: "UPID:pve1:00000000:00000000:00000000:${type}:${id}:root@pam:".toString(), node: 'pve1',
+                type: type, id: id, user: 'root@pam', starttime: nowSec - ago]
+    if (status) { task.endtime = nowSec - ago + 60; task.status = status }
+    task
+}
+def parsePlain = { String stdout ->
+    stdout.readLines().collectEntries { line ->
+        def matcher = PLAIN_LINE.matcher(line)
+        matcher.matches() ? [(matcher.group(1)): matcher.group(2) as double] : [:]
+    }
+}
+def migrationFixtures = [
+    '/cluster/tasks': [migTask('vzmigrate', '108', 30, null), migTask('vzdump', '', 30, null),
+                       migTask('qmigrate', '101', 200, 'OK')],
+    '/nodes/pve1/tasks?typefilter=vzmigrate&limit=100': [migTask('vzmigrate', '108', 600, 'OK'),
+                                                        migTask('vzmigrate', '109', 1200, 'migration aborted'),
+                                                        migTask('vzmigrate', '110', 7200, 'migration aborted')],
+    '/nodes/pve1/tasks?typefilter=qmigrate&limit=100': [migTask('qmigrate', '101', 300, 'OK')],
+]
+def migRun = withFixtures(migrationFixtures) { discoverWith(clusterCollect, hostProps) }
+def migData = parsePlain(migRun.stdout)
+// One running (no end time); two finished OK and one failed in the hour; one failure older.
+note('migrations', migRun.exit == 0 && migData.MigrationsRunning == 1 &&
+                   migData.MigrationsCompletedLastHour == 2 && migData.MigrationsFailedLastHour == 1,
+     "migration counts were ${migData.subMap(['MigrationsRunning', 'MigrationsCompletedLastHour', 'MigrationsFailedLastHour'])}: ${migRun.stderr}")
+note('migrations', migRun.stderr.contains('guest 109 from pve1 (migration aborted)') && !migRun.stderr.contains('guest 110'),
+     "the failed guest was not named, or an old failure was: ${migRun.stderr}")
+note('migrations', !migRun.requests.any { it.startsWith('/nodes/pve2/') },
+     "asked an offline node: ${migRun.requests}")
+// A node whose history cannot be read withholds the hourly counts; running is still reported.
+def migPartial = withFixtures(migrationFixtures + ['/nodes/pve1/tasks?typefilter=qmigrate&limit=100': null]) {
+    discoverWith(clusterCollect, hostProps)
+}
+def partialData = parsePlain(migPartial.stdout)
+note('migrations', migPartial.exit == 0 && partialData.MigrationsRunning == 1 &&
+                   !partialData.containsKey('MigrationsCompletedLastHour') && !partialData.containsKey('MigrationsFailedLastHour'),
+     "an unread history reported ${partialData}")
+
+// Guest Status: Migrating follows Proxmox's migrate lock, and only that lock.
+def statusCollect = new File(scriptsDir, 'Proxmox_VE_GuestStatus.collect.groovy')
+def migratingVms = fixtures['/cluster/resources?type=vm'].collect { guest ->
+    guest.vmid == 101 ? guest + [lock: 'migrate'] : guest
+}
+def migratingRun = withFixtures(['/cluster/resources?type=vm': migratingVms]) { discoverWith(statusCollect, hostProps) }
+def migrating = parseBatch(migratingRun.stdout)
+note('migrations', migrating['qemu-101']?.Migrating == 1 && migrating['qemu-101']?.Locked == 1 &&
+                   migrating['qemu-102']?.Migrating == 0 && migrating['qemu-102']?.Locked == 1,
+     "Migrating was 101 ${migrating['qemu-101']} / 102 (backup lock) ${migrating['qemu-102']}")
+
 // The entire justification for the BatchScript design.
 note('call-efficiency', requested.contains('/cluster/resources?type=vm'),
      'guest collection did not use the bulk endpoint')
