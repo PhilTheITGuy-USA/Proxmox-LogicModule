@@ -282,6 +282,25 @@ def pveTopoNodeKeys = { String node, List ips ->
 }
 
 /*
+ * Whether a /cluster/status row -- in practice the one marked local, the node that
+ * answered -- is the node this resource stands for. On a node holding the token it is. On a
+ * resource for a cluster API address (a virtual IP, a reverse proxy or a health-checked DNS
+ * name, docs/INSTALL.md 4.1.1) it is whichever node is behind the address at that moment,
+ * and taking its identity would stamp that node's keys on a second resource. The row is this
+ * resource when its address is among system.ips, which every node's resource needs anyway
+ * for its IP key to match, or when its name is the resource's own node name.
+ */
+def pveTopoIsLocalNode = { Map row ->
+    if (!row) { return false }
+    def address = pveTopoIp(row.ip?.toString())
+    def ownAddresses = (pveHostProp('system.ips') ?: '').tokenize(',').collect { pveTopoIp(it) }
+    if (address && ownAddresses.contains(address)) { return true }
+    def name = row.name?.toString()?.trim()?.tokenize('.')?.getAt(0)
+    def ownName = pveTopoNodeName()
+    return name != null && ownName != null && name.equalsIgnoreCase(ownName)
+}
+
+/*
  * The one key a node vertex carries. Not both: lm.topo joins a vertex's keys into a single
  * ID, and the portal then matches only a resource carrying every one of them, so a
  * token-less node stamped with the IP key alone would go unmatched. The IP key whenever

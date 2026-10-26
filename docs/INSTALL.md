@@ -158,7 +158,7 @@ secret is readable by anyone who can view the resource. Do not shorten it to `pv
 
 | Property | Default | Notes |
 |---|---|---|
-| `pve.api.url` | `https://<system.hostname>:8006` | Set only if the API is on a different address or port |
+| `pve.api.url` | `https://<system.hostname>:8006` | Set only if the API is on a different address or port. For a cluster API address, see §4.1.1 |
 | `pve.api.port` | `8006` | Used only when building the default URL |
 | `pve.api.timeout` | `10000` | Connect and read timeout, milliseconds |
 | `pve.api.insecure` | `false` | `true` accepts self-signed certificates. **Lab use only** |
@@ -387,10 +387,65 @@ then collects the *same* cluster-wide data, so each guest appears as an instance
 Proxmox resource. On a 3-node cluster that is 3× the instances and 3× the API calls for identical
 numbers. Choose this only if you have decided the redundancy is worth the duplication.
 
+**One resource for a cluster API address (for end-user review).** Resilient *and* without
+duplication: the token goes on a resource that stands for an address any healthy node answers on,
+rather than on a node. Because every node's API serves the whole cluster, it does not matter which
+node is behind the address at any moment. This layout has not been tested against a live cluster;
+§4.1.1 sets it up.
+
 For a **standalone host**, the question does not arise — set it on that host.
 
 Because the PropertySource stays silent when there is no token, **whichever hosts you set the
 property on are exactly the hosts the suite applies to.** The property is the switch.
+
+#### 4.1.1 A cluster API address
+
+**For end-user review: this layout has not been tested against a live cluster.** It needs no
+change to how the modules collect, only to where the token lives.
+
+**1. Provide an address that always reaches a healthy node.** Any of these:
+
+| Method | How it moves | Notes |
+|---|---|---|
+| **Virtual IP** (keepalived, or similar, on the nodes) | the VIP moves to a surviving node | simplest; the nodes need a shared network segment |
+| **Reverse proxy or load balancer** (HAProxy, nginx, a hardware balancer) in front of port 8006 | health checks stop sending requests to a dead node | must pass the `Authorization` header through, which both HAProxy and nginx do by default; the proxy itself must not be a single point of failure |
+| **DNS** with a health-checked record | the record stops naming a dead node | plain round-robin is **not** enough: the Collector's Java runtime connects to one resolved address and caches the lookup, so it keeps trying a dead node |
+
+**2. Give the address a certificate the Collector trusts.** Each Proxmox node's default certificate
+names only that node, so a request to the shared name fails verification. Either:
+
+- install a certificate whose names include the shared name on **every** node
+  (**Datacenter → *node* → System → Certificates**), because whichever node holds the VIP answers
+  with its own; or
+- terminate TLS on the reverse proxy with a certificate for the shared name.
+
+`pve.api.insecure=true` also works, but is for labs only, as everywhere else in this suite.
+
+**3. Add the address to LogicMonitor as its own resource**, by its DNS name (e.g.
+`pve-api.example.com`), and put `pve.api.token.credential` on that resource and nowhere else.
+Its `system.hostname` is the shared name, so the default `pve.api.url` already points at it;
+set `pve.api.url` only for a different port or path. **Do not give this resource SNMP
+credentials.** SNMP to a virtual IP answers as whichever node holds it, and the resource
+would take on that node's addresses, MAC and kernel string, which confuses the topology map and
+can make LogicMonitor treat it as a node. Ping and the HTTPS API are all it needs.
+
+**4. Keep the nodes as they are.** Nodes need no token. For the topology map they stay in the
+topology group of §3.3 exactly as in the one-node layout; the cluster's instances and its map
+vertex live on the address resource.
+
+**Moving an existing deployment to this layout** starts new history: instances belong to the
+resource that discovers them, so the address resource's instances begin empty, and the old token
+holder's history stays on that resource. Remove the token from the old holder once the address
+resource is collecting, or the cluster is collected twice.
+
+**What to check after setting it up** (and please report the result):
+
+1. Every module collects on the address resource, and the node count in Proxmox VE Nodes matches
+   the cluster.
+2. Take the node currently answering on the address offline. Within one collection interval plus
+   the failover time, data resumes; instances keep their history.
+3. On the topology map, each node vertex is drawn on its own node resource and **none** on the
+   address resource.
 
 ### 4.2 Set the property
 

@@ -563,7 +563,7 @@ map, and for the same reason: neither answers SNMP, so neither resource carries
 module is behaving correctly in both cases; what a guest needs to reach the map is on the guest's
 own resource, not in this suite.
 
-Five things are for end-user review. Each needs something this lab cannot produce, or is left
+Six things are for end-user review. Each needs something this lab cannot produce, or is left
 to the end user (user rulings, 2026-10-22, 2026-10-23 and 2026-10-25):
 
 - **Alert messages on 17 datapoints** — that a raised alert shows its message with
@@ -582,6 +582,10 @@ to the end user (user rulings, 2026-10-22, 2026-10-23 and 2026-10-25):
   available in this lab (2026-10-23), so for end-user review.
 - **A cluster large enough to matter.** The bulk-endpoint design is argued from the API's shape in
   §2, not measured at scale. For end-user review.
+- **The cluster API address layout** (INSTALL §4.1.1) — the token on a resource for a VIP, reverse
+  proxy or health-checked DNS name instead of on a node, so losing the answering node does not stop
+  collection. Needs a multi-node cluster with a failover mechanism; for end-user review: failover
+  resumes collection with history intact, and no node's topology key lands on the address resource.
 
 **A standalone host with a stopped guest** is verified (2026-10-23). On `Node-B`, standalone and
 holding the token, with its only guest `Debian Test` powered off, the map draws `Node-B` with a

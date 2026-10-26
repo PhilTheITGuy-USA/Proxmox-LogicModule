@@ -728,6 +728,36 @@ note('topo-ipkey', nodeNameOf(['pve.topology.node': '192.0.2.211', 'system.sysna
 note('topo-ipkey', nodeNameOf(['pve.topology.node': 'fd00::12', 'system.sysname': 'Node-B']) == 'Node-B',
      'an IPv6 address in pve.topology.node was taken as the node name')
 
+// The token holder takes its identity from /cluster/status's local row only when that row
+// is this resource. Behind a shared cluster API address (INSTALL 4.1.1) the answering node
+// changes with failover, and trusting it would stamp that node's keys on the address
+// resource too -- a second resource carrying a node's key, flipping on every failover.
+def isLocalOf = { Map row, Map props ->
+    def run = runSource(preamble + '\nreturn pveTopoIsLocalNode(row)', [hostProps: props, row: row])
+    note('topo-local', run.thrown == null, "pveTopoIsLocalNode threw ${run.thrown}")
+    run.exit
+}
+def pve1Row = [type: 'node', name: 'pve1', ip: '192.168.10.11', local: 1]
+note('topo-local', isLocalOf(pve1Row, ['system.hostname': 'pve1', 'system.ips': '192.168.10.11']) == true,
+     'a token holder that is the answering node was not recognised')
+note('topo-local', isLocalOf(pve1Row, ['system.hostname': '192.168.10.11',
+                                       'system.ips': 'fe80:0:0:0:be24:11ff:fe00:1,192.168.10.11']) == true,
+     'a node added by IP was not recognised by its address')
+note('topo-local', isLocalOf(pve1Row, ['system.sysname': 'PVE1', 'system.hostname': 'node-a.lan',
+                                       'system.ips': '10.9.9.9']) == true,
+     'a node whose address differs was not recognised by its name')
+note('topo-local', isLocalOf([type: 'node', name: 'pve2', ip: 'fd00::12', local: 1],
+                             ['system.hostname': 'node-b.lan', 'system.ips': 'fd00:0:0:0:0:0:0:12']) == true,
+     'a compressed IPv6 row address did not match the uncompressed system.ips form')
+note('topo-local', isLocalOf(pve1Row, ['system.hostname': 'pve-api.example.com',
+                                       'system.ips': '192.168.10.50']) == false,
+     'a cluster API address resource took the answering node as its own identity')
+note('topo-local', isLocalOf(pve1Row, ['system.hostname': '192.168.10.50',
+                                       'system.ips': '192.168.10.50']) == false,
+     'a cluster API address resource added by IP took the answering node as its own identity')
+note('topo-local', isLocalOf(null, ['system.hostname': 'pve1', 'system.ips': '192.168.10.11']) == false,
+     'a missing local row was taken as this resource')
+
 // The guest MAC prefix test and the cluster-name rule are shared by the TopologySource,
 // the guest ERI PropertySource and the guest discovery, none of which can run here.
 def guestMac = runSource(preamble + """
@@ -785,6 +815,8 @@ note('addERI', topoScript.contains('pveTopoKey('),
 // The same for the key that needs no cluster name, which is what draws a token-less node.
 note('addERI', eriScript.contains('pveTopoNodeKeys('),
      'the ERI PropertySource builds its name-plus-IP keys without pveTopoNodeKeys')
+note('addERI', eriScript.contains('pveTopoIsLocalNode(localRow)'),
+     'the ERI PropertySource trusts the answering node as its own identity without pveTopoIsLocalNode')
 note('addERI', topoScript.contains('pveTopoNodeVertexKey('),
      'the TopologySource builds its node vertex key without pveTopoNodeVertexKey')
 note('addERI', !(topoScript =~ /eri\(\[pveTopoKey\([^)]*\),\s*pveTopoNode/),

@@ -73,8 +73,9 @@ dist/                            GENERATED, gitignored — never edit, never com
 - topology: `pveTopoKey` and `pveTopoNodeKey` / `pveTopoNodeKeys` (the cluster-scoped and the
   name-plus-IP node keys; each must match what `addERI_Proxmox_VE` stamps), `pveTopoIp` (the
   address form both sides agree on), `pveGuestMac`, `pveTopoNodeName`, `pveTopoNodeIdentity`,
-  `pveTopoClusterName`, and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a
-  guest's MAC prefix with)
+  `pveTopoClusterName`, `pveTopoIsLocalNode` (whether the node that answered the API is this
+  resource), and `pveGuestMacMatch` (what `addERI_Proxmox_VE_Guest` matches a guest's MAC
+  prefix with)
 
 **Discovery scripts are shared; collection scripts are not.** Twelve AD bodies back fourteen
 multiInstance modules. `Proxmox_VE_OnlineNodes.ad.groovy` backs both NodeDetail and Subscription;
@@ -160,7 +161,11 @@ container reports its host's kernel, so the guest MAC prefix and its override ke
 (checked on two nodes, two containers and a Pi, 2026-10-25). It stamps two kinds of key. The name-plus-IP key,
 `pveTopoNodeKeys(name, ips)`, needs no cluster name: one key per address in `system.ips`, plus the
 local `/cluster/status` row's `ip` where a token is present, with the name from that row or else
-`pveTopoNodeName` (`pve.topology.node`, else the short hostname). The TopologySource builds the same
+`pveTopoNodeName` (`pve.topology.node`, else the short hostname). The local row is the node that
+*answered*, which is this resource only when the API address is the node itself; behind a shared
+cluster API address (INSTALL §4.1.1) it changes with failover, so `pveTopoIsLocalNode` accepts it
+only when its `ip` is in `system.ips` or its name is the resource's own, and otherwise the script
+takes the property path. The harness pins both the helper and its use. The TopologySource builds the same
 key from each node's `/cluster/status` row, so nodes of every cluster match with no property set. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
 from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
 `pve.topology.cluster` without. **A node vertex carries exactly one key**, chosen by

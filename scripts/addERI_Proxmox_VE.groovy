@@ -32,7 +32,9 @@
  * The node name is /cluster/status's local row with a token, and pveTopoNodeName (the
  * pve.topology.node property, else the short hostname) without. The API path falls back to
  * the property path when the API cannot answer, so a node that is briefly unreachable keeps
- * its keys rather than losing them until the next run.
+ * its keys rather than losing them until the next run, and also when the node that answered
+ * is not this resource: on a resource for a shared cluster API address the property path
+ * yields keys no node vertex carries, so no node is drawn there.
  *
  * LIKE THE TOPOLOGYSOURCE, THIS CANNOT BE COMPILED OR RUN OUTSIDE A COLLECTOR. The ERI
  * output format is not hand-written JSON: LogicMonitor's own addERI_* modules build it
@@ -71,10 +73,14 @@ try {
              * The node this resource is, not some node in the cluster: /cluster/status
              * marks the responding node with local=true. Without that, every node in a
              * cluster would be stamped with the same key and every vertex would collide.
+             * The responding node is this resource only when the API address is the node
+             * itself; behind a shared cluster address it is whichever node answered, so
+             * pveTopoIsLocalNode checks the row against the resource's own name and
+             * addresses, and anything else falls through to the properties.
              */
             def localRow = status.find { it.local }
             def nodeName = localRow?.name?.toString()
-            if (nodeName) {
+            if (nodeName && pveTopoIsLocalNode(localRow)) {
                 def clusterRow = status.find { it.type?.toString() == 'cluster' }
                 identity = [cluster: clusterRow?.name?.toString() ?: nodeName, node: nodeName]
                 localIp = localRow.ip?.toString()
