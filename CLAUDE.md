@@ -16,21 +16,17 @@ python build/build.py --check   # validate only; prints the module and dashboard
 
 docker compose -f tests/docker-compose.yml run --rm compile   # groovyc, Groovy 4
 docker compose -f tests/docker-compose.yml run --rm tests     # mock-API integration
-
-python ../logicmonitor-modules-skill/skill/scripts/lm_lint_module.py dist
-python ../logicmonitor-modules-skill/skill/scripts/lm_dashboards.py check dist/dashboards/*.json --modules modules
 ```
 
-The skill checks are Bash syntax; the PowerShell form is in the workspace `..\CLAUDE.md`.
-`lm_lint_module.py` prints 5 expected warnings, all on `addCategory_Proxmox_VE` (the four
-`auto.pve.*` names and the `true()` AppliesTo, both explained below). Anything beyond those five is new.
+Then the `logicmonitor-modules` skill's two checks (`lm_lint_module.py`, `lm_dashboards.py
+check`), run from this repo's root as given in the workspace `..\CLAUDE.md` (Bash and PowerShell
+forms). Here `lm_lint_module.py` prints 5 expected warnings, all on `addCategory_Proxmox_VE` (the
+four `auto.pve.*` names and the `true()` AppliesTo, both explained below). Anything beyond those
+five is new.
 
 Always in that order: both Docker jobs and both skill checks read `dist/`, so an un-rebuilt edit
 is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
 compile or run anything. There is no single-test mode — see Build and verification.
-
-**Use the `logicmonitor-modules` skill** (`PhilTheITGuy-USA/logicmonitor-modules-skill`, its own
-repo) for module, dashboard and API work; the last two commands above are its checks.
 
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** §6 reads like a to-do list,
 but all ten of its items are implemented, and §3's *verbatim* wildvalue is superseded by
@@ -309,8 +305,10 @@ explicitly, which is also the build default.
 `modules/*.json`, runs that module's assembled AD and collect scripts against an in-process mock
 API, then adds fixed assertions that pin the design decisions (template exclusion, migration-safe
 instance IDs, QEMU vs LXC disk, exit 2 on a dead API or bad token, bulk endpoint used and `rrddata`
-not). It finishes in seconds — run all of it. To poke at one script instead, override the service
-command: `docker compose -f tests/docker-compose.yml run --rm tests groovy /work/tests/scratch.groovy`.
+not). It finishes in seconds — run all of it. To poke at one script instead, write your own
+`tests/scratch.groovy` (it must sit inside the repo, the only directory the container mounts;
+`.gitignore` keeps it out of commits) and override the service command:
+`docker compose -f tests/docker-compose.yml run --rm tests groovy /work/tests/scratch.groovy`.
 
 **The mock API returns 501, not 404, for a path it has no fixture for**, so a missing fixture looks
 like a harness gap rather than an empty result. Fixture keys in `tests/fixtures/pve_api.json` are

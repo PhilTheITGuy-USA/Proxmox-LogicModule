@@ -9,3 +9,6 @@ desktop.ini
 
 __pycache__/
 *.pyc
+
+# Throwaway script for poking at one module in the tests container (see CLAUDE.md)
+tests/scratch.groovy
