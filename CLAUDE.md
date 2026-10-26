@@ -28,6 +28,21 @@ Always in that order: both Docker jobs and both skill checks read `dist/`, so an
 is silently tested in its previous form. Groovy is not installed locally; Docker is the only way to
 compile or run anything. There is no single-test mode — see Build and verification.
 
+**When something fails quietly, check here first.** Each is explained further down.
+
+| Symptom | Usual cause |
+|---|---|
+| A change tests green but behaves as before | `dist/` not rebuilt; every check reads it |
+| Batchscript instances discovered, every datapoint No Data | `interpretExpr` in `dist/<Module>.json` lacks `##WILDVALUE##.` |
+| The whole suite stopped applying to a resource, no error | the token is still `pve.api.token`, not `pve.api.token.credential`, or `addCategory_Proxmox_VE` broke |
+| An AppliesTo or doc matches nothing | it reads a PropertySource property without the `auto.` prefix |
+| A live Collector prints a datapoint the build never saw | the name in `pveEmit` is not a single-quoted literal |
+| Discovery is empty, nothing errors | an under-privileged token (DESIGN §2) |
+| A dashboard widget renders blank | it points at a `conditional` datapoint |
+| A dashboard looks right but is incomplete | widgets dropped on import; export and count them |
+| A token-less node is missing from the map | a node vertex carrying two keys |
+| A guest resource stays `PhysicalServer` | its ERI priority is below 3 |
+
 **`docs/DESIGN.md` §1-§6 is a design record, not outstanding work.** §6 reads like a to-do list,
 but all ten of its items are implemented, and §3's *verbatim* wildvalue is superseded by
 `pveWildValue`'s fold. §4's status column is the authority on what is built (Tier 2a and Tier 3
@@ -54,6 +69,8 @@ docs/DESIGN.md                   design rationale, the backlog, and §7: the ONL
 docs/INSTALL.md                  Proxmox user/token/permissions, module import, which hosts
 docs/superpowers/                design specs + implementation plans for past features;
                                  history, linked from DESIGN.md -- not outstanding work
+.superpowers/                    scratch from past agent runs (logs, spikes); self-ignored
+                                 by its own .gitignore -- not a source of truth
 dashboards/<Name>.py             dashboard definitions, one per dashboard — see below
 dist/                            GENERATED, gitignored — never edit, never commit
 ```
@@ -138,60 +155,45 @@ The TopologySource, GuestStatus's discovery and Snapshots are the three O(guests
 why all three run hourly: the first two read every guest's `config` for its MAC, and Snapshots reads
 every guest's snapshot list.
 
-**Never make `Proxmox_VE_Topology` or `addERI_Proxmox_VE` optional.** An ERI module cannot be
-turned off cleanly: the keys it stamped stay in `predef.externalResourceID` after it stops
-applying, and the portal will not let anyone delete them (DESIGN §7). LogicMonitor's own topology
-modules are not optional either. The harness fails if either is marked optional.
+**Topology and ERI: the rules that fail silently.** DESIGN §4 *Supporting modules* has the
+design and the full AppliesTo strings; DESIGN §7 has the spikes that proved each rule below.
 
-**Draw only relationships no other source can see.** The map merges every TopologySource's edges
-onto the same vertices, so before adding an edge type, check what the portal already draws between
-those resources and add only what is missing. A guest's mounts and shares are seen from inside the
-guest by other modules, which is where Media01's Storage edge on the lab map comes from. Which Proxmox
-storage holds a guest's disks (Ceph RBD, NFS, iSCSI, ZFS) is visible only through the Proxmox API,
-so Storage edges for that are this suite's to draw if they are added. Today it emits Cluster and
-Compute edges only.
-
-**`addERI_Proxmox_VE` runs without the token**, and so is not gated
-on `hasCategory("ProxmoxVE")` alone. The map needs its key on *every* node's resource, while the token
-belongs on one node per cluster — put it on every node and every DataSource collects the whole
-cluster once per node. Its AppliesTo,
-`hasCategory("ProxmoxVE") || pve.topology.node || (system.sysinfo =~ "-pve" && !(auto.network.mac_address =~ "^[bB][cC]:24:11") && !pve.guest.mac_prefix)`,
-finds a node by the token, by the property, or by its Proxmox kernel (`-pve`, from SNMP). An LXC
-container reports its host's kernel, so the guest MAC prefix and its override keep containers out
-(checked on two nodes, two containers and a Pi, 2026-10-25). It stamps two kinds of key. The name-plus-IP key,
-`pveTopoNodeKeys(name, ips)`, needs no cluster name: one key per address in `system.ips`, plus the
-local `/cluster/status` row's `ip` where a token is present, with the name from that row or else
-`pveTopoNodeName` (`pve.topology.node`, else the short hostname). The local row is the node that
-*answered*, which is this resource only when the API address is the node itself; behind a shared
-cluster API address (INSTALL §4.1.1) it changes with failover, so `pveTopoIsLocalNode` accepts it
-only when its `ip` is in `system.ips` or its name is the resource's own, and otherwise the script
-takes the property path. The harness pins both the helper and its use. The TopologySource builds the same
-key from each node's `/cluster/status` row, so nodes of every cluster match with no property set. The older `pveTopoKey(cluster, node)` is stamped too wherever the identity is known —
-from `/cluster/status` with a token, or `pveTopoNodeIdentity` from the optional
-`pve.topology.cluster` without. **A node vertex carries exactly one key**, chosen by
-`pveTopoNodeVertexKey`: the IP key, or the cluster-scoped key only when its row has no usable
-address. lm.topo joins a vertex's keys into one ID and the portal then matches only a resource
-carrying all of them, so a two-key vertex leaves a token-less node unmatched (DESIGN §7,
-2026-10-21); the harness refuses one. The key must equal the TopologySource's byte for byte, which
-is why both sides go through the same preamble helpers. The cluster vertex is drawn through
-`Proxmox_VE_Cluster`'s one instance, `cluster`, which on a cluster carries
-`pveTopoKey(cluster, null)` as type `Cluster`; an instance vertex takes edges from every matched
-node (DESIGN §7, spike 3 re-run). Do not put a
-`pveConfigError` return back at the top of the script; the harness checks for it.
-
-**`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and is always on. Its AppliesTo,
-`(auto.network.mac_address =~ "^[bB][cC]:24:11" || pve.guest.mac_prefix) && (isLinux() || isWindows())`,
-reaches every Linux or Windows resource carrying Proxmox's default guest MAC prefix, in either
-case, or the override property. The OS clause is deliberate: a virtual appliance (FortiGate-VM,
-pfSense, a virtual router) running as a guest has its own ERI modules, and a priority-3 VM label
-keyed on MAC prefix alone would override them. The script
-matches through `pveGuestMacMatch`, makes no API call, and prints nothing on no match. It stamps
-`proxmoxve--vm--<mac>` in category `virt.proxmoxve` at priority **3** with type
-`VirtualMachineResource`: the resource type comes from the highest-priority ERI *across*
-categories, and the built-in `net.l2` is priority 2, so anything lower leaves the guest
-`PhysicalServer` with nothing failing (DESIGN §7, spike 1). A guest never carries the token, so the
-preamble always sets `pveConfigError` there — returning on it would make the module a no-op, and
-the harness checks for that too.
+- **Never make `Proxmox_VE_Topology` or `addERI_Proxmox_VE` optional.** An ERI module's keys stay
+  in `predef.externalResourceID` after it stops applying, and the portal will not delete them.
+  LogicMonitor's own topology modules are not optional either. The harness fails either one marked
+  optional.
+- **Draw only relationships no other source can see.** The map merges every TopologySource's edges
+  onto the same vertices, so check what the portal already draws before adding an edge type. A
+  guest's mounts and shares are drawn from inside the guest by other modules; which Proxmox storage
+  holds its disks is visible only through the Proxmox API, so those Storage edges are this suite's
+  to draw if they are ever added. Today it emits Cluster and Compute edges only.
+- **Both sides build a key through the same preamble helpers, byte for byte.** The TopologySource
+  builds each node's name-plus-IP key from its `/cluster/status` row; `addERI_Proxmox_VE` stamps
+  the same key for every address in `system.ips` (`pveTopoNodeKeys`), plus the cluster-scoped
+  `pveTopoKey(cluster, node)` wherever the identity is known (`/cluster/status` with a token, else
+  `pveTopoNodeIdentity`).
+- **A node vertex carries exactly one key**, chosen by `pveTopoNodeVertexKey`: the IP key, or the
+  cluster-scoped one only when the row has no usable address. lm.topo joins a vertex's keys into one
+  ID that matches only a resource carrying all of them, so a two-key vertex leaves a token-less node
+  unmatched. The harness refuses one.
+- **`addERI_Proxmox_VE` runs without the token.** Every node needs its key, but the token belongs on
+  one node per cluster — on every node, each DataSource collects the whole cluster once per node.
+  So its AppliesTo also finds a node by `pve.topology.node` or a `-pve` kernel, excluding the guest
+  MAC prefix because an LXC container reports its host's kernel. Behind a shared cluster API
+  address (INSTALL §4.1.1) the node answering `/cluster/status` changes with failover, so
+  `pveTopoIsLocalNode` decides whether that row is this resource; the harness pins the helper and
+  its use.
+- **The cluster vertex** is `Proxmox_VE_Cluster`'s one instance, `cluster`, which on a cluster
+  carries `pveTopoKey(cluster, null)` as type `Cluster`; an instance vertex takes edges from every
+  matched node.
+- **`addERI_Proxmox_VE_Guest` runs on guests, not on Proxmox**, and stamps `proxmoxve--vm--<mac>`
+  in category `virt.proxmoxve` at priority **3**, type `VirtualMachineResource`. The resource type
+  comes from the highest-priority ERI across categories and the built-in `net.l2` is priority 2, so
+  anything lower leaves the guest `PhysicalServer` with nothing failing. Its
+  `isLinux() || isWindows()` clause keeps virtual appliances (FortiGate-VM, pfSense) on their own
+  ERIs. It matches through `pveGuestMacMatch`, makes no API call, and prints nothing on no match.
+- **Neither ERI PropertySource returns on `pveConfigError`.** Both run where there is no token, so
+  the preamble always sets it there and a return would make them no-ops. The harness checks both.
 
 **There are two collection shapes.** Nodes, GuestPerformance, GuestStatus and StorageCapacity are
 the `/cluster/resources` design DESIGN §2 was written for: one call, any cluster size. Five modules
@@ -431,6 +433,12 @@ the `datapoints` array in `modules/<Module>.json`, a line in one of that file's 
 datapoints share a graph; unrelated ones never do, or the graph becomes unreadable), and the coverage
 table in `README.md`. The build enforces the first two agreeing and that every graph line names a
 declared datapoint; nothing enforces the rest.
+
+**Every change that alters `dist/` ends with a reimport list.** Before asking for any portal
+check, name exactly which modules the user must reimport, and mark each as a behaviour change or
+"text only, reimport optional". An edit to `pve_common.groovy` is concatenated into every module,
+so every module's text changes; a shared AD body changes every module that names it. A portal test
+run against a module that was not reimported proves nothing.
 
 **Adding a module drifts more than that table.** Module counts are written out in prose in
 `README.md`, `docs/INSTALL.md`, `docs/DESIGN.md` §4 and §7, and this file. `check_doc_counts` in
