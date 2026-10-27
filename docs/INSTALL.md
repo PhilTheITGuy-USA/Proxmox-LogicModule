@@ -27,7 +27,7 @@ only ever reads the API.
 **CLI, on any node:**
 
 ```sh
-pveum user add monitor@pve --comment "LogicMonitor read-only monitoring"
+pveum user add monitor@pve --comment 'LogicMonitor read-only monitoring'
 ```
 
 ### 1.2 Grant permissions
@@ -108,12 +108,21 @@ pveum acl modify / --tokens 'monitor@pve!logicmonitor' --roles PVEAuditor
 
 ### 1.5 Verify the token works
 
-From anywhere that can reach the Proxmox API:
+From anywhere that can reach the Proxmox API. On Linux or macOS:
 
 ```sh
 curl -k -H 'Authorization: PVEAPIToken=monitor@pve!logicmonitor=<token>' \
   https://pve1.example.com:8006/api2/json/cluster/resources
 ```
+
+On Windows, in PowerShell (type `curl.exe`: plain `curl` is PowerShell 5.1's alias for
+`Invoke-WebRequest`, and `cmd.exe` does not treat `'` as a quote):
+
+```powershell
+curl.exe -k -H 'Authorization: PVEAPIToken=monitor@pve!logicmonitor=<token>' https://pve1.example.com:8006/api2/json/cluster/resources
+```
+
+Keep the single quotes: the token ID holds a `!`, which Bash expands inside double quotes.
 
 You should get a JSON body with a `data` array listing your nodes, guests and storage.
 

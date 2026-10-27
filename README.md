@@ -90,7 +90,7 @@ credential string, importing, and which hosts to apply it to. The short version:
 
 ```sh
 # On any Proxmox node
-pveum user add monitor@pve --comment "LogicMonitor read-only monitoring"
+pveum user add monitor@pve --comment 'LogicMonitor read-only monitoring'
 pveum acl modify / --users monitor@pve --roles PVEAuditor
 pveum user token add monitor@pve logicmonitor          # copy the secret, shown once
 pveum acl modify / --tokens 'monitor@pve!logicmonitor' --roles PVEAuditor
