@@ -12,3 +12,6 @@ __pycache__/
 
 # Throwaway script for poking at one module in the tests container (see CLAUDE.md)
 tests/scratch.groovy
+
+# Lab names and addresses, kept out of the repo
+CLAUDE.local.md
